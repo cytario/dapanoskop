@@ -1,0 +1,67 @@
+@startsalt
+title Cost Report Screen (1-Page Report)
+
+{
+  {/ <b>Dapanoskop</b> | " " | " " | " " | " " | " " | [Logout] }
+  ---
+  {
+    " " | {
+      <b>Reporting Period</b>
+      ^January 2026^
+    } | " " | {
+      {SI
+        <color:orange><b>Month-to-date</b></color>
+        Data as of 2026-01-15 06:00 UTC
+      }
+    } | " " | " "
+  }
+  ==
+
+  {
+    <b>Tagging Coverage</b> | **93.3%** of cost is tagged | $1,000 untagged
+  }
+  ==
+
+  <b>Cost Center: Engineering</b>
+  {#
+    .                    | <b>Current</b> | <b>Prev Month</b> | <b>MoM ($)</b> | <b>MoM (%)</b> | <b>Same Month LY</b> | <b>YoY ($)</b> | <b>YoY (%)</b>
+    <b>Total</b>         | $15,000     | $14,200          | +$800        | +5.6%        | $11,000              | +$4,000      | +36.4%
+  }
+  ---
+  {
+    <b>Workloads</b>
+    {#
+      .                   | <b>Current</b> | <b>Prev Month</b> | <b>MoM ($)</b> | <b>MoM (%)</b> | <b>Same Month LY</b> | <b>YoY ($)</b> | <b>YoY (%)</b>
+      [data-pipeline]     | $5,000      | $4,800           | +$200        | +4.2%        | $3,200               | +$1,800      | +56.3%
+      [ml-training]       | $4,200      | $4,100           | +$100        | +2.4%        | $3,500               | +$700        | +20.0%
+      [web-platform]      | $3,100      | $3,000           | +$100        | +3.3%        | $2,800               | +$300        | +10.7%
+      [monitoring]        | $1,700      | $1,500           | +$200        | +13.3%       | $1,000               | +$700        | +70.0%
+      <i>Untagged</i>     | $1,000      | $800             | +$200        | +25.0%       | $500                 | +$500        | +100.0%
+    }
+  }
+  ==
+
+  <b>Cost Center: Research</b>
+  {#
+    .                    | <b>Current</b> | <b>Prev Month</b> | <b>MoM ($)</b> | <b>MoM (%)</b> | <b>Same Month LY</b> | <b>YoY ($)</b> | <b>YoY (%)</b>
+    <b>Total</b>         | $8,500      | $8,000           | +$500        | +6.3%        | $6,000               | +$2,500      | +41.7%
+  }
+  ---
+  {
+    <b>Workloads</b>
+    {#
+      .                   | <b>Current</b> | <b>Prev Month</b> | <b>MoM ($)</b> | <b>MoM (%)</b> | <b>Same Month LY</b> | <b>YoY ($)</b> | <b>YoY (%)</b>
+      [genomics-pipeline] | $5,500      | $5,200           | +$300        | +5.8%        | $4,000               | +$1,500      | +37.5%
+      [lab-data]          | $3,000      | $2,800           | +$200        | +7.1%        | $2,000               | +$1,000      | +50.0%
+    }
+  }
+  ==
+
+  <b>Storage Overview</b>
+  {#
+    <b>Total Storage Cost</b> | <b>Cost / TB</b> | <b>Hot Tier %</b> | <b>MoM ($)</b> | <b>MoM (%)</b> | <b>YoY ($)</b> | <b>YoY (%)</b>
+    $4,200                   | $23.45 / TB     | 62.3%            | +$150        | +3.7%        | +$900        | +27.3%
+  }
+}
+
+@endsalt

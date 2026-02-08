@@ -1,0 +1,23 @@
+@startsalt
+title Login Flow (Cognito Hosted UI Redirect)
+
+{
+  {
+    " "
+    " "
+    " "
+    {SI
+      <b>Dapanoskop</b>
+      ---
+      Redirecting to sign in...
+      " "
+      If you are not redirected automatically,
+      [Sign in with Cognito]
+    }
+    " "
+    " "
+    " "
+  }
+}
+
+@endsalt
