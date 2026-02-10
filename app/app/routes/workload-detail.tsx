@@ -32,10 +32,16 @@ export default function WorkloadDetail() {
       return;
     }
     if (!period || !name) return;
+    if (!/^\d{4}-\d{2}$/.test(period)) return;
+
+    let cancelled = false;
+    let worker: Worker | undefined;
+    let db: import("@duckdb/duckdb-wasm").AsyncDuckDB | undefined;
 
     async function loadData() {
       try {
         const summaryData = await fetchSummary(period);
+        if (cancelled) return;
         setSummary(summaryData);
 
         // Lazy-load DuckDB-wasm for parquet querying
@@ -43,6 +49,8 @@ export default function WorkloadDetail() {
         const parquetUrl = `${dataBase}/${period}/cost-by-usage-type.parquet`;
 
         const duckdb = await import("@duckdb/duckdb-wasm");
+        if (cancelled) return;
+
         const DUCKDB_BUNDLES = {
           mvp: {
             mainModule: new URL(
@@ -67,44 +75,54 @@ export default function WorkloadDetail() {
         };
 
         const bundle = await duckdb.selectBundle(DUCKDB_BUNDLES);
-        const worker = new Worker(bundle.mainWorker!);
+        if (!bundle.mainWorker) throw new Error("DuckDB bundle has no worker");
+        worker = new Worker(bundle.mainWorker);
         const logger = new duckdb.ConsoleLogger();
-        const db = new duckdb.AsyncDuckDB(logger, worker);
+        db = new duckdb.AsyncDuckDB(logger, worker);
         await db.instantiate(bundle.mainModule);
+        if (cancelled) return;
 
         const conn = await db.connect();
-        const result = await conn.query(`
-          SELECT workload, usage_type, category, period, cost_usd, usage_quantity
-          FROM read_parquet('${parquetUrl}')
-          WHERE workload = '${name!.replace(/'/g, "''")}'
-          ORDER BY cost_usd DESC
-        `);
+        try {
+          const stmt = await conn.prepare(`
+            SELECT workload, usage_type, category, period, cost_usd, usage_quantity
+            FROM read_parquet('${parquetUrl}')
+            WHERE workload = ?
+            ORDER BY cost_usd DESC
+          `);
+          const result = await stmt.query(name);
 
-        const rows: UsageTypeCostRow[] = [];
-        for (let i = 0; i < result.numRows; i++) {
-          rows.push({
-            workload: String(result.getChildAt(0)?.get(i) ?? ""),
-            usage_type: String(result.getChildAt(1)?.get(i) ?? ""),
-            category: String(
-              result.getChildAt(2)?.get(i) ?? "",
-            ) as UsageTypeCostRow["category"],
-            period: String(result.getChildAt(3)?.get(i) ?? ""),
-            cost_usd: Number(result.getChildAt(4)?.get(i) ?? 0),
-            usage_quantity: Number(result.getChildAt(5)?.get(i) ?? 0),
-          });
+          const rows: UsageTypeCostRow[] = [];
+          for (let i = 0; i < result.numRows; i++) {
+            rows.push({
+              workload: String(result.getChildAt(0)?.get(i) ?? ""),
+              usage_type: String(result.getChildAt(1)?.get(i) ?? ""),
+              category: String(
+                result.getChildAt(2)?.get(i) ?? "",
+              ) as UsageTypeCostRow["category"],
+              period: String(result.getChildAt(3)?.get(i) ?? ""),
+              cost_usd: Number(result.getChildAt(4)?.get(i) ?? 0),
+              usage_quantity: Number(result.getChildAt(5)?.get(i) ?? 0),
+            });
+          }
+
+          if (!cancelled) setUsageRows(rows);
+        } finally {
+          await conn.close();
         }
-
-        await conn.close();
-        await db.terminate();
-        worker.terminate();
-
-        setUsageRows(rows);
       } catch (e) {
-        setError(`Failed to load workload detail: ${e}`);
+        if (!cancelled) setError(`Failed to load workload detail: ${e}`);
+      } finally {
+        if (db) await db.terminate().catch(() => {});
+        if (worker) worker.terminate();
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     }
     loadData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [period, name]);
 
   // Find workload in summary

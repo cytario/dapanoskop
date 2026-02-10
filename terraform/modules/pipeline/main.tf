@@ -23,6 +23,11 @@ resource "aws_iam_role" "lambda" {
   })
 }
 
+resource "aws_cloudwatch_log_group" "lambda" {
+  name              = "/aws/lambda/dapanoskop-pipeline"
+  retention_in_days = 30
+}
+
 resource "aws_iam_role_policy" "lambda" {
   name_prefix = "dapanoskop-pipeline-"
   role        = aws_iam_role.lambda.id
@@ -31,6 +36,7 @@ resource "aws_iam_role_policy" "lambda" {
     Version = "2012-10-17"
     Statement = [
       {
+        # Cost Explorer API actions do not support resource-level permissions
         Effect = "Allow"
         Action = [
           "ce:GetCostAndUsage",
@@ -48,11 +54,10 @@ resource "aws_iam_role_policy" "lambda" {
       {
         Effect = "Allow"
         Action = [
-          "logs:CreateLogGroup",
           "logs:CreateLogStream",
           "logs:PutLogEvents",
         ]
-        Resource = "arn:aws:logs:*:*:*"
+        Resource = "${aws_cloudwatch_log_group.lambda.arn}:*"
       },
     ]
   })
@@ -69,6 +74,8 @@ resource "aws_lambda_function" "pipeline" {
   timeout          = 300
 
   reserved_concurrent_executions = 1
+
+  depends_on = [aws_cloudwatch_log_group.lambda]
 
   layers = [
     "arn:aws:lambda:${data.aws_region.current.id}:336392948345:layer:AWSSDKPandas-Python312:17"

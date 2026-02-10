@@ -22,13 +22,22 @@ export function formatChange(
   previous: number,
 ): { text: string; direction: "up" | "down" | "flat"; color: string } {
   const delta = current - previous;
-  const pct = previous !== 0 ? delta / previous : 0;
   const sign = delta >= 0 ? "+" : "";
-  const text = `${sign}${formatUsd(delta)} (${sign}${pctFormat.format(pct)})`;
 
   if (Math.abs(delta) < 0.01) {
     return { text: "$0 (0.0%)", direction: "flat", color: "text-gray-500" };
   }
+  if (previous === 0) {
+    return {
+      text: `${sign}${formatUsd(delta)} (New)`,
+      direction: delta > 0 ? "up" : "down",
+      color: delta > 0 ? "text-red-600" : "text-green-600",
+    };
+  }
+
+  const pct = delta / previous;
+  const text = `${sign}${formatUsd(delta)} (${sign}${pctFormat.format(pct)})`;
+
   if (delta > 0) {
     return { text, direction: "up", color: "text-red-600" };
   }

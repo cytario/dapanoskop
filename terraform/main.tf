@@ -6,6 +6,7 @@ module "hosting" {
   source = "./modules/hosting"
 
   data_bucket_arn             = module.data_store.bucket_arn
+  data_bucket_id              = module.data_store.bucket_name
   data_bucket_regional_domain = module.data_store.bucket_regional_domain_name
   domain_name                 = var.domain_name
   acm_certificate_arn         = var.acm_certificate_arn

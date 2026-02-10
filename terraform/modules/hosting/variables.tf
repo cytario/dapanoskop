@@ -3,6 +3,11 @@ variable "data_bucket_arn" {
   type        = string
 }
 
+variable "data_bucket_id" {
+  description = "ID (name) of the data S3 bucket"
+  type        = string
+}
+
 variable "data_bucket_regional_domain" {
   description = "Regional domain name of the data S3 bucket"
   type        = string

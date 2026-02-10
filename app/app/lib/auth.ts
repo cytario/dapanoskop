@@ -9,7 +9,7 @@ const CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID ?? "";
 
 function getRedirectUri(): string {
   return (
-    import.meta.env.VITE_getRedirectUri() ??
+    import.meta.env.VITE_REDIRECT_URI ??
     (typeof window !== "undefined" ? window.location.origin + "/" : "/")
   );
 }

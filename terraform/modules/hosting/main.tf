@@ -2,6 +2,16 @@ resource "aws_s3_bucket" "app" {
   bucket_prefix = "dapanoskop-app-"
 }
 
+resource "aws_s3_bucket_server_side_encryption_configuration" "app" {
+  bucket = aws_s3_bucket.app.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
 resource "aws_s3_bucket_public_access_block" "app" {
   bucket = aws_s3_bucket.app.id
 
@@ -69,6 +79,7 @@ resource "aws_cloudfront_distribution" "main" {
 
     forwarded_values {
       query_string = false
+      headers      = ["Range"]
       cookies {
         forward = "none"
       }
@@ -76,15 +87,17 @@ resource "aws_cloudfront_distribution" "main" {
   }
 
   custom_error_response {
-    error_code         = 403
-    response_code      = 200
-    response_page_path = "/index.html"
+    error_code            = 403
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 10
   }
 
   custom_error_response {
-    error_code         = 404
-    response_code      = 200
-    response_page_path = "/index.html"
+    error_code            = 404
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 10
   }
 
   restrictions {
@@ -133,7 +146,7 @@ resource "aws_s3_bucket_policy" "app" {
 }
 
 resource "aws_s3_bucket_policy" "data" {
-  bucket = var.data_bucket_arn
+  bucket = var.data_bucket_id
 
   policy = jsonencode({
     Version = "2012-10-17"

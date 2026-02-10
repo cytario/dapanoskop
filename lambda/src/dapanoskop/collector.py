@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
 import boto3
+
+logger = logging.getLogger(__name__)
 
 
 def _month_range(year: int, month: int) -> tuple[str, str]:
@@ -24,22 +27,15 @@ def _get_periods(now: datetime) -> dict[str, tuple[str, str]]:
 
     Returns dict with keys: current, prev_month, yoy.
     Each value is (start_date, end_date) for CE API.
+
+    "current" is the most recent complete month (i.e., the previous calendar month).
+    The pipeline runs at 06:00 UTC daily, so by the 1st the previous month is complete.
     """
     year, month = now.year, now.month
 
-    # If we're past day 1, current month is the previous complete month
-    # (CE data for current month is incomplete)
-    if now.day > 1:
-        prev_year = year if month > 1 else year - 1
-        prev_month = month - 1 if month > 1 else 12
-    else:
-        # On the 1st, use two months ago as "current"
-        if month > 2:
-            prev_year, prev_month = year, month - 2
-        elif month == 2:
-            prev_year, prev_month = year - 1, 12
-        else:
-            prev_year, prev_month = year - 1, 11
+    # Current period = previous complete month
+    prev_year = year if month > 1 else year - 1
+    prev_month = month - 1 if month > 1 else 12
 
     current_start, current_end = _month_range(prev_year, prev_month)
 
@@ -161,17 +157,21 @@ def collect(
     periods = _get_periods(now)
 
     period_labels = {k: _period_label(v[0]) for k, v in periods.items()}
+    logger.info("Collecting data for periods: %s", period_labels)
 
     # Collect cost data for all three periods
     raw_data: dict[str, list[dict[str, Any]]] = {}
     for period_key, (start, end) in periods.items():
-        raw_data[period_key] = get_cost_and_usage(ce_client, start, end)
+        groups = get_cost_and_usage(ce_client, start, end)
+        logger.info("Period %s: %d groups collected", period_key, len(groups))
+        raw_data[period_key] = groups
 
     # Collect cost category mapping
     current_start, current_end = periods["current"]
     cc_mapping = get_cost_categories(
         ce_client, cost_category_name, current_start, current_end
     )
+    logger.info("Cost category mapping: %d entries", len(cc_mapping))
 
     return {
         "now": now,

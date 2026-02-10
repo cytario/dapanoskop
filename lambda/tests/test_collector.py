@@ -30,18 +30,28 @@ def test_get_periods_mid_month() -> None:
 
 
 def test_get_periods_first_of_month() -> None:
-    """On Mar 1, current period should be January (two months ago)."""
+    """On Mar 1, current period should be February (previous complete month)."""
     now = datetime(2026, 3, 1, 6, 0, 0, tzinfo=timezone.utc)
     periods = _get_periods(now)
 
-    assert periods["current"][0] == "2026-01-01"
-    assert periods["prev_month"][0] == "2025-12-01"
-    assert periods["yoy"][0] == "2025-01-01"
+    assert periods["current"][0] == "2026-02-01"
+    assert periods["prev_month"][0] == "2026-01-01"
+    assert periods["yoy"][0] == "2025-02-01"
 
 
 def test_get_periods_january() -> None:
     """On Jan 15, current period should be December of previous year."""
     now = datetime(2026, 1, 15, 6, 0, 0, tzinfo=timezone.utc)
+    periods = _get_periods(now)
+
+    assert periods["current"][0] == "2025-12-01"
+    assert periods["prev_month"][0] == "2025-11-01"
+    assert periods["yoy"][0] == "2024-12-01"
+
+
+def test_get_periods_january_first() -> None:
+    """On Jan 1, current period should be December of previous year."""
+    now = datetime(2026, 1, 1, 6, 0, 0, tzinfo=timezone.utc)
     periods = _get_periods(now)
 
     assert periods["current"][0] == "2025-12-01"

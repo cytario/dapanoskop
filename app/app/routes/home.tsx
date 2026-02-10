@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import type { CostSummary } from "~/types/cost-data";
 import { discoverPeriods, fetchSummary } from "~/lib/data";
 import { isAuthenticated, login, handleCallback, logout } from "~/lib/auth";
@@ -16,6 +17,9 @@ export function meta() {
 }
 
 export default function Home() {
+  const [searchParams] = useSearchParams();
+  const urlPeriod = searchParams.get("period") ?? "";
+
   const [authenticated, setAuthenticated] = useState(false);
   const [periods, setPeriods] = useState<string[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState("");
@@ -27,7 +31,8 @@ export default function Home() {
   useEffect(() => {
     async function checkAuth() {
       // Handle callback if present
-      if (window.location.search.includes("code=")) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("code")) {
         await handleCallback();
       }
       if (isAuthenticated()) {
@@ -43,12 +48,17 @@ export default function Home() {
   useEffect(() => {
     if (!authenticated) return;
     async function loadPeriods() {
+      setError(null);
       try {
         const discovered = await discoverPeriods();
         if (discovered.length > 0) {
           setPeriods(discovered);
-          // Default to most recent complete month (second in list if first is current)
-          setSelectedPeriod(discovered[0]);
+          // Use period from URL if valid, otherwise default to most recent
+          const initial =
+            urlPeriod && discovered.includes(urlPeriod)
+              ? urlPeriod
+              : discovered[0];
+          setSelectedPeriod(initial);
         } else {
           setError("No cost data available.");
         }
@@ -58,7 +68,7 @@ export default function Home() {
       setLoading(false);
     }
     loadPeriods();
-  }, [authenticated]);
+  }, [authenticated, urlPeriod]);
 
   // Load summary for selected period
   useEffect(() => {
