@@ -12,6 +12,7 @@ dev = [
     "pytest",
     "moto[ce,s3]",
     "boto3-stubs",
+    "ruff",
 ]
 
 [tool.ruff]
