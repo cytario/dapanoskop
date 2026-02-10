@@ -1,0 +1,25 @@
+[project]
+name = "dapanoskop"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "pyarrow",
+    "boto3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "moto[ce,s3]",
+    "boto3-stubs",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dapanoskop"]

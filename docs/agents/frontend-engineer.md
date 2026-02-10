@@ -171,6 +171,29 @@ Report loads and renders within **2 seconds** after authentication (SRS-DP-51000
 
 Latest versions of Chrome, Firefox, Safari, Edge. **Desktop only** — no mobile optimization.
 
+## Quality Gates
+
+```bash
+npx prettier --check .
+npx eslint .
+npx tsc --noEmit
+npm run build
+```
+
+### Prettier
+
+- Installed as dev dependency (`prettier ^3.x`)
+- No config file — uses Prettier defaults
+- Covers `.ts`, `.tsx`, `.json`, `.md` files
+
+### ESLint
+
+- Flat config (`eslint.config.js`)
+- Plugins: `@eslint/js`, `typescript-eslint`, `eslint-plugin-react-hooks`
+- Parser: `typescript-eslint/parser`
+- Rules: recommended + react-hooks rules
+- Ignores: `build/`, `node_modules/`, `.react-router/`
+
 ## Reference Documents
 
 - Wireframes: `docs/wireframes/cost-report.puml`, `docs/wireframes/workload-detail.puml`, `docs/wireframes/login.puml`
