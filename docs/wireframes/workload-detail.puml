@@ -12,21 +12,21 @@ title Workload Detail Screen (Drill-Down)
   <b>Workload: data-pipeline</b> | Cost Center: Engineering
   ---
   {#
-    .                    | <b>Current</b> | <b>Prev Month</b> | <b>MoM ($)</b> | <b>MoM (%)</b> | <b>Same Month LY</b> | <b>YoY ($)</b> | <b>YoY (%)</b>
-    <b>Total</b>         | $5,000      | $4,800           | +$200        | +4.2%        | $3,200               | +$1,800      | +56.3%
+    <b>Current</b> | <b>MoM</b>           | <b>YoY</b>
+    $5,000      | +$200 (+4.2%)      | +$1,800 (+56.3%)
   }
   ==
 
   <b>Usage Types</b>
   {#
-    <b>Usage Type</b>                  | <b>Category</b> | <b>Current</b> | <b>Prev Month</b> | <b>MoM ($)</b> | <b>MoM (%)</b> | <b>YoY ($)</b> | <b>YoY (%)</b>
-    TimedStorage-ByteHrs              | Storage         | $1,800      | $1,750           | +$50         | +2.9%        | +$500        | +38.5%
-    BoxUsage:m5.2xlarge               | Compute         | $1,200      | $1,200           | $0           | 0.0%         | +$400        | +50.0%
-    DataTransfer-Out-Bytes            | Other           | $800        | $700             | +$100        | +14.3%       | +$300        | +60.0%
-    TimedStorage-INT-FA-ByteHrs       | Storage         | $500        | $480             | +$20         | +4.2%        | +$200        | +66.7%
-    NatGateway-Hours                  | Other           | $350        | $340             | +$10         | +2.9%        | +$150        | +75.0%
-    Requests-Tier1                    | Other           | $200        | $190             | +$10         | +5.3%        | +$100        | +100.0%
-    EBS:VolumeUsage.gp3              | Storage         | $150        | $140             | +$10         | +7.1%        | +$150        | N/A
+    <b>Usage Type</b>                  | <b>Category</b> | <b>Current</b> | <b>MoM</b>           | <b>YoY</b>
+    TimedStorage-ByteHrs              | Storage         | $1,800      | +$50 (+2.9%)         | +$500 (+38.5%)
+    BoxUsage:m5.2xlarge               | Compute         | $1,200      | $0 (0.0%)            | +$400 (+50.0%)
+    DataTransfer-Out-Bytes            | Other           | $800        | +$100 (+14.3%)       | +$300 (+60.0%)
+    TimedStorage-INT-FA-ByteHrs       | Storage         | $500        | +$20 (+4.2%)         | +$200 (+66.7%)
+    NatGateway-Hours                  | Other           | $350        | +$10 (+2.9%)         | +$150 (+75.0%)
+    Requests-Tier1                    | Other           | $200        | +$10 (+5.3%)         | +$100 (+100.0%)
+    EBS:VolumeUsage.gp3              | Storage         | $150        | +$10 (+7.1%)         | +$150 (N/A)
   }
 }
 

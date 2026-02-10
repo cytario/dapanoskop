@@ -25,7 +25,6 @@ Dapanoskop provides opinionated AWS cloud cost visibility by leveraging resource
 | Document | Description |
 |----------|-------------|
 | README.md | Dapanoskop project description |
-| vz_aws | Origin Python CLI tool with cost reporting capabilities |
 
 ### 1.4 Definitions and Abbreviations
 
@@ -33,8 +32,8 @@ Dapanoskop provides opinionated AWS cloud cost visibility by leveraging resource
 |------|------------|
 | App tag | An AWS resource tag with key `App` (or `user:App`) whose value identifies the workload a resource belongs to |
 | Workload | A logical grouping of AWS resources belonging to one application, identified by a shared App tag value |
-| Cost Category | An AWS Cost Categories rule that maps workloads to cost centers |
-| Cost Center | An organizational budget unit to which AWS costs are allocated |
+| Cost Category | A single AWS Cost Category whose values represent cost centers. Dapanoskop expects one Cost Category to be configured in the AWS account (e.g., "Cost Centers") with values corresponding to individual cost centers. |
+| Cost Center | A value within the configured Cost Category, representing an organizational budget unit to which AWS costs are allocated |
 | MoM | Month-over-Month comparison |
 | YoY | Year-over-Year comparison |
 | Hot tier | Storage classes with immediate access: S3 Standard, S3 Intelligent-Tiering Frequent Access, EFS Standard |
@@ -61,13 +60,13 @@ The name comes from Greek δαπάνη (dapáni, "cost") + σκοπέω (skopéo
 
 **Description**: A DevOps engineer deploys Dapanoskop into an AWS account. This involves provisioning the web application infrastructure, the cost data collection pipeline, authentication, and configuring which Cost Categories and cost centers to report on.
 
-**Input Data**: AWS account credentials, desired Cost Category configuration, existing Cognito User Pool reference.
+**Input Data**: AWS account credentials, existing Cognito User Pool reference, optionally the name of the Cost Category to use.
 
 **Output Data**: A running Dapanoskop instance accessible via a URL.
 
 **User Requests**:
 - "I want to deploy this with a single Terraform module"
-- "I need to configure which cost centers to track"
+- "I need to tell it which Cost Category to use, or just let it pick the first one"
 - "I need to point it at my existing Cognito User Pool"
 
 #### 2.2.2 Macro-Step 2: Tag Resources for Cost Visibility
@@ -139,8 +138,8 @@ The name comes from Greek δαπάνη (dapáni, "cost") + σκοπέω (skopéo
 **[URS-DP-10101] Provision Dapanoskop Instance**
 A DevOps engineer deploys a complete Dapanoskop instance into an AWS account using a Terraform module, providing configuration values for the target environment.
 
-**[URS-DP-10102] Configure Cost Centers**
-A DevOps engineer specifies which AWS Cost Categories and cost center values Dapanoskop reports on, so that reports align with the organization's budget structure.
+**[URS-DP-10102] Configure Cost Category**
+A DevOps engineer specifies which AWS Cost Category Dapanoskop uses to derive cost centers. By default, the first Cost Category returned by the Cost Explorer API is used. All values within the selected Cost Category are treated as cost centers and reported on.
 
 **[URS-DP-10103] Configure Authentication**
 A DevOps engineer integrates Dapanoskop with an existing Cognito User Pool so that only authorized users can access cost reports.

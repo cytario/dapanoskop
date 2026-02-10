@@ -1,66 +1,91 @@
 @startsalt
-title Cost Report Screen (1-Page Report)
+title Dapanoskop - Cost Report Screen
 
 {
   {/ <b>Dapanoskop</b> | " " | " " | " " | " " | " " | [Logout] }
   ---
+
+  ' === Period Selector (horizontal month strip) ===
   {
-    " " | {
-      <b>Reporting Period</b>
-      ^January 2026^
-    } | " " | {
+    Oct 25 | Nov 25 | Dec 25 | [<b> Jan 26 </b>] | <color:orange>Feb 26 (MTD)</color>
+  }
+  ==
+
+  ' === Global Summary Bar ===
+  {SI
+    {
       {SI
-        <color:orange><b>Month-to-date</b></color>
-        Data as of 2026-01-15 06:00 UTC
+        Total Spend
+        <b>$23,500</b>
+      } | {SI
+        vs Last Month
+        <color:red><b>+$1,300 (+5.9%)</b> ▲</color>
+      } | {SI
+        vs Last Year
+        <color:red><b>+$6,500 (+38.2%)</b> ▲</color>
       }
-    } | " " | " "
-  }
-  ==
-
-  {
-    <b>Tagging Coverage</b> | **93.3%** of cost is tagged | $1,000 untagged
-  }
-  ==
-
-  <b>Cost Center: Engineering</b>
-  {#
-    .                    | <b>Current</b> | <b>Prev Month</b> | <b>MoM ($)</b> | <b>MoM (%)</b> | <b>Same Month LY</b> | <b>YoY ($)</b> | <b>YoY (%)</b>
-    <b>Total</b>         | $15,000     | $14,200          | +$800        | +5.6%        | $11,000              | +$4,000      | +36.4%
-  }
-  ---
-  {
-    <b>Workloads</b>
-    {#
-      .                   | <b>Current</b> | <b>Prev Month</b> | <b>MoM ($)</b> | <b>MoM (%)</b> | <b>Same Month LY</b> | <b>YoY ($)</b> | <b>YoY (%)</b>
-      [data-pipeline]     | $5,000      | $4,800           | +$200        | +4.2%        | $3,200               | +$1,800      | +56.3%
-      [ml-training]       | $4,200      | $4,100           | +$100        | +2.4%        | $3,500               | +$700        | +20.0%
-      [web-platform]      | $3,100      | $3,000           | +$100        | +3.3%        | $2,800               | +$300        | +10.7%
-      [monitoring]        | $1,700      | $1,500           | +$200        | +13.3%       | $1,000               | +$700        | +70.0%
-      <i>Untagged</i>     | $1,000      | $800             | +$200        | +25.0%       | $500                 | +$500        | +100.0%
     }
   }
   ==
 
-  <b>Cost Center: Research</b>
-  {#
-    .                    | <b>Current</b> | <b>Prev Month</b> | <b>MoM ($)</b> | <b>MoM (%)</b> | <b>Same Month LY</b> | <b>YoY ($)</b> | <b>YoY (%)</b>
-    <b>Total</b>         | $8,500      | $8,000           | +$500        | +6.3%        | $6,000               | +$2,500      | +41.7%
+  ' === Tagging Coverage Bar ===
+  {SI
+    <b>Tagging Coverage</b>
+    [=============================================----- ]
+    <b>93.3%</b> tagged ($14,000) · $1,000 untagged
   }
-  ---
-  {
-    <b>Workloads</b>
+  ==
+
+  ' === Cost Center Card: Engineering ===
+  {SI
+    <b>Engineering</b> | <b>$15,000</b> | <color:red>+$800 (+5.6%) ▲</color> | <color:red>+$4,000 (+36.4%) ▲</color>
+    5 workloads · Top mover: <b>monitoring</b> (+13.3% MoM)
+    ---
     {#
-      .                   | <b>Current</b> | <b>Prev Month</b> | <b>MoM ($)</b> | <b>MoM (%)</b> | <b>Same Month LY</b> | <b>YoY ($)</b> | <b>YoY (%)</b>
-      [genomics-pipeline] | $5,500      | $5,200           | +$300        | +5.8%        | $4,000               | +$1,500      | +37.5%
-      [lab-data]          | $3,000      | $2,800           | +$200        | +7.1%        | $2,000               | +$1,000      | +50.0%
+      .                   | <b>Current</b> | <b>MoM</b>              | <b>YoY</b>
+      [data-pipeline  ]   | $5,000      | +$200 (+4.2%)          | +$1,800 (+56.3%)
+      [ml-training    ]   | $4,200      | +$100 (+2.4%)          | +$700 (+20.0%)
+      [web-platform   ]   | $3,100      | +$100 (+3.3%)          | +$300 (+10.7%)
+      <color:red><b>[monitoring]</b></color> | <color:red>$1,700</color> | <color:red><b>+$200 (+13.3%)</b></color> | <color:red>+$700 (+70.0%)</color>
+      <color:red><b><i>Untagged</i></b></color> | <color:red>$1,000</color> | <color:red><b>+$200 (+25.0%)</b></color> | <color:red>+$500 (+100.0%)</color>
     }
   }
   ==
 
-  <b>Storage Overview</b>
-  {#
-    <b>Total Storage Cost</b> | <b>Cost / TB</b> | <b>Hot Tier %</b> | <b>MoM ($)</b> | <b>MoM (%)</b> | <b>YoY ($)</b> | <b>YoY (%)</b>
-    $4,200                   | $23.45 / TB     | 62.3%            | +$150        | +3.7%        | +$900        | +27.3%
+  ' === Cost Center Card: Research ===
+  {SI
+    <b>Research</b> | <b>$8,500</b> | <color:red>+$500 (+6.3%) ▲</color> | <color:red>+$2,500 (+41.7%) ▲</color>
+    2 workloads · Top mover: <b>lab-data</b> (+7.1% MoM)
+    ---
+    {#
+      .                   | <b>Current</b> | <b>MoM</b>              | <b>YoY</b>
+      [genomics-pipeline] | $5,500      | +$300 (+5.8%)          | +$1,500 (+37.5%)
+      [lab-data        ]  | $3,000      | +$200 (+7.1%)          | +$1,000 (+50.0%)
+    }
+  }
+  ==
+
+  ' === Storage Overview (metric cards) ===
+  {SI
+    <b>Storage Overview</b>
+    {
+      {SI
+        Total Cost
+        <b>$4,200</b>
+        <color:red>+$150 (+3.7%) ▲</color>
+      } | {SI
+        Cost / TB
+        <b>$23.45</b>
+      } | {SI
+        Hot Tier
+        <b>62.3%</b>
+      }
+    }
+  }
+
+  ==
+  {
+    " " | <color:gray>Dapanoskop v1.2.3</color> | " "
   }
 }
 

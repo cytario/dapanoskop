@@ -22,32 +22,31 @@ This document covers the internal architecture of Dapanoskop: the static web app
 
 ### 1.3 Referenced Documents
 
-| Document | Description |
-|----------|-------------|
-| URS-DP | User Requirements Specification for Dapanoskop |
-| SRS-DP | Software Requirements Specification for Dapanoskop |
+| Document | Description                                        |
+|----------|----------------------------------------------------|
+| URS-DP   | User Requirements Specification for Dapanoskop     |
+| SRS-DP   | Software Requirements Specification for Dapanoskop |
 
 ### 1.4 Definitions and Abbreviations
 
-| Term | Definition |
-|------|------------|
-| SPA | Single Page Application |
-| IaC | Infrastructure as Code |
-| CE | AWS Cost Explorer |
-| OAC | CloudFront Origin Access Control |
+| Term | Definition                       |
+|------|----------------------------------|
+| SPA  | Single Page Application          |
+| IaC  | Infrastructure as Code           |
+| CE   | AWS Cost Explorer                |
+| OAC  | CloudFront Origin Access Control |
 
 ---
 
 ## 2. Solution Strategy
 
-| Quality Goal | Scenario | Solution Approach | Reference |
-|-------------|----------|-------------------|-----------|
-| Simplicity for Budget Owners | A non-technical user opens the app and immediately sees their cost report | Static pre-rendered report data; no interactive querying; 1-page layout | §3.1 |
-| Low operational cost | The tool itself should not be a significant cost item | Serverless architecture (Lambda + S3 + CloudFront); no always-on compute | §3.2, §5 |
-| Easy deployment | A DevOps engineer deploys in minutes | Single Terraform module encapsulating all resources | §3.3 |
-| Data freshness | Cost data is at most 1 day old | Scheduled Lambda execution (daily) writing to S3 | §3.2, §4.1 |
-| Security | Only authenticated users access cost data | Cognito authentication via existing User Pool; all authenticated users see all data | §3.1, §6.4 |
-| Origin reuse | Leverage proven cost analysis logic from vz_aws | Lambda function reuses cost categorization and data processing patterns from vz_aws | §3.2 |
+| Quality Goal                 | Scenario                                                                  | Solution Approach                                                                   | Reference  |
+|------------------------------|---------------------------------------------------------------------------|-------------------------------------------------------------------------------------|------------|
+| Simplicity for Budget Owners | A non-technical user opens the app and immediately sees their cost report | Static pre-rendered report data; no interactive querying; 1-page layout             | §3.1       |
+| Low operational cost         | The tool itself should not be a significant cost item                     | Serverless architecture (Lambda + S3 + CloudFront); no always-on compute            | §3.2, §5   |
+| Easy deployment              | A DevOps engineer deploys in minutes                                      | Single Terraform module encapsulating all resources                                 | §3.3       |
+| Data freshness               | Cost data is at most 1 day old                                            | Scheduled Lambda execution (daily) writing to S3                                    | §3.2, §4.1 |
+| Security                     | Only authenticated users access cost data                                 | Cognito authentication via existing User Pool; all authenticated users see all data | §3.1, §6.4 |
 
 ---
 
@@ -56,9 +55,9 @@ This document covers the internal architecture of Dapanoskop: the static web app
 ### Level 1: System Decomposition
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                        D A P A N O S K O P                       │
-│                                                                  │
+┌─────────────────────────────────────────────────────────────────┐
+│                        D A P A N O S K O P                      │
+│                                                                 │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐     │
 │  │  SS-1        │   │  SS-2        │   │  SS-3            │     │
 │  │  Web App     │   │  Data        │   │  Terraform       │     │
@@ -68,18 +67,18 @@ This document covers the internal architecture of Dapanoskop: the static web app
 │  │  CloudFront  │   │  EventBridge │   │  resources       │     │
 │  │  + Cognito   │   │              │   │                  │     │
 │  └──────┬───────┘   └──────┬───────┘   └──────────────────┘     │
-│         │                  │                                     │
-│         │    reads         │    writes                           │
-│         ▼                  ▼                                     │
-│       ┌──────────────────────┐                                   │
-│       │  SS-4                │                                   │
-│       │  Data Store          │                                   │
-│       │  (S3 Data Bucket)    │                                   │
-│       │                      │                                   │
-│       │  summary.json +      │                                   │
-│       │  parquet per period  │                                   │
-│       └──────────────────────┘                                   │
-└──────────────────────────────────────────────────────────────────┘
+│         │                  │                                    │
+│         │    reads         │    writes                          │
+│         ▼                  ▼                                    │
+│       ┌──────────────────────┐                                  │
+│       │  SS-4                │                                  │
+│       │  Data Store          │                                  │
+│       │  (S3 Data Bucket)    │                                  │
+│       │                      │                                  │
+│       │  summary.json +      │                                  │
+│       │  parquet per period  │                                  │
+│       └──────────────────────┘                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 Note: The SPA static assets are hosted in a separate S3 App Bucket (part of SS-1). The Data Bucket (SS-4) stores only cost data JSON files.
@@ -103,11 +102,11 @@ Note: The SPA static assets are hosted in a separate S3 App Bucket (part of SS-1
 │                                          │
 │  ┌──────────────┐  ┌─────────────────┐   │
 │  │  C-1.1       │  │  C-1.2          │   │
-│  │  Auth Module  │  │  Report Renderer│   │
+│  │  Auth Module │  │  Report Renderer│   │
 │  │              │  │                 │   │
-│  │  Cognito     │  │  Reads JSON,   │   │
-│  │  OIDC flow,  │  │  renders 1-page│   │
-│  │  token mgmt  │  │  cost report   │   │
+│  │  Cognito     │  │  Reads JSON,    │   │
+│  │  OIDC flow,  │  │  renders 1-page │   │
+│  │  token mgmt  │  │  cost report    │   │
 │  └──────────────┘  └─────────────────┘   │
 │                                          │
 └──────────────────────────────────────────┘
@@ -138,12 +137,12 @@ Refs: SRS-DP-310101, SRS-DP-310102, SRS-DP-410101, SRS-DP-410102
 **Variability**: None.
 
 **[SDS-DP-010201] Fetch Summary Data**
-The Report Renderer fetches `{year}-{month}/summary.json` for the selected reporting period from CloudFront and renders the 1-page cost report (cost center totals, storage metrics).
-Refs: SRS-DP-310201
+The Report Renderer fetches `{year}-{month}/summary.json` for the selected reporting period and renders the 1-page cost report (global summary bar, cost center cards, storage metric cards).
+Refs: SRS-DP-310201, SRS-DP-310211
 
-**[SDS-DP-010202] Render Cost Center Summary**
-The Report Renderer renders cost center totals with MoM and YoY comparisons from the pre-computed summary.json.
-Refs: SRS-DP-310201, SRS-DP-310202, SRS-DP-310203
+**[SDS-DP-010202] Render Cost Center Cards**
+The Report Renderer renders each cost center as an expandable card with summary (total, MoM, YoY, workload count, top mover) from summary.json. The workload breakdown table is rendered within the expanded card.
+Refs: SRS-DP-310201, SRS-DP-310202, SRS-DP-310203, SRS-DP-310212
 
 **[SDS-DP-010203] Render Workload Table**
 The Report Renderer renders the workload breakdown table from summary.json, with workloads sorted by current month cost descending and MoM/YoY deltas included.
@@ -162,7 +161,8 @@ The Report Renderer maps internal identifiers to business-friendly labels (e.g.,
 Refs: SRS-DP-310209
 
 Wireframes: See `docs/wireframes/cost-report.puml` and `docs/wireframes/workload-detail.puml`.
-Cost direction indicators (color coding, +/- prefixes) are implemented with Tailwind CSS utility classes.
+Cost direction indicators (color coding, direction arrows, +/- prefixes) and anomaly highlighting are implemented with Tailwind CSS utility classes.
+Refs: SRS-DP-310210, SRS-DP-310213
 
 ### 3.2 SS-2: Data Pipeline
 
@@ -203,14 +203,14 @@ Cost direction indicators (color coding, +/- prefixes) are implemented with Tail
 - **Inbound**: Invoked by the Data Processor (C-2.2) or directly by the Lambda handler
 - **Outbound**: AWS Cost Explorer `GetCostAndUsage` API
 
-**Variability**: GroupBy dimensions are fixed (TAG:App + USAGE_TYPE). Cost Category mapping is queried separately.
+**Variability**: GroupBy dimensions are fixed (TAG:App + USAGE_TYPE). The Cost Category name is configurable (defaults to the first one returned by the API).
 
 **[SDS-DP-020101] Query Cost Explorer for Three Periods**
 The Cost Collector queries `GetCostAndUsage` for three time periods: the current (or most recent complete) month, the previous month, and the same month of the previous year. Each query uses `MONTHLY` granularity and requests `UnblendedCost` and `UsageQuantity` metrics, grouped by App tag and USAGE_TYPE (2 GroupBy dimensions, within the CE API limit).
 Refs: SRS-DP-420101, SRS-DP-420102
 
 **[SDS-DP-020102] Query Cost Category Mapping**
-The Cost Collector queries AWS Cost Categories separately to obtain the mapping of workloads (App tag values) to cost centers. This mapping is applied during data processing (C-2.2) to allocate workload costs to cost centers.
+The Cost Collector queries the configured AWS Cost Category (by name, or the first one returned by `GetCostCategories` if not configured) to obtain the mapping of workloads (App tag values) to cost centers. The Cost Category's values are the cost center names. This mapping is applied during data processing (C-2.2) to allocate workload costs to cost centers.
 Refs: SRS-DP-420103
 
 ##### 3.2.2 C-2.2: Data Processor & Writer
@@ -221,10 +221,8 @@ Refs: SRS-DP-420103
 - **Inbound**: Raw Cost Explorer response data from C-2.1
 - **Outbound**: Summary JSON and parquet files written to S3 via `PutObject`
 
-**Variability**: Usage type categorization patterns are derived from the vz_aws origin tool and can be extended.
-
 **[SDS-DP-020201] Categorize Usage Types**
-The Data Processor categorizes each AWS usage type into Storage, Compute, Other, or Support by matching the usage type string against known patterns. The pattern list is derived from the `get_usage_category()` function in the vz_aws origin tool.
+The Data Processor categorizes each AWS usage type into Storage, Compute, Other, or Support by matching the usage type string against known patterns.
 Refs: SRS-DP-420105
 
 **[SDS-DP-020202] Apply Cost Category Mapping**
@@ -237,15 +235,15 @@ Refs: SRS-DP-420104
 
 **[SDS-DP-020204] Write Summary JSON**
 The Data Processor writes `{year}-{month}/summary.json` containing pre-computed aggregates for the 1-page report: cost center totals (current, prev month, YoY), workload breakdown per cost center (sorted by cost descending, with MoM/YoY), storage metrics (total cost, cost/TB, hot tier %), and a `collected_at` ISO 8601 timestamp.
-Refs: SRS-DP-440101, SRS-DP-510002
+Refs: SRS-DP-430101, SRS-DP-510002
 
 **[SDS-DP-020205] Write Workload Parquet**
 The Data Processor writes `{year}-{month}/cost-by-workload.parquet` containing per-workload cost data with columns: `cost_center`, `workload`, `period`, `cost_usd`. Rows for all three periods (current, previous month, YoY month) are included so the SPA can compute comparisons via DuckDB queries.
-Refs: SRS-DP-440101
+Refs: SRS-DP-430101
 
 **[SDS-DP-020206] Write Usage Type Parquet**
 The Data Processor writes `{year}-{month}/cost-by-usage-type.parquet` containing per-usage-type cost data with columns: `workload`, `usage_type`, `category`, `period`, `cost_usd`, `usage_quantity`. Rows for all three periods are included.
-Refs: SRS-DP-440101
+Refs: SRS-DP-430101
 
 ### 3.3 SS-3: Terraform Module
 
@@ -255,7 +253,7 @@ Refs: SRS-DP-440101
 - **Inbound**: Terraform input variables from the deployer
 - **Outbound**: Provisions AWS resources (S3 buckets, CloudFront distribution, Cognito app client on existing User Pool, Lambda function, EventBridge rule, IAM roles)
 
-**Variability**: Configurable via Terraform variables (domain name, Cost Category names, existing Cognito User Pool ID, schedule, storage services to include, etc.).
+**Variability**: Configurable via Terraform variables (domain name, Cost Category name (optional, defaults to first), existing Cognito User Pool ID, schedule, storage services to include, etc.).
 
 #### Level 2: Terraform Module Components
 
@@ -263,14 +261,14 @@ Refs: SRS-DP-440101
 ┌────────────────────────────────────────────────────────┐
 │              SS-3: Terraform Module                    │
 │                                                        │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
-│  │ C-3.1    │ │ C-3.2    │ │ C-3.3    │ │ C-3.4    │  │
-│  │ Hosting  │ │ Auth     │ │ Pipeline │ │ Data     │  │
-│  │ Infra    │ │ Infra    │ │ Infra    │ │ Store    │  │
-│  │          │ │          │ │          │ │ Infra    │  │
-│  │ S3 App + │ │ Cognito  │ │ Lambda + │ │ S3 Data │  │
-│  │ CF + DNS │ │ App Clnt │ │ EB Rule  │ │ bucket  │  │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
+│  │ C-3.1    │ │ C-3.2    │ │ C-3.3    │ │ C-3.4    │   │
+│  │ Hosting  │ │ Auth     │ │ Pipeline │ │ Data     │   │
+│  │ Infra    │ │ Infra    │ │ Infra    │ │ Store    │   │
+│  │          │ │          │ │          │ │ Infra    │   │
+│  │ S3 App + │ │ Cognito  │ │ Lambda + │ │ S3 Data  │   │
+│  │ CF + DNS │ │ App Clnt │ │ EB Rule  │ │ bucket   │   │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘   │
 │                                                        │
 └────────────────────────────────────────────────────────┘
 ```
@@ -281,7 +279,7 @@ Refs: SRS-DP-440101
 
 **[SDS-DP-030101] Provision Web Hosting Stack**
 The module creates an S3 app bucket (private, website hosting disabled), a CloudFront distribution with OAC pointing to both the app bucket and the data bucket as separate origins, and S3 bucket policies granting CloudFront read access.
-Refs: SRS-DP-430101, SRS-DP-450101
+Refs: SRS-DP-520001, SRS-DP-520003
 
 The custom domain name and ACM certificate ARN are passed as optional Terraform input variables. The module does not create certificates or DNS records — those are managed externally.
 
@@ -308,7 +306,7 @@ Refs: SRS-DP-510002, SRS-DP-520002
 
 **[SDS-DP-030401] Provision Data Bucket**
 The module creates a dedicated S3 bucket for cost data with versioning enabled, server-side encryption (SSE-S3 or SSE-KMS), and a bucket policy granting the Lambda function write access and CloudFront read access.
-Refs: SRS-DP-440101, SRS-DP-440102
+Refs: SRS-DP-430101, SRS-DP-430102
 
 No lifecycle rules — all historical data is retained indefinitely. Storage cost is negligible (a few KB per period).
 
@@ -332,7 +330,7 @@ Each reporting period is stored under a `{year}-{month}/` prefix containing:
   cost-by-usage-type.parquet   # Detailed usage type cost data for all 3 periods
 ```
 
-Refs: SRS-DP-440101, SRS-DP-440102
+Refs: SRS-DP-430101, SRS-DP-430102
 
 **[SDS-DP-040002] summary.json Schema**
 
@@ -348,6 +346,7 @@ Refs: SRS-DP-440101, SRS-DP-440102
   "storage_config": { "include_efs": true, "include_ebs": false },
   "storage_metrics": {
     "total_cost_usd": 1234.56,
+    "prev_month_cost_usd": 1084.56,
     "total_volume_bytes": 5497558138880,
     "hot_tier_percentage": 62.3,
     "cost_per_tb_usd": 23.45
@@ -376,7 +375,7 @@ Refs: SRS-DP-440101, SRS-DP-440102
 }
 ```
 
-Refs: SRS-DP-440101, SRS-DP-440102
+Refs: SRS-DP-430101, SRS-DP-430102
 
 **[SDS-DP-040003] Parquet File Schemas**
 
@@ -384,7 +383,7 @@ Refs: SRS-DP-440101, SRS-DP-440102
 
 | Column | Type | Description |
 |--------|------|-------------|
-| cost_center | STRING | Cost Category value |
+| cost_center | STRING | A value from the configured Cost Category |
 | workload | STRING | App tag value (or "Untagged") |
 | period | STRING | YYYY-MM |
 | cost_usd | DOUBLE | UnblendedCost in USD |
@@ -402,7 +401,7 @@ Refs: SRS-DP-440101, SRS-DP-440102
 
 Both parquet files contain rows for all three periods (current, previous month, YoY) to support comparison queries.
 
-Refs: SRS-DP-440101
+Refs: SRS-DP-430101
 
 No index file is needed. The SPA lists objects in the data bucket prefix to discover available periods. The number of periods is small enough that S3 ListObjects performance is sufficient.
 
@@ -582,7 +581,7 @@ The software version follows semantic versioning (SemVer) and is displayed in th
 
 ### 6.3 Usage Type Categorization
 
-The usage type categorization logic (mapping AWS usage types to Storage / Compute / Other / Support) is derived from the `get_usage_category()` function in the vz_aws origin tool. This function uses string pattern matching against 200+ known AWS usage type patterns. The categorization is applied during data processing in the Lambda function (C-2.2).
+The usage type categorization logic (mapping AWS usage types to Storage / Compute / Other / Support) uses string pattern matching against known AWS usage type patterns. The categorization is applied during data processing in the Lambda function (C-2.2).
 
 This categorization must be maintained as AWS introduces new usage types. Unknown usage types default to the "Other" category.
 
@@ -612,7 +611,6 @@ The hot tier percentage is calculated as:
 hot_tier_% = (hot_tier_byte_hours / total_byte_hours) × 100
 ```
 
-This is consistent with the `_calculate_hot_data_percentage()` function in the vz_aws origin tool.
 
 ### 6.6 Cost per TB Calculation
 
@@ -710,8 +708,7 @@ What programming language should the Lambda function use?
 
 #### 7.4.2 Boundary Conditions
 - Must support AWS SDK (Cost Explorer API)
-- Origin tool (vz_aws) is written in Python
-- Categorization logic from vz_aws should be reusable
+- Existing categorization logic is written in Python
 
 #### 7.4.3 Assumptions
 - The data processing logic is moderate complexity (categorization, aggregation, JSON output)
@@ -720,12 +717,12 @@ What programming language should the Lambda function use?
 
 | Option | Pros | Cons |
 |--------|------|------|
-| **A: Python** | Direct reuse of vz_aws categorization logic; mature AWS SDK (boto3); familiar to origin authors | Lambda cold start slightly slower than compiled languages |
-| B: Node.js / TypeScript | Same language as SPA (if JS); fast Lambda cold starts | Cannot directly reuse vz_aws logic |
+| **A: Python** | Reuse of existing categorization logic; mature AWS SDK (boto3) | Lambda cold start slightly slower than compiled languages |
+| B: Node.js / TypeScript | Same language as SPA (if JS); fast Lambda cold starts | Cannot directly reuse existing categorization logic |
 | C: Go / Rust | Fastest cold starts; compiled binary | No reuse of existing Python code; smaller ecosystem for this use case |
 
 #### 7.4.5 Decision
-**Option A: Python**. Direct reuse of the vz_aws cost categorization logic is a significant advantage. The Lambda runs daily on a schedule, so cold start performance is not critical.
+**Option A: Python**. Reuse of existing categorization logic is a significant advantage. The Lambda runs daily on a schedule, so cold start performance is not critical.
 
 ---
 
