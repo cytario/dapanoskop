@@ -53,6 +53,7 @@ jobs:
           python-version: "3.12"
 
       - run: uv sync
+      - run: uv pip install -e .
 
       - name: Ruff lint
         run: uv run ruff check .
