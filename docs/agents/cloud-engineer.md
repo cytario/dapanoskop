@@ -60,7 +60,7 @@ Refs: SRS-DP-410101
 ### C-3.3: Pipeline Infrastructure
 
 **[SDS-DP-030301] Lambda and Schedule**
-- Lambda function from zip deployment artifact
+- Lambda function from local zip via `archive_file` data source (deployed directly, not via S3)
 - IAM role with `ce:GetCostAndUsage`, `ce:GetCostCategories`, `s3:PutObject`
 - EventBridge rule: `cron(0 6 * * ? *)`
 

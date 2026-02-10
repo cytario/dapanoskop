@@ -29,7 +29,7 @@ Implements OAuth 2.0 Authorization Code flow with PKCE against Cognito hosted UI
 - Tokens stored in **sessionStorage** (clears on tab close)
 - Handle token refresh on expiry
 - Redirect unauthenticated users to Cognito hosted UI
-- Cognito User Pool ID and Client ID injected at build/deploy time
+- Cognito Domain URL (`VITE_COGNITO_DOMAIN`) and Client ID (`VITE_COGNITO_CLIENT_ID`) injected at build/deploy time
 - Session duration: Cognito defaults (1h for ID/access tokens)
 - All authenticated users see all data (no role-based filtering)
 
@@ -47,7 +47,7 @@ The SPA reads pre-computed files from the data S3 bucket (via CloudFront). No di
 - `cost-by-workload.parquet` — Per-workload cost for all 3 comparison periods
 - `cost-by-usage-type.parquet` — Per-usage-type cost for drill-down
 
-**Period discovery**: List S3 objects in the data bucket prefix. No index file.
+**Period discovery**: First attempts to fetch `index.json`; if unavailable, probes the last 13 months via HEAD requests to `{year}-{month}/summary.json`.
 
 ### summary.json Schema
 

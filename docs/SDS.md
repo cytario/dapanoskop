@@ -92,7 +92,7 @@ Note: The SPA static assets are hosted in a separate S3 App Bucket (part of SS-1
 - **Outbound (Data Store)**: Reads pre-computed cost data JSON files from the data S3 bucket via CloudFront
 - **Outbound (Auth)**: Redirects to existing Cognito hosted UI for authentication; validates JWT tokens
 
-**Variability**: Cognito User Pool ID and Client ID are injected at deploy time.
+**Variability**: Cognito Domain URL and Client ID are injected at deploy time via environment variables.
 
 #### Level 2: Web Application Components
 
@@ -120,7 +120,7 @@ Note: The SPA static assets are hosted in a separate S3 App Bucket (part of SS-1
 - **Inbound**: Called by the SPA on page load and on token expiry
 - **Outbound**: Cognito hosted UI (redirect), Cognito token endpoint (token exchange)
 
-**Variability**: Cognito User Pool ID and Client ID are injected at build/deploy time via configuration.
+**Variability**: Cognito Domain URL and Client ID are injected at build/deploy time via environment variables (`VITE_COGNITO_DOMAIN`, `VITE_COGNITO_CLIENT_ID`).
 
 **[SDS-DP-010101] Implement OIDC Authorization Code Flow with PKCE**
 The Auth Module implements the OAuth 2.0 Authorization Code flow with PKCE against the Cognito hosted UI. Tokens are stored in sessionStorage, preserving the session across page refreshes within the same browser tab while clearing automatically when the tab is closed. The module handles token refresh on expiry.
@@ -297,7 +297,7 @@ Refs: SRS-DP-410101
 
 **[SDS-DP-030301] Provision Lambda and Schedule**
 The module creates a Lambda function (Python runtime) from a packaged deployment artifact, an IAM role with permissions for `ce:GetCostAndUsage`, `ce:GetCostCategories`, and `s3:PutObject` (to the data bucket), and an EventBridge rule to trigger the Lambda on a daily schedule.
-The Lambda is packaged as a zip file uploaded to the data S3 bucket. Memory: 256 MB. Timeout: 5 minutes. EventBridge schedule: `cron(0 6 * * ? *)` (daily at 06:00 UTC).
+The Lambda is packaged as a zip file from the local source directory via Terraform's `archive_file` data source and deployed directly (not via S3). Memory: 256 MB. Timeout: 5 minutes. EventBridge schedule: `cron(0 6 * * ? *)` (daily at 06:00 UTC).
 Refs: SRS-DP-510002, SRS-DP-520002
 
 ##### 3.3.4 C-3.4: Data Store Infrastructure
@@ -403,7 +403,7 @@ Both parquet files contain rows for all three periods (current, previous month, 
 
 Refs: SRS-DP-430101
 
-No index file is needed. The SPA lists objects in the data bucket prefix to discover available periods. The number of periods is small enough that S3 ListObjects performance is sufficient.
+The SPA discovers available periods using a two-step approach: it first attempts to fetch an `index.json` file listing available periods; if that fails, it probes the last 13 months by making HEAD requests to `{year}-{month}/summary.json` and collects those that return 200.
 
 ---
 
@@ -543,7 +543,7 @@ DevOps Engineer          Terraform          AWS
 | Artifact | Content | Deployed To |
 |----------|---------|-------------|
 | SPA bundle | HTML, CSS, JS (compiled React app) | S3 App Bucket |
-| Lambda package | Python code (zip file) | Lambda function |
+| Lambda package | Python code (zip file from `archive_file`) | Lambda function |
 | Terraform module | HCL files | Executed by DevOps engineer |
 
 **Execution Nodes:**
@@ -731,3 +731,4 @@ What programming language should the Lambda function use?
 | Version | Date       | Author | Description       |
 |---------|------------|--------|-------------------|
 | 0.1     | 2026-02-08 | —      | Initial draft     |
+| 0.2     | 2026-02-10 | —      | Align with implementation: period discovery, Lambda deployment, auth config |
