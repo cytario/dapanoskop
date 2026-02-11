@@ -26,6 +26,8 @@ coverage.xml
 *.tfstate.*
 .terraform.lock.hcl
 *.tfplan
+*.tfvars
+!*.tfvars.example
 crash.log
 override.tf
 override.tf.json
@@ -44,6 +46,13 @@ override.tf.json
 .env
 .env.local
 .env.*.local
+
+# Secrets and private keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
 
 # Lambda packaging
 *.zip

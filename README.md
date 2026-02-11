@@ -1,3 +1,8 @@
+[![CI](https://github.com/cytario/dapanoskop/actions/workflows/ci.yml/badge.svg)](https://github.com/cytario/dapanoskop/actions/workflows/ci.yml)
+[![Release](https://github.com/cytario/dapanoskop/actions/workflows/release.yml/badge.svg)](https://github.com/cytario/dapanoskop/actions/workflows/release.yml)
+[![GitHub release](https://img.shields.io/github/v/release/cytario/dapanoskop)](https://github.com/cytario/dapanoskop/releases)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 # Dapanoskop
 
 > From Greek δαπάνη (dapáni, "cost") + σκοπέω (skopéo, "to observe") — the cost observer.

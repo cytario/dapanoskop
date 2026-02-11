@@ -7,6 +7,12 @@ on:
     branches: [main]
   workflow_call:
 
+permissions: read-all
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   frontend:
     name: Frontend
