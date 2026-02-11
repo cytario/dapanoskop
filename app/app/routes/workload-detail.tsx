@@ -2,7 +2,7 @@ import { useEffect, useState, lazy, Suspense } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import type { CostSummary, UsageTypeCostRow } from "~/types/cost-data";
 import { fetchSummary } from "~/lib/data";
-import { isAuthenticated, login } from "~/lib/auth";
+import { initAuth, isAuthenticated, login } from "~/lib/auth";
 import { formatUsd } from "~/lib/format";
 import { CostChange } from "~/components/CostChange";
 
@@ -27,13 +27,6 @@ export default function WorkloadDetail() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      login();
-      return;
-    }
-    if (!period || !name) return;
-    if (!/^\d{4}-\d{2}$/.test(period)) return;
-
     let cancelled = false;
     let worker: Worker | undefined;
     let db: import("@duckdb/duckdb-wasm").AsyncDuckDB | undefined;
@@ -131,7 +124,19 @@ export default function WorkloadDetail() {
       }
       if (!cancelled) setLoading(false);
     }
-    loadData();
+
+    async function init() {
+      await initAuth();
+      if (cancelled) return;
+      if (!isAuthenticated()) {
+        login();
+        return;
+      }
+      if (!period || !name) return;
+      if (!/^\d{4}-\d{2}$/.test(period)) return;
+      await loadData();
+    }
+    init();
 
     return () => {
       cancelled = true;

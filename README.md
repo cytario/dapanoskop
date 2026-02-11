@@ -24,57 +24,32 @@ terraform/    OpenTofu/Terraform module — provisions all AWS infrastructure
 - AWS account with [Cost Explorer enabled](https://docs.aws.amazon.com/cost-management/latest/userguide/ce-enable.html)
 - An existing [Cognito User Pool](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pool-as-user-directory.html) for authentication
 - [OpenTofu](https://opentofu.org/) >= 1.5 (or Terraform >= 1.5)
-- [Node.js](https://nodejs.org/) >= 22 (to build the SPA)
-- [uv](https://docs.astral.sh/uv/) + Python >= 3.12 (to package the Lambda)
 
 ## Getting Started
 
-### 1. Provision infrastructure
-
-```bash
-git clone https://github.com/cytario/dapanoskop.git && cd dapanoskop/terraform
-
-tofu init
-tofu plan -var="cognito_user_pool_id=eu-west-1_XXXXXXX"
-tofu apply -var="cognito_user_pool_id=eu-west-1_XXXXXXX"
-```
-
-Or reference the module from your own Terraform config:
+Add the module to your Terraform config, point it at a release, and apply:
 
 ```hcl
 module "dapanoskop" {
-  source = "git::https://github.com/cytario/dapanoskop.git//terraform?ref=v1.0.0"
+  source = "git::https://github.com/cytario/dapanoskop.git//terraform?ref=v1.2.0"
 
+  release_version      = "v1.2.0"
   cognito_user_pool_id = "eu-west-1_XXXXXXX"
+  cognito_domain       = "https://auth.example.com"
 }
 ```
 
-### 2. Deploy the SPA
-
 ```bash
-cd app
-npm ci
-npm run build
-aws s3 sync build/client/ s3://$(cd ../terraform && tofu output -raw app_bucket_name)/
+tofu init && tofu apply
 ```
 
-### 3. Deploy the Lambda
+That's it. The module downloads pre-built Lambda and SPA artifacts from the GitHub release, deploys them, and writes the runtime config to S3. No Node.js, no Python, no manual S3 sync.
 
-```bash
-cd lambda
-zip -r lambda.zip src/dapanoskop/
-aws lambda update-function-code \
-  --function-name $(cd ../terraform && tofu output -raw lambda_function_name) \
-  --zip-file fileb://lambda.zip
-```
+Navigate to the CloudFront URL from `tofu output cloudfront_url` and log in with your Cognito user credentials.
 
-### 4. Open the dashboard
+### Local development mode
 
-```bash
-tofu output cloudfront_url
-```
-
-Navigate to the URL and log in with your Cognito user credentials.
+When `release_version` is not set, the module builds the Lambda zip from source via `archive_file` and skips SPA deployment (deploy manually with `aws s3 sync`).
 
 ## Configuration
 
@@ -83,10 +58,12 @@ Navigate to the URL and log in with your Cognito user credentials.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `cognito_user_pool_id` | Yes | Existing Cognito User Pool ID |
+| `release_version` | No | GitHub release tag (e.g. `v1.2.0`). Downloads pre-built artifacts. |
+| `cognito_domain` | No | Cognito domain for auth and CSP (e.g. `https://auth.example.com`) |
+| `github_repo` | No | GitHub repo for release artifacts (default: `cytario/dapanoskop`) |
 | `cost_category_name` | No | AWS Cost Category for cost center mapping |
 | `domain_name` | No | Custom domain for CloudFront |
 | `acm_certificate_arn` | No | ACM certificate ARN (required with `domain_name`) |
-| `cognito_domain` | No | Cognito domain for CSP connect-src |
 | `schedule_expression` | No | EventBridge cron (default: `cron(0 6 * * ? *)`) |
 | `include_efs` | No | Include EFS in storage metrics (default: `false`) |
 | `include_ebs` | No | Include EBS in storage metrics (default: `false`) |
@@ -102,14 +79,15 @@ Navigate to the URL and log in with your Cognito user credentials.
 | `cognito_client_id` | Cognito app client ID |
 | `lambda_function_name` | Lambda function name |
 
-### SPA Environment Variables
+### SPA Configuration
 
-These are set at build time (baked into the static bundle):
+In production, the SPA reads `/config.json` from S3 (written by Terraform). For local development, it falls back to `VITE_*` env vars:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VITE_COGNITO_DOMAIN` | — | Cognito hosted UI domain |
-| `VITE_COGNITO_CLIENT_ID` | — | Cognito app client ID (from Terraform output) |
+| `VITE_AUTH_BYPASS` | `false` | Skip auth for local dev |
+| `VITE_COGNITO_DOMAIN` | — | Cognito hosted UI domain (fallback) |
+| `VITE_COGNITO_CLIENT_ID` | — | Cognito app client ID (fallback) |
 | `VITE_REDIRECT_URI` | `window.location.origin + "/"` | OAuth redirect URI |
 | `VITE_DATA_BASE_URL` | `"/data"` | Base URL for cost data files |
 

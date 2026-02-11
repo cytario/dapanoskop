@@ -1,3 +1,10 @@
+module "artifacts" {
+  source = "./modules/artifacts"
+
+  release_version = var.release_version
+  github_repo     = var.github_repo
+}
+
 module "data_store" {
   source = "./modules/data-store"
 }
@@ -11,6 +18,8 @@ module "hosting" {
   domain_name                 = var.domain_name
   acm_certificate_arn         = var.acm_certificate_arn
   cognito_domain              = var.cognito_domain
+  spa_archive_path            = module.artifacts.spa_archive_path
+  cognito_client_id           = module.auth.client_id
 }
 
 module "auth" {
@@ -29,4 +38,6 @@ module "pipeline" {
   schedule_expression = var.schedule_expression
   include_efs         = var.include_efs
   include_ebs         = var.include_ebs
+  lambda_zip_path     = module.artifacts.lambda_zip_path
+  lambda_zip_hash     = module.artifacts.lambda_zip_hash
 }

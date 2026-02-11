@@ -3,6 +3,11 @@
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
-    "@semantic-release/github"
+    ["@semantic-release/github", {
+      "assets": [
+        {"path": "lambda.zip", "label": "Lambda deployment package"},
+        {"path": "spa.tar.gz", "label": "SPA static files"}
+      ]
+    }]
   ]
 }

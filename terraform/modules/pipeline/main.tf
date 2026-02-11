@@ -1,9 +1,15 @@
 data "aws_region" "current" {}
 
 data "archive_file" "lambda" {
+  count       = var.lambda_zip_path != "" ? 0 : 1
   type        = "zip"
   source_dir  = "${path.module}/../../../lambda/src"
   output_path = "${path.module}/lambda.zip"
+}
+
+locals {
+  lambda_filename = var.lambda_zip_path != "" ? var.lambda_zip_path : data.archive_file.lambda[0].output_path
+  lambda_hash     = var.lambda_zip_path != "" ? var.lambda_zip_hash : data.archive_file.lambda[0].output_base64sha256
 }
 
 resource "aws_iam_role" "lambda" {
@@ -68,8 +74,8 @@ resource "aws_lambda_function" "pipeline" {
   role             = aws_iam_role.lambda.arn
   handler          = "dapanoskop.handler.handler"
   runtime          = "python3.12"
-  filename         = data.archive_file.lambda.output_path
-  source_code_hash = data.archive_file.lambda.output_base64sha256
+  filename         = local.lambda_filename
+  source_code_hash = local.lambda_hash
   memory_size      = 256
   timeout          = 300
 

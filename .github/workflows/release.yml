@@ -26,6 +26,16 @@ jobs:
         with:
           node-version: 22
 
+      - name: Package Lambda
+        run: cd lambda/src && zip -r ../../lambda.zip dapanoskop/
+
+      - name: Build SPA
+        run: |
+          cd app
+          npm ci
+          npm run build
+          tar -czf ../spa.tar.gz -C build/client .
+
       - name: Install semantic-release
         run: npm install -g semantic-release
 

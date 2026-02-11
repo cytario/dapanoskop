@@ -1,17 +1,26 @@
 /**
  * Auth module (C-1.1): OIDC Authorization Code + PKCE flow with Cognito.
  * Dev bypass via VITE_AUTH_BYPASS=true.
+ *
+ * Call initAuth() once before using any other export.
  */
 
-const AUTH_BYPASS = import.meta.env.VITE_AUTH_BYPASS === "true";
-const COGNITO_DOMAIN = import.meta.env.VITE_COGNITO_DOMAIN ?? "";
-const CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID ?? "";
+import { getConfig } from "./config";
 
-function getRedirectUri(): string {
-  return (
-    import.meta.env.VITE_REDIRECT_URI ??
-    (typeof window !== "undefined" ? window.location.origin + "/" : "/")
-  );
+let authBypass = false;
+let cognitoDomain = "";
+let clientId = "";
+let redirectUri = "/";
+let initialized = false;
+
+export async function initAuth(): Promise<void> {
+  if (initialized) return;
+  const cfg = await getConfig();
+  authBypass = cfg.authBypass;
+  cognitoDomain = cfg.cognitoDomain;
+  clientId = cfg.cognitoClientId;
+  redirectUri = cfg.redirectUri;
+  initialized = true;
 }
 
 function generateCodeVerifier(): string {
@@ -34,7 +43,7 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
 }
 
 export function isAuthenticated(): boolean {
-  if (AUTH_BYPASS) return true;
+  if (authBypass) return true;
   const token = sessionStorage.getItem("id_token");
   if (!token) return false;
   // Basic expiry check
@@ -47,7 +56,7 @@ export function isAuthenticated(): boolean {
 }
 
 export async function login(): Promise<void> {
-  if (AUTH_BYPASS) return;
+  if (authBypass) return;
 
   const verifier = generateCodeVerifier();
   const challenge = await generateCodeChallenge(verifier);
@@ -55,18 +64,18 @@ export async function login(): Promise<void> {
 
   const params = new URLSearchParams({
     response_type: "code",
-    client_id: CLIENT_ID,
-    redirect_uri: getRedirectUri(),
+    client_id: clientId,
+    redirect_uri: redirectUri,
     scope: "openid email profile",
     code_challenge: challenge,
     code_challenge_method: "S256",
   });
 
-  window.location.href = `${COGNITO_DOMAIN}/oauth2/authorize?${params}`;
+  window.location.href = `${cognitoDomain}/oauth2/authorize?${params}`;
 }
 
 export async function handleCallback(): Promise<boolean> {
-  if (AUTH_BYPASS) return true;
+  if (authBypass) return true;
 
   const params = new URLSearchParams(window.location.search);
   const code = params.get("code");
@@ -75,14 +84,14 @@ export async function handleCallback(): Promise<boolean> {
   const verifier = sessionStorage.getItem("pkce_verifier");
   if (!verifier) return false;
 
-  const response = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
+  const response = await fetch(`${cognitoDomain}/oauth2/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: CLIENT_ID,
+      client_id: clientId,
       code,
-      redirect_uri: getRedirectUri(),
+      redirect_uri: redirectUri,
       code_verifier: verifier,
     }),
   });
@@ -106,18 +115,18 @@ export function logout(): void {
   sessionStorage.removeItem("id_token");
   sessionStorage.removeItem("access_token");
   sessionStorage.removeItem("refresh_token");
-  if (!AUTH_BYPASS && COGNITO_DOMAIN) {
+  if (!authBypass && cognitoDomain) {
     const params = new URLSearchParams({
-      client_id: CLIENT_ID,
-      logout_uri: getRedirectUri(),
+      client_id: clientId,
+      logout_uri: redirectUri,
     });
-    window.location.href = `${COGNITO_DOMAIN}/logout?${params}`;
+    window.location.href = `${cognitoDomain}/logout?${params}`;
   } else {
     window.location.reload();
   }
 }
 
 export function getAccessToken(): string | null {
-  if (AUTH_BYPASS) return "bypass-token";
+  if (authBypass) return "bypass-token";
   return sessionStorage.getItem("access_token");
 }

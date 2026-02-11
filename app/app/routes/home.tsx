@@ -2,7 +2,13 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import type { CostSummary } from "~/types/cost-data";
 import { discoverPeriods, fetchSummary } from "~/lib/data";
-import { isAuthenticated, login, handleCallback, logout } from "~/lib/auth";
+import {
+  initAuth,
+  isAuthenticated,
+  login,
+  handleCallback,
+  logout,
+} from "~/lib/auth";
 import { PeriodSelector } from "~/components/PeriodSelector";
 import { GlobalSummary } from "~/components/GlobalSummary";
 import { TaggingCoverage } from "~/components/TaggingCoverage";
@@ -30,6 +36,7 @@ export default function Home() {
   // Auth check
   useEffect(() => {
     async function checkAuth() {
+      await initAuth();
       // Handle callback if present
       const params = new URLSearchParams(window.location.search);
       if (params.has("code")) {

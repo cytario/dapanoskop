@@ -285,6 +285,48 @@ resource "aws_s3_bucket_policy" "app" {
   })
 }
 
+resource "terraform_data" "deploy_spa" {
+  count = var.spa_archive_path != "" ? 1 : 0
+
+  input = filemd5(var.spa_archive_path)
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      TMPDIR=$(mktemp -d)
+      tar -xzf "${var.spa_archive_path}" -C "$TMPDIR"
+      aws s3 sync "$TMPDIR" "s3://${aws_s3_bucket.app.id}" --delete --exclude "config.json"
+      rm -rf "$TMPDIR"
+    EOT
+  }
+}
+
+resource "aws_s3_object" "config_json" {
+  count = var.cognito_client_id != "" ? 1 : 0
+
+  bucket       = aws_s3_bucket.app.id
+  key          = "config.json"
+  content_type = "application/json"
+
+  content = jsonencode({
+    cognitoDomain   = var.cognito_domain
+    cognitoClientId = var.cognito_client_id
+  })
+
+  depends_on = [terraform_data.deploy_spa]
+}
+
+resource "terraform_data" "invalidate_cloudfront" {
+  count = var.spa_archive_path != "" ? 1 : 0
+
+  input = terraform_data.deploy_spa[0].output
+
+  provisioner "local-exec" {
+    command = "aws cloudfront create-invalidation --distribution-id ${aws_cloudfront_distribution.main.id} --paths '/*'"
+  }
+
+  depends_on = [aws_s3_object.config_json]
+}
+
 resource "aws_s3_bucket_policy" "data" {
   bucket = var.data_bucket_id
 

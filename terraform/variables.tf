@@ -44,3 +44,15 @@ variable "cognito_domain" {
   type        = string
   default     = ""
 }
+
+variable "release_version" {
+  description = "GitHub release tag to download pre-built artifacts from (e.g. v1.2.0). Leave empty for local dev."
+  type        = string
+  default     = ""
+}
+
+variable "github_repo" {
+  description = "GitHub repository in owner/repo format for downloading release artifacts"
+  type        = string
+  default     = "cytario/dapanoskop"
+}

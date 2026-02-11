@@ -31,3 +31,15 @@ variable "include_ebs" {
   type        = bool
   default     = false
 }
+
+variable "lambda_zip_path" {
+  description = "Path to a pre-built Lambda zip. If empty, archive_file builds from source."
+  type        = string
+  default     = ""
+}
+
+variable "lambda_zip_hash" {
+  description = "Base64-encoded SHA256 hash of the pre-built Lambda zip"
+  type        = string
+  default     = ""
+}
