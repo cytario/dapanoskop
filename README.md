@@ -168,4 +168,6 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 
 ## License
 
-Private.
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
+
+A commercial license is available through [Cytario](https://cytario.com) for use cases where the GPL is not suitable.
