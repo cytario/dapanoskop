@@ -100,5 +100,8 @@ jobs:
 
       - uses: terraform-linters/setup-tflint@v4
 
+      - name: TFLint init
+        run: tflint --init
+
       - name: TFLint
         run: tflint --recursive
