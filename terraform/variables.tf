@@ -38,3 +38,9 @@ variable "include_ebs" {
   type        = bool
   default     = false
 }
+
+variable "cognito_domain" {
+  description = "Cognito domain for CSP connect-src (e.g. https://auth.example.com)"
+  type        = string
+  default     = ""
+}

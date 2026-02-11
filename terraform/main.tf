@@ -10,6 +10,7 @@ module "hosting" {
   data_bucket_regional_domain = module.data_store.bucket_regional_domain_name
   domain_name                 = var.domain_name
   acm_certificate_arn         = var.acm_certificate_arn
+  cognito_domain              = var.cognito_domain
 }
 
 module "auth" {

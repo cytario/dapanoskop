@@ -13,6 +13,7 @@ dev = [
     "moto[ce,s3]",
     "boto3-stubs",
     "ruff",
+    "pip-audit",
 ]
 
 [build-system]

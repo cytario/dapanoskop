@@ -24,3 +24,15 @@ variable "acm_certificate_arn" {
   type        = string
   default     = ""
 }
+
+variable "cognito_domain" {
+  description = "Cognito domain for CSP connect-src (e.g. https://auth.example.com)"
+  type        = string
+  default     = ""
+}
+
+variable "enable_access_logging" {
+  description = "Enable S3 and CloudFront access logging"
+  type        = bool
+  default     = false
+}

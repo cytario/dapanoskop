@@ -25,6 +25,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
       - name: Prettier
         run: npx prettier --check .
 
@@ -54,6 +57,9 @@ jobs:
 
       - run: uv sync
       - run: uv pip install -e .
+
+      - name: Audit dependencies
+        run: uv run pip-audit
 
       - name: Ruff lint
         run: uv run ruff check .
@@ -85,3 +91,8 @@ jobs:
 
       - name: Validate
         run: tofu validate
+
+      - uses: terraform-linters/setup-tflint@v4
+
+      - name: TFLint
+        run: tflint --recursive

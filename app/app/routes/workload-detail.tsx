@@ -82,11 +82,18 @@ export default function WorkloadDetail() {
         await db.instantiate(bundle.mainModule);
         if (cancelled) return;
 
+        await db.registerFileURL(
+          "usage.parquet",
+          parquetUrl,
+          duckdb.DuckDBDataProtocol.HTTP,
+          false,
+        );
+
         const conn = await db.connect();
         try {
           const stmt = await conn.prepare(`
             SELECT workload, usage_type, category, period, cost_usd, usage_quantity
-            FROM read_parquet('${parquetUrl}')
+            FROM read_parquet('usage.parquet')
             WHERE workload = ?
             ORDER BY cost_usd DESC
           `);
@@ -111,7 +118,13 @@ export default function WorkloadDetail() {
           await conn.close();
         }
       } catch (e) {
-        if (!cancelled) setError(`Failed to load workload detail: ${e}`);
+        if (!cancelled) {
+          setError(
+            import.meta.env.DEV
+              ? `Failed to load workload detail: ${e}`
+              : "Failed to load workload detail. Please try again later.",
+          );
+        }
       } finally {
         if (db) await db.terminate().catch(() => {});
         if (worker) worker.terminate();

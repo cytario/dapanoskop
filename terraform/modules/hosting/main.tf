@@ -2,6 +2,14 @@ resource "aws_s3_bucket" "app" {
   bucket_prefix = "dapanoskop-app-"
 }
 
+resource "aws_s3_bucket_versioning" "app" {
+  bucket = aws_s3_bucket.app.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "app" {
   bucket = aws_s3_bucket.app.id
 
@@ -21,6 +29,77 @@ resource "aws_s3_bucket_public_access_block" "app" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket" "logs" {
+  count         = var.enable_access_logging ? 1 : 0
+  bucket_prefix = "dapanoskop-logs-"
+}
+
+resource "aws_s3_bucket_public_access_block" "logs" {
+  count  = var.enable_access_logging ? 1 : 0
+  bucket = aws_s3_bucket.logs[0].id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "logs" {
+  count  = var.enable_access_logging ? 1 : 0
+  bucket = aws_s3_bucket.logs[0].id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "logs" {
+  count  = var.enable_access_logging ? 1 : 0
+  bucket = aws_s3_bucket.logs[0].id
+
+  rule {
+    id     = "expire-logs"
+    status = "Enabled"
+
+    expiration {
+      days = 90
+    }
+  }
+}
+
+resource "aws_s3_bucket_ownership_controls" "logs" {
+  count  = var.enable_access_logging ? 1 : 0
+  bucket = aws_s3_bucket.logs[0].id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_acl" "logs" {
+  count  = var.enable_access_logging ? 1 : 0
+  bucket = aws_s3_bucket.logs[0].id
+  acl    = "log-delivery-write"
+
+  depends_on = [aws_s3_bucket_ownership_controls.logs]
+}
+
+resource "aws_s3_bucket_logging" "app" {
+  count         = var.enable_access_logging ? 1 : 0
+  bucket        = aws_s3_bucket.app.id
+  target_bucket = aws_s3_bucket.logs[0].id
+  target_prefix = "s3-app/"
+}
+
+resource "aws_s3_bucket_logging" "data" {
+  count         = var.enable_access_logging ? 1 : 0
+  bucket        = var.data_bucket_id
+  target_bucket = aws_s3_bucket.logs[0].id
+  target_prefix = "s3-data/"
+}
+
 resource "aws_cloudfront_origin_access_control" "app" {
   name                              = "dapanoskop-app"
   origin_access_control_origin_type = "s3"
@@ -33,6 +112,54 @@ resource "aws_cloudfront_origin_access_control" "data" {
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
+}
+
+resource "aws_cloudfront_response_headers_policy" "security" {
+  name = "dapanoskop-security-headers"
+
+  security_headers_config {
+    content_type_options {
+      override = true
+    }
+    frame_options {
+      frame_option = "DENY"
+      override     = true
+    }
+    referrer_policy {
+      referrer_policy = "strict-origin-when-cross-origin"
+      override        = true
+    }
+    strict_transport_security {
+      access_control_max_age_sec = 63072000
+      include_subdomains         = true
+      preload                    = true
+      override                   = true
+    }
+    content_security_policy {
+      content_security_policy = join(" ", [
+        "default-src 'self';",
+        "script-src 'self' 'unsafe-inline';",
+        "style-src 'self' 'unsafe-inline';",
+        "worker-src 'self' blob:;",
+        "connect-src 'self'${var.cognito_domain != "" ? " ${var.cognito_domain}" : ""};",
+        "img-src 'self' data:;",
+        "font-src 'self';",
+        "object-src 'none';",
+        "frame-ancestors 'none';",
+        "base-uri 'self';",
+        "form-action 'self'",
+      ])
+      override = true
+    }
+  }
+
+  custom_headers_config {
+    items {
+      header   = "Permissions-Policy"
+      value    = "camera=(), microphone=(), geolocation=()"
+      override = true
+    }
+  }
 }
 
 resource "aws_cloudfront_distribution" "main" {
@@ -55,11 +182,12 @@ resource "aws_cloudfront_distribution" "main" {
   }
 
   default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "app"
-    viewer_protocol_policy = "redirect-to-https"
-    compress               = true
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    target_origin_id           = "app"
+    viewer_protocol_policy     = "redirect-to-https"
+    compress                   = true
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
 
     forwarded_values {
       query_string = false
@@ -70,12 +198,13 @@ resource "aws_cloudfront_distribution" "main" {
   }
 
   ordered_cache_behavior {
-    path_pattern           = "/data/*"
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "data"
-    viewer_protocol_policy = "redirect-to-https"
-    compress               = true
+    path_pattern               = "/data/*"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    target_origin_id           = "data"
+    viewer_protocol_policy     = "redirect-to-https"
+    compress                   = true
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
 
     forwarded_values {
       query_string = false
@@ -100,6 +229,15 @@ resource "aws_cloudfront_distribution" "main" {
     error_caching_min_ttl = 10
   }
 
+  dynamic "logging_config" {
+    for_each = var.enable_access_logging ? [1] : []
+    content {
+      bucket          = aws_s3_bucket.logs[0].bucket_domain_name
+      prefix          = "cloudfront/"
+      include_cookies = false
+    }
+  }
+
   restrictions {
     geo_restriction {
       restriction_type = "none"
@@ -115,6 +253,8 @@ resource "aws_cloudfront_distribution" "main" {
     }
   }
 
+  # Dev-only fallback: uses the default *.cloudfront.net certificate.
+  # Production deployments should always set acm_certificate_arn.
   dynamic "viewer_certificate" {
     for_each = var.acm_certificate_arn != "" ? [] : [1]
     content {
