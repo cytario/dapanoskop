@@ -5,8 +5,8 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.1 (Draft)                                |
-| Date                | 2026-02-08                                 |
+| Version             | 0.2 (Draft)                                |
+| Date                | 2026-02-12                                 |
 
 ---
 
@@ -60,8 +60,19 @@ Dapanoskop is a web-based AWS cloud cost monitoring application. This document d
    ▼              ▼              ▼
 ┌───────┐   ┌────────┐   ┌───────┐
 │Cognito│   │Cost    │   │S3 Data│
-│(exist)│   │Explorer│   │Bucket │
-└───────┘   └────────┘   └───────┘
+│(exist │   │Explorer│   │Bucket │
+│ or    │   └────────┘   └───────┘
+│managed│
+│ pool) │
+└───┬───┘
+    │ SI-4 (optional)
+    ▼
+┌────────┐
+│External│
+│IdP     │
+│(SAML/  │
+│ OIDC)  │
+└────────┘
 ```
 
 **User Interfaces:**
@@ -72,9 +83,10 @@ Dapanoskop is a web-based AWS cloud cost monitoring application. This document d
 **System Interfaces:**
 | ID   | Name           | Entity          | Description |
 |------|----------------|-----------------|-------------|
-| SI-1 | Auth           | Amazon Cognito  | User authentication and authorization |
+| SI-1 | Auth           | Amazon Cognito (existing or managed) | User authentication and authorization |
 | SI-2 | Cost Data      | AWS Cost Explorer API | Source of cost and usage data |
-| SI-3 | Data Store      | Amazon S3 (Data bucket) | Storage for collected cost data |
+| SI-3 | Data Store     | Amazon S3 (Data bucket) | Storage for collected cost data |
+| SI-4 | Federation     | External IdP (SAML/OIDC) | Optional SSO identity provider (e.g., Azure Entra ID) federated through Cognito |
 
 ---
 
@@ -82,19 +94,23 @@ Dapanoskop is a web-based AWS cloud cost monitoring application. This document d
 
 ### 3.1 UI-1: Web Application
 
-The web application is a SPA. Users authenticate via an existing Cognito User Pool before accessing any content. All authenticated users can view all cost centers.
+The web application is a SPA. Users authenticate via a Cognito User Pool (existing or module-managed) before accessing any content. All authenticated users can view all cost centers.
 
 #### 3.1.1 Login Screen
 
 **[SRS-DP-310101] Cognito Authentication Redirect**
-The system redirects unauthenticated users to the Cognito hosted UI for login. Upon successful authentication, the user is redirected back to the application with a valid session.
-Refs: URS-DP-10103, URS-DP-20301
+The system redirects unauthenticated users to the Cognito hosted UI for login. The hosted UI is provided by the Cognito User Pool (existing or module-managed). When federation is configured, the Cognito hosted UI redirects the user to the external identity provider. Upon successful authentication, the user is redirected back to the application with a valid session.
+Refs: URS-DP-10103, URS-DP-10104, URS-DP-20301
 
 **[SRS-DP-310102] Session Persistence**
 The system maintains the user's authenticated session using Cognito tokens stored in the browser. The session remains valid until the token expires.
 Refs: URS-DP-20301
 
-Session duration follows the Cognito User Pool's default token expiry settings (1 hour for ID/access tokens).
+Session duration: 1 hour for ID and access tokens, 12 hours for refresh tokens.
+
+**[SRS-DP-310103] Runtime Authentication Configuration**
+The system loads authentication configuration (Cognito domain, client ID, redirect URI) at runtime from a configuration file served alongside the SPA, rather than at build time. This allows the same SPA build artifact to be deployed to different environments.
+Refs: URS-DP-10101, URS-DP-10103
 
 #### 3.1.2 Cost Report Screen (1-Page Report)
 
@@ -240,12 +256,28 @@ Refs: URS-DP-10301
 #### 4.1.1 Endpoints
 
 **[SRS-DP-410101] OAuth 2.0 / OIDC Authentication Flow**
-The system integrates with an existing Cognito User Pool using the OAuth 2.0 / OIDC authorization code flow with PKCE. The SPA redirects to the Cognito hosted UI and receives tokens upon successful authentication.
+The system integrates with a Cognito User Pool (existing or module-managed) using the OAuth 2.0 / OIDC authorization code flow with PKCE. The SPA redirects to the Cognito hosted UI and receives tokens upon successful authentication.
 Refs: URS-DP-10103, URS-DP-20301
 
 **[SRS-DP-410102] Token Validation**
 The system validates Cognito JWT tokens (ID token and access token) before granting access to cost data. Expired or invalid tokens result in a redirect to the login flow.
 Refs: URS-DP-20301
+
+**[SRS-DP-410103] Managed User Pool Provisioning**
+When no existing Cognito User Pool ID is provided, the system creates and manages a Cognito User Pool with security-hardened defaults: 14-character minimum password, admin-only user creation, token revocation enabled, deletion protection active, and configurable MFA (OFF / OPTIONAL / ON, default OPTIONAL).
+Refs: URS-DP-10103
+
+**[SRS-DP-410104] SAML Federation**
+When a SAML metadata URL is provided, the system configures the managed Cognito User Pool to federate with an external SAML identity provider (e.g., Azure Entra ID). The metadata URL must use HTTPS. When federation is active, the Cognito hosted UI redirects users to the external IdP and local password login is disabled.
+Refs: URS-DP-10104
+
+**[SRS-DP-410105] OIDC Federation**
+When an OIDC issuer URL is provided, the system configures the managed Cognito User Pool to federate with an external OIDC identity provider. The issuer URL must use HTTPS. The OIDC client ID and client secret are required. When federation is active, the Cognito hosted UI redirects users to the external IdP and local password login is disabled.
+Refs: URS-DP-10104
+
+**[SRS-DP-410106] Federation IdP Configuration Outputs**
+When SAML federation is configured, the system outputs the SAML Entity ID and ACS (Assertion Consumer Service) URL required to configure the identity provider.
+Refs: URS-DP-10104
 
 #### 4.1.2 Models
 
@@ -253,6 +285,33 @@ Refs: URS-DP-20301
 |-------|------|-------------|
 | sub | String (UUID) | Cognito user identifier |
 | email | String | User email |
+
+### 4.4 SI-4: External Identity Provider (Federation)
+
+#### 4.4.1 Endpoints
+
+**[SRS-DP-440101] SAML 2.0 Protocol**
+When SAML federation is configured, the external IdP communicates with Cognito via the SAML 2.0 protocol. The IdP sends signed SAML assertions to the Cognito ACS endpoint. The IdP's federation metadata is fetched from the configured HTTPS URL.
+Refs: URS-DP-10104
+
+**[SRS-DP-440102] OIDC Protocol**
+When OIDC federation is configured, the external IdP communicates with Cognito via the OIDC protocol using the authorization code flow. The IdP's configuration is discovered from the OIDC issuer URL.
+Refs: URS-DP-10104
+
+#### 4.4.2 Models
+
+**SAML Attribute Mapping (default):**
+
+| SAML Claim | Cognito Attribute |
+|------------|-------------------|
+| `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress` | email |
+
+**OIDC Attribute Mapping (default):**
+
+| OIDC Claim | Cognito Attribute |
+|------------|-------------------|
+| email | email |
+| sub | username |
 
 ### 4.2 SI-2: AWS Cost Explorer API
 
@@ -351,10 +410,18 @@ Refs: URS-DP-20301
 All authenticated users can access all cost data. Unauthenticated access to cost data is prevented. The SPA enforces authentication before fetching data files.
 Refs: URS-DP-20301
 
+**[SRS-DP-520004] Managed Pool Security Hardening**
+When using the module-managed Cognito User Pool, the system enforces: admin-only user creation (no self-signup), strong password policy (14-character minimum, upper + lower + number + symbol), configurable MFA, token revocation, prevention of user existence error leakage, optional advanced security (compromised credentials detection, adaptive authentication), and deletion protection.
+Refs: URS-DP-20301, URS-DP-10103
+
+**[SRS-DP-520005] Federation URL Validation**
+The system validates that SAML metadata URLs and OIDC issuer URLs use HTTPS, rejecting insecure HTTP URLs at deployment time.
+Refs: URS-DP-10104, URS-DP-20301
+
 ### 5.3 Service Requirements
 
 **[SRS-DP-530001] Update via Terraform**
-The system is updated to new versions by running `terraform apply` with the updated module version. No manual steps beyond Terraform are required for updates.
+The system is updated to new versions by running `terraform apply` with the updated release version. Pre-built Lambda and SPA artifacts are downloaded from GitHub Releases. No local build tools (Node.js, Python) are required.
 Refs: URS-DP-10101
 
 **[SRS-DP-530002] Zero-Downtime Updates**
@@ -373,7 +440,7 @@ None — non-regulated software.
 The system runs entirely on AWS. Required AWS services:
 - Amazon S3 (static hosting + data storage)
 - Amazon CloudFront (CDN)
-- Amazon Cognito (authentication — existing User Pool)
+- Amazon Cognito (authentication — existing or module-managed User Pool)
 - AWS Lambda (data collection)
 - AWS Cost Explorer API (data source)
 
@@ -396,3 +463,4 @@ Refs: URS-DP-10101
 | Version | Date       | Author | Description       |
 |---------|------------|--------|-------------------|
 | 0.1     | 2026-02-08 | —      | Initial draft     |
+| 0.2     | 2026-02-12 | —      | Add managed Cognito pool, SAML/OIDC federation, runtime config, release artifacts |

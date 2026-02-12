@@ -19,23 +19,32 @@ lambda/       Python Lambda — collects AWS Cost Explorer data, writes JSON + P
 terraform/    OpenTofu/Terraform module — provisions all AWS infrastructure
 ```
 
+### Multi-account setup
+
+Dapanoskop queries Cost Explorer in the account where it's deployed. For org-wide visibility you have two options:
+
+- **Management (payer) account** — sees consolidated costs across all member accounts.
+- **Delegated member account** — designate a member account as [Cost Management administrator](https://docs.aws.amazon.com/cost-management/latest/userguide/management-account-delegation.html) to avoid deploying in the management account.
+
+Deploying in a regular member account (without delegation) shows only that account's costs.
+
 ## Prerequisites
 
 - AWS account with [Cost Explorer enabled](https://docs.aws.amazon.com/cost-management/latest/userguide/ce-enable.html)
-- An existing [Cognito User Pool](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pool-as-user-directory.html) for authentication
 - [OpenTofu](https://opentofu.org/) >= 1.5 (or Terraform >= 1.5)
 
 ## Getting Started
 
-Add the module to your Terraform config, point it at a release, and apply:
+### Option A: Managed Cognito User Pool (recommended)
+
+The module creates and manages a Cognito User Pool for you:
 
 ```hcl
 module "dapanoskop" {
-  source = "git::https://github.com/cytario/dapanoskop.git//terraform?ref=v1.2.0"
+  source = "git::https://github.com/cytario/dapanoskop.git//terraform?ref=v1.3.0"
 
-  release_version      = "v1.2.0"
-  cognito_user_pool_id = "eu-west-1_XXXXXXX"
-  cognito_domain       = "https://auth.example.com"
+  release_version       = "v1.3.0"
+  cognito_domain_prefix = "dapanoskop-myorg"
 }
 ```
 
@@ -43,9 +52,52 @@ module "dapanoskop" {
 tofu init && tofu apply
 ```
 
-That's it. The module downloads pre-built Lambda and SPA artifacts from the GitHub release, deploys them, and writes the runtime config to S3. No Node.js, no Python, no manual S3 sync.
+The managed pool comes with security-hardened defaults: strong password policy, MFA support, token revocation, and admin-only user creation. To add users, use the AWS Console or CLI:
 
-Navigate to the CloudFront URL from `tofu output cloudfront_url` and log in with your Cognito user credentials.
+```bash
+aws cognito-idp admin-create-user \
+  --user-pool-id $(tofu output -raw cognito_user_pool_id) \
+  --username user@example.com
+```
+
+### Option B: Bring your own Cognito User Pool
+
+If you already have a Cognito User Pool:
+
+```hcl
+module "dapanoskop" {
+  source = "git::https://github.com/cytario/dapanoskop.git//terraform?ref=v1.3.0"
+
+  release_version      = "v1.3.0"
+  cognito_user_pool_id = "eu-west-1_XXXXXXX"
+  cognito_domain       = "https://auth.example.com"
+}
+```
+
+### SSO federation (Azure Entra ID)
+
+Add SAML federation to the managed pool for single sign-on:
+
+```hcl
+module "dapanoskop" {
+  source = "git::https://github.com/cytario/dapanoskop.git//terraform?ref=v1.3.0"
+
+  release_version       = "v1.3.0"
+  cognito_domain_prefix = "dapanoskop-myorg"
+
+  saml_provider_name = "AzureAD"
+  saml_metadata_url  = "https://login.microsoftonline.com/{tenant-id}/federationmetadata/2007-06/federationmetadata.xml"
+}
+```
+
+After `tofu apply`, configure your IdP with the Terraform outputs:
+
+```bash
+tofu output saml_entity_id  # Set as Entity ID / Identifier in Azure
+tofu output saml_acs_url    # Set as Reply URL in Azure
+```
+
+When federation is active, local Cognito password login is automatically disabled — users must authenticate through the IdP.
 
 ### Local development mode
 
@@ -57,9 +109,18 @@ When `release_version` is not set, the module builds the Lambda zip from source 
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `cognito_user_pool_id` | Yes | Existing Cognito User Pool ID |
-| `release_version` | No | GitHub release tag (e.g. `v1.2.0`). Downloads pre-built artifacts. |
-| `cognito_domain` | No | Cognito domain for auth and CSP (e.g. `https://auth.example.com`) |
+| `cognito_user_pool_id` | No | Existing Cognito User Pool ID. Leave empty for a managed pool. |
+| `cognito_domain_prefix` | No | Domain prefix for managed pool hosted UI (required if no `cognito_user_pool_id`) |
+| `cognito_domain` | No | Cognito domain for CSP (only needed with BYO pool) |
+| `cognito_mfa_configuration` | No | MFA for managed pool: `OFF`, `OPTIONAL` (default), or `ON` |
+| `saml_provider_name` | No | SAML IdP display name (e.g. `AzureAD`) |
+| `saml_metadata_url` | No | SAML federation metadata URL from your IdP |
+| `saml_attribute_mapping` | No | SAML claim-to-attribute mapping |
+| `oidc_provider_name` | No | OIDC IdP display name |
+| `oidc_issuer` | No | OIDC issuer URL |
+| `oidc_client_id` | No | OIDC client ID |
+| `oidc_client_secret` | No | OIDC client secret (sensitive — prefer SAML to avoid secrets in state) |
+| `release_version` | No | GitHub release tag (e.g. `v1.3.0`). Downloads pre-built artifacts. |
 | `github_repo` | No | GitHub repo for release artifacts (default: `cytario/dapanoskop`) |
 | `cost_category_name` | No | AWS Cost Category for cost center mapping |
 | `domain_name` | No | Custom domain for CloudFront |
@@ -77,6 +138,10 @@ When `release_version` is not set, the module builds the Lambda zip from source 
 | `data_bucket_name` | S3 bucket for cost data |
 | `app_bucket_name` | S3 bucket for SPA assets |
 | `cognito_client_id` | Cognito app client ID |
+| `cognito_user_pool_id` | Cognito User Pool ID |
+| `cognito_domain_url` | Cognito hosted UI URL (managed pool only) |
+| `saml_entity_id` | SAML Entity ID for IdP configuration |
+| `saml_acs_url` | SAML ACS URL for IdP configuration |
 | `lambda_function_name` | Lambda function name |
 
 ### SPA Configuration

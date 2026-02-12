@@ -27,3 +27,23 @@ output "lambda_function_name" {
   description = "Name of the Lambda function"
   value       = module.pipeline.function_name
 }
+
+output "cognito_user_pool_id" {
+  description = "ID of the Cognito User Pool"
+  value       = module.auth.user_pool_id
+}
+
+output "cognito_domain_url" {
+  description = "Cognito hosted UI domain URL"
+  value       = module.auth.cognito_domain
+}
+
+output "saml_entity_id" {
+  description = "SAML Entity ID for IdP configuration"
+  value       = module.auth.saml_entity_id
+}
+
+output "saml_acs_url" {
+  description = "SAML ACS URL for IdP configuration"
+  value       = module.auth.saml_acs_url
+}

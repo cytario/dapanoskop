@@ -5,8 +5,8 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.1 (Draft)                                |
-| Date                | 2026-02-08                                 |
+| Version             | 0.3 (Draft)                                |
+| Date                | 2026-02-12                                 |
 
 ---
 
@@ -46,7 +46,8 @@ This document covers the internal architecture of Dapanoskop: the static web app
 | Low operational cost         | The tool itself should not be a significant cost item                     | Serverless architecture (Lambda + S3 + CloudFront); no always-on compute            | §3.2, §5   |
 | Easy deployment              | A DevOps engineer deploys in minutes                                      | Single Terraform module encapsulating all resources                                 | §3.3       |
 | Data freshness               | Cost data is at most 1 day old                                            | Scheduled Lambda execution (daily) writing to S3                                    | §3.2, §4.1 |
-| Security                     | Only authenticated users access cost data                                 | Cognito authentication via existing User Pool; all authenticated users see all data | §3.1, §6.4 |
+| Security                     | Only authenticated users access cost data                                 | Cognito authentication (existing or managed pool, optional SAML/OIDC federation); all authenticated users see all data | §3.1, §6.4 |
+| Self-contained deployment    | A DevOps engineer deploys without local build tools                       | Pre-built release artifacts (Lambda zip + SPA tarball) downloaded at deploy time; runtime config.json instead of build-time env vars | §3.3, §6.7 |
 
 ---
 
@@ -92,7 +93,7 @@ Note: The SPA static assets are hosted in a separate S3 App Bucket (part of SS-1
 - **Outbound (Data Store)**: Reads pre-computed cost data JSON files from the data S3 bucket via CloudFront
 - **Outbound (Auth)**: Redirects to existing Cognito hosted UI for authentication; validates JWT tokens
 
-**Variability**: Cognito Domain URL and Client ID are injected at deploy time via environment variables.
+**Variability**: Cognito Domain URL, Client ID, and redirect URI are loaded at runtime from a `/config.json` file served alongside the SPA. The config file is written to S3 by Terraform at deploy time, allowing the same SPA build artifact to work across environments.
 
 #### Level 2: Web Application Components
 
@@ -114,17 +115,21 @@ Note: The SPA static assets are hosted in a separate S3 App Bucket (part of SS-1
 
 ##### 3.1.1 C-1.1: Auth Module
 
-**Purpose / Responsibility**: Handles the Cognito OIDC authentication flow, token storage, and token refresh against an existing Cognito User Pool.
+**Purpose / Responsibility**: Handles the Cognito OIDC authentication flow, token storage, and token refresh against a Cognito User Pool (existing or module-managed). When federation is configured, the Cognito hosted UI transparently redirects to the external IdP.
 
 **Interfaces**:
 - **Inbound**: Called by the SPA on page load and on token expiry
-- **Outbound**: Cognito hosted UI (redirect), Cognito token endpoint (token exchange)
+- **Outbound**: Cognito hosted UI (redirect), Cognito token endpoint (token exchange); config.json (runtime configuration)
 
-**Variability**: Cognito Domain URL and Client ID are injected at build/deploy time via environment variables (`VITE_COGNITO_DOMAIN`, `VITE_COGNITO_CLIENT_ID`).
+**Variability**: Cognito Domain URL, Client ID, and redirect URI are loaded at runtime from `/config.json` via an async `initAuth()` call. During local development, the module falls back to `VITE_*` environment variables if config.json contains no values.
 
 **[SDS-DP-010101] Implement OIDC Authorization Code Flow with PKCE**
 The Auth Module implements the OAuth 2.0 Authorization Code flow with PKCE against the Cognito hosted UI. Tokens are stored in sessionStorage, preserving the session across page refreshes within the same browser tab while clearing automatically when the tab is closed. The module handles token refresh on expiry.
-Refs: SRS-DP-310101, SRS-DP-310102, SRS-DP-410101, SRS-DP-410102
+Refs: SRS-DP-310101, SRS-DP-310102, SRS-DP-310103, SRS-DP-410101, SRS-DP-410102
+
+**[SDS-DP-010102] Load Configuration at Runtime**
+The Auth Module fetches `/config.json` on first use via an async `getConfig()` singleton. The config file contains `cognitoDomain`, `cognitoClientId`, `redirectUri`, and `authBypass`. Each route calls `await initAuth()` before accessing auth state. The singleton ensures the config is fetched only once.
+Refs: SRS-DP-310103
 
 ##### 3.1.2 C-1.2: Report Renderer
 
@@ -251,26 +256,27 @@ Refs: SRS-DP-430101
 
 **Interfaces**:
 - **Inbound**: Terraform input variables from the deployer
-- **Outbound**: Provisions AWS resources (S3 buckets, CloudFront distribution, Cognito app client on existing User Pool, Lambda function, EventBridge rule, IAM roles)
+- **Outbound**: Provisions AWS resources (S3 buckets, CloudFront distribution, Cognito User Pool or app client on existing pool, optional SAML/OIDC federation, Lambda function, EventBridge rule, IAM roles)
 
-**Variability**: Configurable via Terraform variables (domain name, Cost Category name (optional, defaults to first), existing Cognito User Pool ID, schedule, storage services to include, etc.).
+**Variability**: Configurable via Terraform variables (domain name, Cost Category name (optional, defaults to first), existing Cognito User Pool ID (optional — managed pool created if omitted), federation settings (SAML/OIDC), MFA configuration, schedule, storage services to include, release version, etc.).
 
 #### Level 2: Terraform Module Components
 
 ```
-┌────────────────────────────────────────────────────────┐
-│              SS-3: Terraform Module                    │
-│                                                        │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
-│  │ C-3.1    │ │ C-3.2    │ │ C-3.3    │ │ C-3.4    │   │
-│  │ Hosting  │ │ Auth     │ │ Pipeline │ │ Data     │   │
-│  │ Infra    │ │ Infra    │ │ Infra    │ │ Store    │   │
-│  │          │ │          │ │          │ │ Infra    │   │
-│  │ S3 App + │ │ Cognito  │ │ Lambda + │ │ S3 Data  │   │
-│  │ CF + DNS │ │ App Clnt │ │ EB Rule  │ │ bucket   │   │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘   │
-│                                                        │
-└────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                    SS-3: Terraform Module                         │
+│                                                                   │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐  │
+│  │ C-3.1    │ │ C-3.2    │ │ C-3.3    │ │ C-3.4    │ │ C-3.5  │  │
+│  │ Hosting  │ │ Auth     │ │ Pipeline │ │ Data     │ │ Arti-  │  │
+│  │ Infra    │ │ Infra    │ │ Infra    │ │ Store    │ │ facts  │  │
+│  │          │ │          │ │          │ │ Infra    │ │        │  │
+│  │ S3 App + │ │ Cognito  │ │ Lambda + │ │ S3 Data  │ │ DL +   │  │
+│  │ CF + DNS │ │ Pool/Clnt│ │ EB Rule  │ │ bucket   │ │ unpack │  │
+│  │ + config │ │ + Federn │ │          │ │          │ │        │  │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └────────┘  │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ##### 3.3.1 C-3.1: Hosting Infrastructure
@@ -283,13 +289,33 @@ Refs: SRS-DP-520001, SRS-DP-520003
 
 The custom domain name and ACM certificate ARN are passed as optional Terraform input variables. The module does not create certificates or DNS records — those are managed externally.
 
+**[SDS-DP-030102] Deploy SPA from Release Archive**
+When a release version is specified, the hosting module extracts the pre-built SPA tarball and syncs the contents to the S3 app bucket. After sync, it writes a `config.json` file to the bucket containing the Cognito domain URL and client ID, and invalidates the CloudFront cache.
+Refs: SRS-DP-310103, SRS-DP-530001
+
 ##### 3.3.2 C-3.2: Auth Infrastructure
 
-**Purpose / Responsibility**: Creates a Cognito app client on an existing Cognito User Pool for Dapanoskop authentication.
+**Purpose / Responsibility**: Provisions Cognito authentication for Dapanoskop. Either creates an app client on an existing Cognito User Pool, or creates and manages a complete User Pool with optional SAML/OIDC federation.
 
 **[SDS-DP-030201] Create Cognito App Client**
-The module creates a Cognito app client on the existing User Pool (provided via input variable), configured for authorization code flow with PKCE. Callback URLs point to the CloudFront distribution domain.
-Refs: SRS-DP-410101
+The module creates a Cognito app client configured for authorization code flow with PKCE, token revocation enabled, and user-existence-error prevention. Callback URLs point to the CloudFront distribution domain. Token validity: 1 hour for ID/access tokens, 12 hours for refresh tokens. The app client references either the provided existing User Pool or the newly created managed pool.
+Refs: SRS-DP-410101, SRS-DP-520004
+
+**[SDS-DP-030202] Create Managed Cognito User Pool**
+When `cognito_user_pool_id` is empty, the module creates a Cognito User Pool (`count`-conditional) with: email as username, admin-only user creation, 14-character password policy, configurable MFA with software TOTP, deletion protection, verified email recovery, and optional advanced security (ENFORCED mode). A Cognito domain is created using the configured domain prefix.
+Refs: SRS-DP-410103, SRS-DP-520004
+
+**[SDS-DP-030203] Configure SAML Identity Provider**
+When `saml_metadata_url` is provided (and a managed pool is being created), the module creates a `SAML` identity provider on the managed User Pool using the metadata URL. Attribute mappings default to email. The app client's `supported_identity_providers` is set to the SAML provider name, disabling local Cognito login. Preconditions validate that `saml_provider_name` is non-empty and the metadata URL uses HTTPS.
+Refs: SRS-DP-410104, SRS-DP-520005
+
+**[SDS-DP-030204] Configure OIDC Identity Provider**
+When `oidc_issuer` is provided (and a managed pool is being created), the module creates an `OIDC` identity provider on the managed User Pool. Preconditions validate that `oidc_provider_name`, `oidc_client_id`, and `oidc_client_secret` are non-empty and the issuer URL uses HTTPS.
+Refs: SRS-DP-410105, SRS-DP-520005
+
+**[SDS-DP-030205] Output Federation Configuration**
+The module outputs `saml_entity_id` (format: `urn:amazon:cognito:sp:{pool_id}`) and `saml_acs_url` (format: `https://{domain_prefix}.auth.{region}.amazoncognito.com/saml2/idpresponse`) for IdP configuration.
+Refs: SRS-DP-410106
 
 ##### 3.3.3 C-3.3: Pipeline Infrastructure
 
@@ -297,8 +323,8 @@ Refs: SRS-DP-410101
 
 **[SDS-DP-030301] Provision Lambda and Schedule**
 The module creates a Lambda function (Python runtime) from a packaged deployment artifact, an IAM role with permissions for `ce:GetCostAndUsage`, `ce:GetCostCategories`, and `s3:PutObject` (to the data bucket), and an EventBridge rule to trigger the Lambda on a daily schedule.
-The Lambda is packaged as a zip file from the local source directory via Terraform's `archive_file` data source and deployed directly (not via S3). Memory: 256 MB. Timeout: 5 minutes. EventBridge schedule: `cron(0 6 * * ? *)` (daily at 06:00 UTC).
-Refs: SRS-DP-510002, SRS-DP-520002
+When a release version is specified, the Lambda zip is downloaded from the GitHub Release by the Artifacts module (C-3.5). Otherwise, the Lambda is packaged from the local source directory via Terraform's `archive_file` data source. Memory: 256 MB. Timeout: 5 minutes. EventBridge schedule: `cron(0 6 * * ? *)` (daily at 06:00 UTC).
+Refs: SRS-DP-510002, SRS-DP-520002, SRS-DP-530001
 
 ##### 3.3.4 C-3.4: Data Store Infrastructure
 
@@ -309,6 +335,20 @@ The module creates a dedicated S3 bucket for cost data with versioning enabled, 
 Refs: SRS-DP-430101, SRS-DP-430102
 
 No lifecycle rules — all historical data is retained indefinitely. Storage cost is negligible (a few KB per period).
+
+##### 3.3.5 C-3.5: Artifacts
+
+**Purpose / Responsibility**: Downloads pre-built Lambda and SPA deployment artifacts from a GitHub Release when a release version is specified.
+
+**Interfaces**:
+- **Inbound**: `release_version` and `github_repo` Terraform variables
+- **Outbound**: Downloads `lambda.zip` and `spa.tar.gz` from GitHub Releases via `curl`; outputs file paths and hashes for consumption by C-3.3 (Pipeline) and C-3.1 (Hosting)
+
+**Variability**: When `release_version` is empty (local dev mode), artifact paths are empty and downstream modules fall back to building from source.
+
+**[SDS-DP-030501] Download Release Artifacts**
+When `release_version` is set, the module uses `terraform_data` with `local-exec` provisioners to download `lambda.zip` and `spa.tar.gz` from the specified GitHub Release. The artifacts are stored in a local `.terraform/artifacts/` directory. The module outputs `lambda_zip_path`, `lambda_zip_hash`, `spa_archive_path`, and a boolean `use_release` for conditional logic in downstream modules.
+Refs: SRS-DP-530001
 
 ### 3.4 SS-4: Data Store (S3 Data Bucket)
 
@@ -519,11 +559,11 @@ DevOps Engineer          Terraform          AWS
 │           │                                       │ PutObject    │
 │  ┌────────┴────────┐                     ┌────────┴──────────┐   │
 │  │  Cognito        │                     │  Lambda Function   │   │
-│  │  (existing      │                     │  (Python)          │   │
-│  │   User Pool)    │                     │                    │   │
+│  │  (existing or   │                     │  (Python)          │   │
+│  │   managed pool) │                     │                    │   │
 │  │                 │                     │  Cost Collector +  │   │
-│  │  App Client     │                     │  Data Processor    │   │
-│  │  (created by TF)│                     └────────┬───────────┘   │
+│  │  App Client +   │                     │  Data Processor    │   │
+│  │  opt. SAML/OIDC │                     └────────┬───────────┘   │
 │  └─────────────────┘                              │              │
 │                                          ┌────────┴──────────┐   │
 │                                          │  EventBridge       │   │
@@ -542,9 +582,12 @@ DevOps Engineer          Terraform          AWS
 
 | Artifact | Content | Deployed To |
 |----------|---------|-------------|
-| SPA bundle | HTML, CSS, JS (compiled React app) | S3 App Bucket |
-| Lambda package | Python code (zip file from `archive_file`) | Lambda function |
+| `spa.tar.gz` | HTML, CSS, JS (compiled React app) | S3 App Bucket (extracted + synced by Terraform) |
+| `lambda.zip` | Python code (deployment package) | Lambda function |
+| `config.json` | Runtime auth configuration (Cognito domain, client ID) | S3 App Bucket (written by Terraform) |
 | Terraform module | HCL files | Executed by DevOps engineer |
+
+When `release_version` is specified, `spa.tar.gz` and `lambda.zip` are downloaded from GitHub Releases. When not specified (local dev), they are built from source.
 
 **Execution Nodes:**
 
@@ -554,7 +597,7 @@ DevOps Engineer          Terraform          AWS
 | S3 App Bucket | AWS managed object store | Host React SPA static assets |
 | S3 Data Bucket | AWS managed object store | Host pre-computed summary JSON and parquet files |
 | Lambda | AWS managed serverless compute | Run cost data collection |
-| Cognito | AWS managed identity (existing User Pool) | User authentication |
+| Cognito | AWS managed identity (existing or managed User Pool) | User authentication (optional SAML/OIDC federation) |
 | EventBridge | AWS managed event bus | Schedule Lambda invocations |
 
 ---
@@ -591,7 +634,9 @@ All authenticated users can access all cost data. The security model is:
 1. The Lambda writes a single JSON file containing data for all cost centers
 2. The SPA is served behind CloudFront + OAC (no direct S3 access)
 3. The SPA requires a valid Cognito token before fetching data
-4. User management is handled via the existing Cognito User Pool console
+4. User management is handled via the Cognito User Pool console (existing pool), AWS CLI admin-create-user (managed pool), or automatically via IdP federation (SSO)
+
+When using the managed pool, security hardening is applied by default: admin-only signup prevents unauthorized account creation, strong password policy, configurable MFA, token revocation, and optional advanced security (compromised credentials detection). When federation is active, local Cognito password login is disabled — users must authenticate through the external IdP.
 
 This is appropriate for an internal cost monitoring tool where all stakeholders should have visibility into the full cost picture.
 
@@ -621,6 +666,23 @@ cost_per_TB = total_storage_cost_usd / (total_storage_volume_bytes / 1,099,511,6
 ```
 
 Where `total_storage_volume_bytes` is derived from `TimedStorage-*-ByteHrs` usage quantities (and optionally EFS/EBS when configured). Byte-hours are converted to bytes by dividing by the number of hours in the reporting month.
+
+### 6.7 Runtime Configuration
+
+The SPA loads authentication configuration at runtime from `/config.json` (served from the S3 app bucket) rather than embedding values at build time via `VITE_*` environment variables. This decouples the SPA build artifact from the deployment environment, enabling the same pre-built tarball to be deployed to different AWS accounts with different Cognito configurations.
+
+The `config.json` file is written to S3 by the Terraform hosting module (C-3.1) after extracting the SPA archive. It contains:
+
+```json
+{
+  "cognitoDomain": "https://dapanoskop-myorg.auth.eu-west-1.amazoncognito.com",
+  "cognitoClientId": "abc123...",
+  "redirectUri": "https://d1234.cloudfront.net",
+  "authBypass": false
+}
+```
+
+The Auth Module (C-1.1) fetches this file once via an async singleton and falls back to `VITE_*` env vars for local development.
 
 ---
 
@@ -724,6 +786,56 @@ What programming language should the Lambda function use?
 #### 7.4.5 Decision
 **Option A: Python**. Reuse of existing categorization logic is a significant advantage. The Lambda runs daily on a schedule, so cold start performance is not critical.
 
+### 7.5 Managed Cognito Pool vs. BYO-Only
+
+#### 7.5.1 Issue
+Should the Terraform module require an existing Cognito User Pool, or optionally create and manage one?
+
+#### 7.5.2 Boundary Conditions
+- Many deployers may not have a pre-existing Cognito User Pool
+- Enterprise deployers need SSO integration (SAML/OIDC)
+- The module should remain simple for the common case
+
+#### 7.5.3 Assumptions
+- Most new deployers prefer the module to handle authentication end-to-end
+- Existing-pool users already have their own security settings
+
+#### 7.5.4 Considered Alternatives
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **A: Optional managed pool (default) + BYO** | Lower barrier to entry; SSO support built-in; security-hardened defaults | More complex auth module; conditional resources |
+| B: BYO pool only | Simpler module; no responsibility for pool security | Requires users to create and configure a pool manually |
+| C: IAM Identity Center integration | Native AWS SSO; no Cognito needed | Complex, requires Organization-level permissions; limited browser token support |
+
+#### 7.5.5 Decision
+**Option A: Optional managed pool with BYO fallback**. The managed pool provides the simplest deployment path for new users while retaining backward compatibility. IAM Identity Center (Option C) was evaluated and rejected due to complexity, limited SPA token support, and overly broad Organization-level permissions.
+
+### 7.6 Runtime Config vs. Build-Time Environment Variables
+
+#### 7.6.1 Issue
+How should the SPA obtain deployment-specific configuration (Cognito domain, client ID)?
+
+#### 7.6.2 Boundary Conditions
+- Self-contained deployment requires using a pre-built SPA artifact
+- Build-time `VITE_*` env vars are baked into the JS bundle at build time
+- Different deployments target different AWS accounts with different Cognito configs
+
+#### 7.6.3 Assumptions
+- A single SPA build artifact should work across any deployment environment
+- The configuration values are not sensitive (public Cognito client ID, domain URL)
+
+#### 7.6.4 Considered Alternatives
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **A: Runtime config.json fetched on load** | Same build artifact across environments; Terraform writes config at deploy time | Requires async fetch before auth; slightly more complex auth init |
+| B: Build-time VITE_* env vars | Simple; standard Vite pattern | Requires building the SPA per environment; incompatible with release artifacts |
+| C: Server-side rendering with env injection | Standard for SSR apps | Requires a server; contradicts the static SPA architecture |
+
+#### 7.6.5 Decision
+**Option A: Runtime config.json**. The async fetch adds minimal complexity (one HTTP request, cached by the singleton) and enables the self-contained deployment model where Terraform downloads and deploys pre-built artifacts. Build-time env vars are retained as a fallback for local development.
+
 ---
 
 ## 8. Change History
@@ -732,3 +844,4 @@ What programming language should the Lambda function use?
 |---------|------------|--------|-------------------|
 | 0.1     | 2026-02-08 | —      | Initial draft     |
 | 0.2     | 2026-02-10 | —      | Align with implementation: period discovery, Lambda deployment, auth config |
+| 0.3     | 2026-02-12 | —      | Add managed Cognito pool (C-3.2), SAML/OIDC federation, artifacts module (C-3.5), runtime config (§6.7), design decisions 7.5–7.6 |

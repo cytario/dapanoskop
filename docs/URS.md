@@ -5,8 +5,8 @@
 | Document ID         | URS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.1 (Draft)                                |
-| Date                | 2026-02-08                                 |
+| Version             | 0.2 (Draft)                                |
+| Date                | 2026-02-12                                 |
 
 ---
 
@@ -58,9 +58,9 @@ The name comes from Greek δαπάνη (dapáni, "cost") + σκοπέω (skopéo
 
 #### 2.2.1 Macro-Step 1: Deploy Dapanoskop
 
-**Description**: A DevOps engineer deploys Dapanoskop into an AWS account. This involves provisioning the web application infrastructure, the cost data collection pipeline, authentication, and configuring which Cost Categories and cost centers to report on.
+**Description**: A DevOps engineer deploys Dapanoskop into an AWS account. This involves provisioning the web application infrastructure, the cost data collection pipeline, authentication, and configuring which Cost Categories and cost centers to report on. The deployment uses pre-built release artifacts so no local build tools are required.
 
-**Input Data**: AWS account credentials, existing Cognito User Pool reference, optionally the name of the Cost Category to use.
+**Input Data**: AWS account credentials, optionally an existing Cognito User Pool reference, optionally the name of the Cost Category to use, optionally SSO federation metadata.
 
 **Output Data**: A running Dapanoskop instance accessible via a URL.
 
@@ -68,6 +68,9 @@ The name comes from Greek δαπάνη (dapáni, "cost") + σκοπέω (skopéo
 - "I want to deploy this with a single Terraform module"
 - "I need to tell it which Cost Category to use, or just let it pick the first one"
 - "I need to point it at my existing Cognito User Pool"
+- "I don't have a Cognito User Pool; the module should create one for me"
+- "I want to deploy without needing Node.js or Python installed"
+- "I want my users to log in with their corporate identity (Azure Entra ID / SSO)"
 
 #### 2.2.2 Macro-Step 2: Tag Resources for Cost Visibility
 
@@ -111,14 +114,16 @@ The name comes from Greek δαπάνη (dapáni, "cost") + σκοπέω (skopéo
 
 #### 2.2.5 Macro-Step 5: Manage Users and Access
 
-**Description**: A DevOps engineer manages who can access Dapanoskop via the existing Cognito User Pool console. All authenticated users can see all cost centers.
+**Description**: A DevOps engineer manages who can access Dapanoskop. When using an existing Cognito User Pool, users are managed via the pool's console. When using a managed pool, users are created by an admin via the AWS Console or CLI, or users authenticate automatically through a federated identity provider (SAML/OIDC). All authenticated users can see all cost centers.
 
-**Input Data**: User identity.
+**Input Data**: User identity, optionally identity provider federation configuration.
 
 **Output Data**: User accounts with access to Dapanoskop.
 
 **User Requests**:
 - "I manage users in our existing Cognito User Pool"
+- "I want to create users via the AWS Console when using the managed pool"
+- "When SSO is configured, I don't want to manage users at all — anyone in the IdP group gets access"
 
 ### 2.3 User Groups
 
@@ -136,13 +141,16 @@ The name comes from Greek δαπάνη (dapáni, "cost") + σκοπέω (skopéo
 #### 3.1.1 Deploy Dapanoskop (Macro-Step 1)
 
 **[URS-DP-10101] Provision Dapanoskop Instance**
-A DevOps engineer deploys a complete Dapanoskop instance into an AWS account using a Terraform module, providing configuration values for the target environment.
+A DevOps engineer deploys a complete Dapanoskop instance into an AWS account using a Terraform module, providing configuration values for the target environment. The deployment uses pre-built release artifacts and does not require local build tools (Node.js, Python).
 
 **[URS-DP-10102] Configure Cost Category**
 A DevOps engineer specifies which AWS Cost Category Dapanoskop uses to derive cost centers. By default, the first Cost Category returned by the Cost Explorer API is used. All values within the selected Cost Category are treated as cost centers and reported on.
 
 **[URS-DP-10103] Configure Authentication**
-A DevOps engineer integrates Dapanoskop with an existing Cognito User Pool so that only authorized users can access cost reports.
+A DevOps engineer configures authentication for Dapanoskop so that only authorized users can access cost reports. The engineer either provides an existing Cognito User Pool or lets the module create and manage one with security-hardened defaults.
+
+**[URS-DP-10104] Configure SSO Federation**
+A DevOps engineer configures single sign-on so that users authenticate through their organization's identity provider (e.g., Azure Entra ID via SAML or an OIDC provider) instead of managing separate Cognito credentials.
 
 #### 3.1.2 Tag Resources for Cost Visibility (Macro-Step 2)
 
@@ -189,7 +197,7 @@ A Budget Owner identifies which workloads or cost components changed significant
 #### 3.1.5 Manage Users and Access (Macro-Step 5)
 
 **[URS-DP-10501] Control Report Access**
-A DevOps engineer manages user access to Dapanoskop via the existing Cognito User Pool console. All authenticated users can view all cost centers.
+A DevOps engineer manages user access to Dapanoskop. When using an existing pool, users are managed via its console. When using a managed pool without federation, the engineer creates users via the AWS Console or CLI (admin-only signup). When SSO federation is active, users authenticate through the external identity provider and no manual Cognito user management is required. All authenticated users can view all cost centers.
 
 ### 3.2 Regulatory Requirements
 
@@ -243,3 +251,4 @@ A Budget Owner understands the cost report without separate documentation. The r
 | Version | Date       | Author | Description       |
 |---------|------------|--------|-------------------|
 | 0.1     | 2026-02-08 | —      | Initial draft     |
+| 0.2     | 2026-02-12 | —      | Add managed Cognito pool, SSO federation, release artifacts |

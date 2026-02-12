@@ -17,7 +17,7 @@ module "hosting" {
   data_bucket_regional_domain = module.data_store.bucket_regional_domain_name
   domain_name                 = var.domain_name
   acm_certificate_arn         = var.acm_certificate_arn
-  cognito_domain              = var.cognito_domain
+  cognito_domain              = coalesce(var.cognito_domain, module.auth.cognito_domain)
   spa_archive_path            = module.artifacts.spa_archive_path
   cognito_client_id           = module.auth.client_id
 }
@@ -25,8 +25,20 @@ module "hosting" {
 module "auth" {
   source = "./modules/auth"
 
-  cognito_user_pool_id = var.cognito_user_pool_id
-  callback_urls        = [module.hosting.cloudfront_url]
+  cognito_user_pool_id      = var.cognito_user_pool_id
+  callback_urls             = [module.hosting.cloudfront_url]
+  cognito_domain_prefix     = var.cognito_domain_prefix
+  cognito_mfa_configuration = var.cognito_mfa_configuration
+  saml_provider_name        = var.saml_provider_name
+  saml_metadata_url         = var.saml_metadata_url
+  saml_attribute_mapping    = var.saml_attribute_mapping
+  oidc_provider_name        = var.oidc_provider_name
+  oidc_issuer               = var.oidc_issuer
+  oidc_client_id            = var.oidc_client_id
+  oidc_client_secret        = var.oidc_client_secret
+  oidc_scopes               = var.oidc_scopes
+  oidc_attribute_mapping    = var.oidc_attribute_mapping
+  enable_advanced_security  = var.enable_advanced_security
 }
 
 module "pipeline" {
