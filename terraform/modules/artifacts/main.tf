@@ -1,3 +1,7 @@
+terraform {
+  required_version = ">= 1.5"
+}
+
 locals {
   use_release  = var.release_version != ""
   download_dir = "${path.module}/.downloads/${var.release_version}"

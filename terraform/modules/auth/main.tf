@@ -1,3 +1,14 @@
+terraform {
+  required_version = ">= 1.5"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0"
+    }
+  }
+}
+
 resource "aws_cognito_user_pool_client" "app" {
   name         = "dapanoskop"
   user_pool_id = var.cognito_user_pool_id

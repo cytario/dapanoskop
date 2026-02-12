@@ -70,7 +70,7 @@ tf-validate: tf-init ## Validate Terraform configuration
 	cd terraform && tofu validate
 
 tf-lint: ## Run TFLint
-	cd terraform && tflint --recursive
+	cd terraform && tflint --init && tflint --recursive
 
 tf-fmt: ## Check Terraform formatting
 	cd terraform && tofu fmt -check -recursive
