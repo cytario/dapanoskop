@@ -11,7 +11,7 @@ Dapanoskop is an opinionated approach to cloud cost monitoring. Rather than tryi
 
 ## How It Works
 
-A daily Lambda queries AWS Cost Explorer, aggregates costs by workload and cost center, and writes pre-computed `summary.json` and Parquet files to S3. The SPA loads the summary for instant rendering and uses DuckDB-wasm for in-browser SQL on Parquet files when drilling down into usage-type details.
+A daily Lambda queries AWS Cost Explorer, aggregates costs by workload and cost center, and writes pre-computed `summary.json`, Parquet files, and an `index.json` manifest to S3. The SPA authenticates via Cognito, obtains temporary AWS credentials from a Cognito Identity Pool, and accesses S3 directly — JSON via the AWS S3 SDK, Parquet via DuckDB-wasm's native S3 support (httpfs). Data access is enforced at the IAM level: only authenticated users receive scoped `s3:GetObject` credentials.
 
 ```
 app/          React SPA — cost report with drill-down via DuckDB-wasm
@@ -143,18 +143,29 @@ When `release_version` is not set, the module builds the Lambda zip from source 
 | `saml_entity_id` | SAML Entity ID for IdP configuration |
 | `saml_acs_url` | SAML ACS URL for IdP configuration |
 | `lambda_function_name` | Lambda function name |
+| `identity_pool_id` | Cognito Identity Pool ID |
 
 ### SPA Configuration
 
-In production, the SPA reads `/config.json` from S3 (written by Terraform). For local development, it falls back to `VITE_*` env vars:
+In production, the SPA reads `/config.json` from S3 (written by Terraform) with the following fields:
+
+| Field | Description |
+|-------|-------------|
+| `cognitoDomain` | Cognito hosted UI domain |
+| `cognitoClientId` | Cognito app client ID |
+| `userPoolId` | Cognito User Pool ID |
+| `identityPoolId` | Cognito Identity Pool ID |
+| `awsRegion` | AWS region for S3 and Cognito calls |
+| `dataBucketName` | S3 bucket containing cost data |
+
+For local development, the SPA falls back to `VITE_*` env vars:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VITE_AUTH_BYPASS` | `false` | Skip auth for local dev |
-| `VITE_COGNITO_DOMAIN` | — | Cognito hosted UI domain (fallback) |
-| `VITE_COGNITO_CLIENT_ID` | — | Cognito app client ID (fallback) |
+| `VITE_COGNITO_DOMAIN` | — | Cognito hosted UI domain |
+| `VITE_COGNITO_CLIENT_ID` | — | Cognito app client ID |
 | `VITE_REDIRECT_URI` | `window.location.origin + "/"` | OAuth redirect URI |
-| `VITE_DATA_BASE_URL` | `"/data"` | Base URL for cost data files |
 
 ### Lambda Environment Variables
 

@@ -108,15 +108,15 @@ Note: The SPA static assets are hosted in a separate S3 App Bucket (part of SS-1
 ┌────────────────────────────────────────────────────────────┐
 │                     SS-1: Web App                          │
 │                                                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐  │
-│  │  C-1.1       │  │  C-1.3       │  │  C-1.2          │  │
-│  │  Auth Module │  │  Credentials │  │  Report Renderer│  │
-│  │              │  │  Module      │  │                 │  │
-│  │  Cognito     │  │              │  │  S3 SDK for     │  │
-│  │  OIDC flow,  │  │  Identity    │  │  JSON; DuckDB   │  │
-│  │  token mgmt  │──│  Pool creds, │──│  httpfs S3 for  │  │
-│  │              │  │  auto-refresh│  │  parquet         │  │
-│  └──────────────┘  └──────────────┘  └─────────────────┘  │
+│  ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐   │
+│  │  C-1.1       │  │  C-1.3       │  │  C-1.2          │   │
+│  │  Auth Module │  │  Credentials │  │  Report Renderer│   │
+│  │              │  │  Module      │  │                 │   │
+│  │  Cognito     │  │              │  │  S3 SDK for     │   │
+│  │  OIDC flow,  │  │  Identity    │  │  JSON; DuckDB   │   │
+│  │  token mgmt  │──│  Pool creds, │──│  httpfs S3 for  │   │
+│  │              │  │  auto-refresh│  │  parquet        │   │
+│  └──────────────┘  └──────────────┘  └─────────────────┘   │
 │                                                            │
 └────────────────────────────────────────────────────────────┘
 ```
@@ -328,6 +328,10 @@ The custom domain name and ACM certificate ARN are passed as optional Terraform 
 When a release version is specified, the hosting module extracts the pre-built SPA tarball and syncs the contents to the S3 app bucket. After sync, it writes a `config.json` file to the bucket containing the Cognito domain URL, client ID, User Pool ID, Identity Pool ID, AWS region, and data bucket name, and invalidates the CloudFront cache.
 Refs: SRS-DP-310103, SRS-DP-530001
 
+**[SDS-DP-030103] App Bucket Lifecycle Policy**
+The app bucket has a lifecycle configuration that aborts incomplete multipart uploads after 1 day and expires obsolete delete markers. No Intelligent-Tiering transition is applied because SPA assets are always hot (served via CloudFront). The logs bucket (when enabled) additionally expires objects after 90 days.
+Refs: SRS-DP-510003
+
 ##### 3.3.2 C-3.2: Auth Infrastructure
 
 **Purpose / Responsibility**: Provisions Cognito authentication for Dapanoskop. Either creates an app client on an existing Cognito User Pool, or creates and manages a complete User Pool with optional SAML/OIDC federation.
@@ -377,7 +381,9 @@ Refs: SRS-DP-510002, SRS-DP-520002, SRS-DP-530001, SRS-DP-430103
 The module creates a dedicated S3 bucket for cost data with versioning enabled and server-side encryption (SSE-S3 or SSE-KMS). The bucket has no bucket policy granting CloudFront access — authenticated browser users access data directly using temporary IAM credentials from the Identity Pool (C-3.2).
 Refs: SRS-DP-430101, SRS-DP-430102
 
-No lifecycle rules — all historical data is retained indefinitely. Storage cost is negligible (a few KB per period).
+**[SDS-DP-030403] Data Bucket Lifecycle Policy**
+The data bucket has a lifecycle configuration that aborts incomplete multipart uploads after 1 day, expires obsolete delete markers, and transitions objects to S3 Intelligent-Tiering after 5 days. Intelligent-Tiering automatically moves infrequently accessed historical data to lower-cost tiers without retrieval fees or latency penalties. Archive tiers are not configured (omitting `aws_s3_intelligent_tiering_configuration`), so objects remain instantly accessible. No `NoncurrentVersionExpiration` is applied — all versioned data is retained indefinitely to preserve rollback capability.
+Refs: SRS-DP-510003
 
 **[SDS-DP-030402] Configure S3 CORS for Browser Access**
 The module configures CORS on the data bucket allowing `GET` and `HEAD` methods from the CloudFront distribution origin. Allowed headers include `Authorization`, `Range`, and `x-amz-*` (required by the AWS S3 SDK and DuckDB httpfs). Exposed headers include `Content-Length`, `Content-Range`, and `ETag`. Max age: 300 seconds.
@@ -942,4 +948,4 @@ How should the browser access cost data (JSON and parquet) stored in the data S3
 | 0.1     | 2026-02-08 | —      | Initial draft     |
 | 0.2     | 2026-02-10 | —      | Align with implementation: period discovery, Lambda deployment, auth config |
 | 0.3     | 2026-02-12 | —      | Add managed Cognito pool (C-3.2), SAML/OIDC federation, artifacts module (C-3.5), runtime config (§6.7), design decisions 7.5–7.6 |
-| 0.4     | 2026-02-13 | —      | Replace CloudFront data path with Cognito Identity Pool + direct S3 access; add C-1.3 Credentials Module; DuckDB httpfs S3 protocol; index.json manifest; S3 CORS; IAM-enforced data access (§6.4, §7.7) |
+| 0.4     | 2026-02-13 | —      | Replace CloudFront data path with Cognito Identity Pool + direct S3 access; add C-1.3 Credentials Module; DuckDB httpfs S3 protocol; index.json manifest; S3 CORS; IAM-enforced data access (§6.4, §7.7); S3 lifecycle policies (§3.3.1, §3.3.4) |

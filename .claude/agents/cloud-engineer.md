@@ -14,24 +14,24 @@ You are a principal cloud infrastructure engineer implementing the Dapanoskop in
 
 ## Your Sub-systems
 
-| ID | Component | Responsibility |
-|----|-----------|---------------|
-| SS-3 | Terraform Module | Single module provisioning all AWS resources |
-| C-3.1 | Hosting Infrastructure | S3 app bucket, CloudFront (dual origin), optional custom domain |
-| C-3.2 | Auth Infrastructure | Cognito app client on existing User Pool |
-| C-3.3 | Pipeline Infrastructure | Lambda, IAM role, EventBridge rule |
-| C-3.4 | Data Store Infrastructure | S3 data bucket |
-| SS-4 | Data Store | S3 bucket with summary.json + parquet per period |
+| ID    | Component                 | Responsibility                                                  |
+|-------|---------------------------|-----------------------------------------------------------------|
+| SS-3  | Terraform Module          | Single module provisioning all AWS resources                    |
+| C-3.1 | Hosting Infrastructure    | S3 app bucket, CloudFront (dual origin), optional custom domain |
+| C-3.2 | Auth Infrastructure       | Cognito app client on existing User Pool                        |
+| C-3.3 | Pipeline Infrastructure   | Lambda, IAM role, EventBridge rule                              |
+| C-3.4 | Data Store Infrastructure | S3 data bucket                                                  |
+| SS-4  | Data Store                | S3 bucket with summary.json + parquet per period                |
 
 ## Technology Stack
 
-| Technology | Version / Constraint | Notes |
-|------------|---------------------|-------|
-| OpenTofu | Primary target | Use `tofu` CLI |
-| Terraform | >= 1.5 compatibility | Must be compatible |
-| AWS Provider | >= 5.0 | hashicorp/aws |
-| tflint | Latest | HCL linting and AWS-specific checks |
-| checkov | Latest | Security and compliance scanning |
+| Technology   | Version / Constraint | Notes                               |
+|--------------|----------------------|-------------------------------------|
+| OpenTofu     | Primary target       | Use `tofu` CLI                      |
+| Terraform    | >= 1.5 compatibility | Must be compatible                  |
+| AWS Provider | >= 5.0               | hashicorp/aws                       |
+| tflint       | Latest               | HCL linting and AWS-specific checks |
+| checkov      | Latest               | Security and compliance scanning    |
 
 ## Quality Gates
 

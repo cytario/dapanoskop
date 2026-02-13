@@ -437,6 +437,10 @@ The cost report screen loads and renders within 2 seconds after authentication, 
 Cost data is refreshed at least once per day. The report displays the timestamp of the last data collection.
 Refs: URS-DP-20401
 
+**[SRS-DP-510003] Storage Cost Optimization**
+All S3 buckets have lifecycle policies to minimize storage cost: incomplete multipart uploads are aborted after 1 day, obsolete delete markers are expired, and data bucket objects are transitioned to S3 Intelligent-Tiering after 5 days. Intelligent-Tiering archive tiers are not enabled, so all data remains instantly accessible.
+Refs: URS-DP-10101
+
 ### 5.2 Safety & Security Requirements
 
 **[SRS-DP-520001] HTTPS Only**
@@ -506,4 +510,4 @@ Refs: URS-DP-10101
 |---------|------------|--------|-------------------|
 | 0.1     | 2026-02-08 | —      | Initial draft     |
 | 0.2     | 2026-02-12 | —      | Add managed Cognito pool, SAML/OIDC federation, runtime config, release artifacts |
-| 0.3     | 2026-02-13 | —      | Add Cognito Identity Pool (SI-5) for temporary AWS credentials; SPA accesses S3 directly (not via CloudFront); add index.json period discovery; IAM-enforced data access; S3 CORS; expanded runtime config |
+| 0.3     | 2026-02-13 | —      | Add Cognito Identity Pool (SI-5) for temporary AWS credentials; SPA accesses S3 directly (not via CloudFront); add index.json period discovery; IAM-enforced data access; S3 CORS; expanded runtime config; S3 lifecycle policies for storage cost optimization |
