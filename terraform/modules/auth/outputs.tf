@@ -22,3 +22,8 @@ output "saml_acs_url" {
   description = "SAML ACS URL for IdP configuration"
   value       = local.create_user_pool && var.cognito_domain_prefix != "" ? "https://${var.cognito_domain_prefix}.auth.${data.aws_region.current.id}.amazoncognito.com/saml2/idpresponse" : ""
 }
+
+output "identity_pool_id" {
+  description = "Cognito Identity Pool ID for frontend AWS SDK"
+  value       = aws_cognito_identity_pool.main.id
+}

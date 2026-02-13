@@ -74,6 +74,7 @@ def test_handler_integration(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "2026-01/summary.json" in keys
     assert "2026-01/cost-by-workload.parquet" in keys
     assert "2026-01/cost-by-usage-type.parquet" in keys
+    assert "index.json" in keys
 
     # Verify summary.json content
     summary_obj = s3.get_object(Bucket="test-data-bucket", Key="2026-01/summary.json")
@@ -81,3 +82,8 @@ def test_handler_integration(monkeypatch: pytest.MonkeyPatch) -> None:
     assert summary["period"] == "2026-01"
     assert len(summary["cost_centers"]) == 1
     assert summary["cost_centers"][0]["name"] == "Engineering"
+
+    # Verify index.json content
+    index_obj = s3.get_object(Bucket="test-data-bucket", Key="index.json")
+    index_data = json.loads(index_obj["Body"].read())
+    assert "2026-01" in index_data["periods"]

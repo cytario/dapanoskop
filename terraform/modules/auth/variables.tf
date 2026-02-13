@@ -101,3 +101,8 @@ variable "oidc_attribute_mapping" {
     username = "sub"
   }
 }
+
+variable "data_bucket_arn" {
+  description = "ARN of the S3 data bucket (for Identity Pool IAM policy)"
+  type        = string
+}

@@ -47,3 +47,8 @@ output "saml_acs_url" {
   description = "SAML ACS URL for IdP configuration"
   value       = module.auth.saml_acs_url
 }
+
+output "identity_pool_id" {
+  description = "Cognito Identity Pool ID"
+  value       = module.auth.identity_pool_id
+}

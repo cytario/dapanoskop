@@ -1,18 +1,3 @@
-variable "data_bucket_arn" {
-  description = "ARN of the data S3 bucket"
-  type        = string
-}
-
-variable "data_bucket_id" {
-  description = "ID (name) of the data S3 bucket"
-  type        = string
-}
-
-variable "data_bucket_regional_domain" {
-  description = "Regional domain name of the data S3 bucket"
-  type        = string
-}
-
 variable "domain_name" {
   description = "Custom domain name (optional)"
   type        = string
@@ -45,6 +30,42 @@ variable "spa_archive_path" {
 
 variable "cognito_client_id" {
   description = "Cognito app client ID for runtime config"
+  type        = string
+  default     = ""
+}
+
+variable "user_pool_id" {
+  description = "Cognito User Pool ID for runtime config"
+  type        = string
+  default     = ""
+}
+
+variable "identity_pool_id" {
+  description = "Cognito Identity Pool ID for runtime config"
+  type        = string
+  default     = ""
+}
+
+variable "aws_region" {
+  description = "AWS region for runtime config"
+  type        = string
+  default     = ""
+}
+
+variable "data_bucket_name" {
+  description = "Data S3 bucket name for runtime config"
+  type        = string
+  default     = ""
+}
+
+variable "data_bucket_s3_endpoint" {
+  description = "S3 endpoint for data bucket CSP (e.g. https://bucket.s3.region.amazonaws.com)"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_identity_endpoint" {
+  description = "Cognito Identity endpoint for CSP (e.g. https://cognito-identity.region.amazonaws.com)"
   type        = string
   default     = ""
 }

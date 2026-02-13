@@ -321,3 +321,20 @@ def write_to_s3(
             Body=buf.getvalue(),
             ContentType="application/octet-stream",
         )
+
+    # Update index.json with all available periods
+    paginator = s3.get_paginator("list_objects_v2")
+    periods: list[str] = []
+    for page in paginator.paginate(Bucket=bucket, Delimiter="/"):
+        for prefix_entry in page.get("CommonPrefixes", []):
+            p = prefix_entry["Prefix"].rstrip("/")
+            if len(p) == 7 and p[4] == "-" and p[:4].isdigit() and p[5:].isdigit():
+                periods.append(p)
+    periods.sort(reverse=True)
+
+    s3.put_object(
+        Bucket=bucket,
+        Key="index.json",
+        Body=json.dumps({"periods": periods}).encode(),
+        ContentType="application/json",
+    )

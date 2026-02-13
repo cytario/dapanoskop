@@ -5,8 +5,8 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.2 (Draft)                                |
-| Date                | 2026-02-12                                 |
+| Version             | 0.3 (Draft)                                |
+| Date                | 2026-02-13                                 |
 
 ---
 
@@ -36,6 +36,8 @@ Dapanoskop is a web-based AWS cloud cost monitoring application. This document d
 | App tag | AWS resource tag with key `App` (or `user:App`) |
 | UnblendedCost | AWS cost metric showing the actual cost of each usage type |
 | TimedStorage-ByteHrs | AWS usage type metric measuring S3 storage volume over time |
+| Identity Pool | Amazon Cognito Identity Pool — exchanges Cognito ID tokens for temporary AWS credentials via the enhanced (simplified) authflow |
+| httpfs | DuckDB extension enabling SQL queries against remote files via HTTP(S) or S3 protocols |
 
 ---
 
@@ -53,17 +55,19 @@ Dapanoskop is a web-based AWS cloud cost monitoring application. This document d
 │                                              │
 │              D A P A N O S K O P             │
 │                                              │
-└──┬──────────────┬──────────────┬─────────────┘
-   │              │              │
-   │ SI-1         │ SI-2         │ SI-3
-   │              │              │
-   ▼              ▼              ▼
-┌───────┐   ┌────────┐   ┌───────┐
-│Cognito│   │Cost    │   │S3 Data│
-│(exist │   │Explorer│   │Bucket │
-│ or    │   └────────┘   └───────┘
-│managed│
-│ pool) │
+└──┬──────────┬──────────┬──────────┬──────────┘
+   │          │          │          │
+   │ SI-1     │ SI-2     │ SI-3     │ SI-5
+   │          │          │          │
+   ▼          ▼          ▼          ▼
+┌───────┐ ┌────────┐ ┌───────┐ ┌──────────┐
+│Cognito│ │Cost    │ │S3 Data│ │Cognito   │
+│User   │ │Explorer│ │Bucket │ │Identity  │
+│Pool   │ │        │ │       │ │Pool      │
+│(exist │ └────────┘ └───────┘ │          │
+│ or    │                      │ temp AWS │
+│managed│                      │ creds    │
+│ pool) │                      └──────────┘
 └───┬───┘
     │ SI-4 (optional)
     ▼
@@ -75,6 +79,8 @@ Dapanoskop is a web-based AWS cloud cost monitoring application. This document d
 └────────┘
 ```
 
+Note: The browser accesses the S3 Data Bucket directly (not via CloudFront) using temporary AWS credentials obtained from the Cognito Identity Pool (SI-5). CloudFront serves only the SPA static assets from the App Bucket.
+
 **User Interfaces:**
 | ID   | Name     | Users                   | Description |
 |------|----------|-------------------------|-------------|
@@ -83,10 +89,11 @@ Dapanoskop is a web-based AWS cloud cost monitoring application. This document d
 **System Interfaces:**
 | ID   | Name           | Entity          | Description |
 |------|----------------|-----------------|-------------|
-| SI-1 | Auth           | Amazon Cognito (existing or managed) | User authentication and authorization |
+| SI-1 | Auth           | Amazon Cognito User Pool (existing or managed) | User authentication via OIDC |
 | SI-2 | Cost Data      | AWS Cost Explorer API | Source of cost and usage data |
-| SI-3 | Data Store     | Amazon S3 (Data bucket) | Storage for collected cost data |
+| SI-3 | Data Store     | Amazon S3 (Data bucket) | Storage for collected cost data; accessed directly by browser with temporary credentials |
 | SI-4 | Federation     | External IdP (SAML/OIDC) | Optional SSO identity provider (e.g., Azure Entra ID) federated through Cognito |
+| SI-5 | Credentials    | Amazon Cognito Identity Pool | Exchanges Cognito ID tokens for temporary AWS credentials (enhanced authflow) |
 
 ---
 
@@ -108,8 +115,8 @@ Refs: URS-DP-20301
 
 Session duration: 1 hour for ID and access tokens, 12 hours for refresh tokens.
 
-**[SRS-DP-310103] Runtime Authentication Configuration**
-The system loads authentication configuration (Cognito domain, client ID, redirect URI) at runtime from a configuration file served alongside the SPA, rather than at build time. This allows the same SPA build artifact to be deployed to different environments.
+**[SRS-DP-310103] Runtime Configuration**
+The system loads deployment-specific configuration at runtime from a configuration file served alongside the SPA, rather than at build time. The configuration includes: Cognito domain, client ID, User Pool ID, Identity Pool ID, AWS region, and data bucket name. This allows the same SPA build artifact to be deployed to different environments.
 Refs: URS-DP-10101, URS-DP-10103
 
 #### 3.1.2 Cost Report Screen (1-Page Report)
@@ -279,6 +286,31 @@ Refs: URS-DP-10104
 When SAML federation is configured, the system outputs the SAML Entity ID and ACS (Assertion Consumer Service) URL required to configure the identity provider.
 Refs: URS-DP-10104
 
+### 4.5 SI-5: Amazon Cognito Identity Pool (Credentials)
+
+#### 4.5.1 Endpoints
+
+**[SRS-DP-450101] Temporary AWS Credentials via Enhanced Authflow**
+The system exchanges the authenticated user's Cognito ID token for temporary AWS credentials using the Cognito Identity Pool enhanced (simplified) authflow (`GetId` + `GetCredentialsForIdentity`). The temporary credentials grant read-only access to the data S3 bucket (SI-3).
+Refs: URS-DP-20301
+
+**[SRS-DP-450102] Credential Caching and Auto-Refresh**
+The system caches temporary AWS credentials in memory and automatically refreshes them before expiry. Concurrent credential requests are deduplicated to prevent redundant Identity Pool API calls.
+Refs: URS-DP-20301
+
+**[SRS-DP-450103] Credential Lifecycle**
+Temporary credentials are cleared from memory when the user logs out. Credential expiry (typically 1 hour) triggers a transparent re-fetch without user interaction.
+Refs: URS-DP-20301
+
+#### 4.5.2 Models
+
+| Field | Type | Description |
+|-------|------|-------------|
+| AccessKeyId | String | Temporary AWS access key |
+| SecretKey | String | Temporary AWS secret key |
+| SessionToken | String | Temporary session token |
+| Expiration | DateTime | Credential expiry timestamp |
+
 #### 4.1.2 Models
 
 | Field | Type | Description |
@@ -370,15 +402,24 @@ The Lambda function writes collected and processed cost data to a dedicated data
 Refs: URS-DP-10301
 
 **[SRS-DP-430102] Read Cost Data from SPA**
-The SPA reads summary JSON for the 1-page report and queries parquet files via DuckDB-wasm for drill-down, served from the data S3 bucket. No direct AWS API calls are made from the browser.
+The SPA reads cost data directly from the data S3 bucket using temporary AWS credentials obtained via the Identity Pool (SI-5). Summary JSON files are fetched via the AWS S3 SDK. Parquet files are queried via DuckDB-wasm using the S3 protocol (httpfs) with the same temporary credentials set via DuckDB configuration parameters.
+Refs: URS-DP-10301, URS-DP-20301
+
+**[SRS-DP-430103] Period Discovery via Index File**
+The data bucket contains a root-level `index.json` file listing all available reporting periods, sorted in reverse chronological order. The SPA reads this file to populate the period selector without requiring S3 listing permissions. The index file is updated by the Lambda pipeline each time new data is written.
 Refs: URS-DP-10301
+
+**[SRS-DP-430104] S3 CORS for Browser Access**
+The data S3 bucket is configured with CORS rules allowing browser-originated requests (GET, HEAD) from the CloudFront distribution domain. This is required because the SPA accesses S3 directly (not via CloudFront proxy) using the AWS S3 SDK and DuckDB httpfs.
+Refs: URS-DP-10301, URS-DP-20301
 
 #### 4.3.2 Models
 
-**Data file layout per reporting period:**
+**Data file layout:**
 
 | File | Format | Purpose |
 |------|--------|---------|
+| `index.json` | JSON | Lists all available reporting periods (reverse chronological) |
 | `{year}-{month}/summary.json` | JSON | Pre-computed aggregates for instant 1-page report rendering |
 | `{year}-{month}/cost-by-workload.parquet` | Parquet | Per-workload cost data for all comparison periods |
 | `{year}-{month}/cost-by-usage-type.parquet` | Parquet | Per-usage-type cost data for drill-down |
@@ -402,12 +443,12 @@ Refs: URS-DP-20401
 All communication between the user's browser and the system is encrypted via HTTPS (TLS 1.2 or higher).
 Refs: URS-DP-20301
 
-**[SRS-DP-520002] No Direct AWS API Access from Browser**
-The SPA does not make direct calls to the AWS Cost Explorer API. All cost data is pre-computed by the Lambda function and served as static files.
+**[SRS-DP-520002] No Cost Explorer API Access from Browser**
+The SPA does not make direct calls to the AWS Cost Explorer API. All cost data is pre-computed by the Lambda function. The SPA accesses pre-computed data files from S3 using temporary, scoped AWS credentials obtained via the Identity Pool (SI-5). These credentials grant only `s3:GetObject` on the data bucket — no other AWS API access.
 Refs: URS-DP-20301
 
-**[SRS-DP-520003] Authentication-Gated Access**
-All authenticated users can access all cost data. Unauthenticated access to cost data is prevented. The SPA enforces authentication before fetching data files.
+**[SRS-DP-520003] IAM-Enforced Data Access**
+Access to cost data is enforced at the AWS IAM level. The Identity Pool issues temporary credentials scoped to `s3:GetObject` on the data bucket only. Unauthenticated users cannot obtain credentials and therefore cannot access data. This is server-side enforcement independent of client-side token checks.
 Refs: URS-DP-20301
 
 **[SRS-DP-520004] Managed Pool Security Hardening**
@@ -439,8 +480,9 @@ None — non-regulated software.
 **[SRS-DP-600001] AWS Cloud Environment**
 The system runs entirely on AWS. Required AWS services:
 - Amazon S3 (static hosting + data storage)
-- Amazon CloudFront (CDN)
-- Amazon Cognito (authentication — existing or module-managed User Pool)
+- Amazon CloudFront (CDN for SPA static assets)
+- Amazon Cognito User Pool (authentication — existing or module-managed)
+- Amazon Cognito Identity Pool (temporary AWS credentials for browser-to-S3 access)
 - AWS Lambda (data collection)
 - AWS Cost Explorer API (data source)
 
@@ -464,3 +506,4 @@ Refs: URS-DP-10101
 |---------|------------|--------|-------------------|
 | 0.1     | 2026-02-08 | —      | Initial draft     |
 | 0.2     | 2026-02-12 | —      | Add managed Cognito pool, SAML/OIDC federation, runtime config, release artifacts |
+| 0.3     | 2026-02-13 | —      | Add Cognito Identity Pool (SI-5) for temporary AWS credentials; SPA accesses S3 directly (not via CloudFront); add index.json period discovery; IAM-enforced data access; S3 CORS; expanded runtime config |

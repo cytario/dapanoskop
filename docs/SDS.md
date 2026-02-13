@@ -5,8 +5,8 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.3 (Draft)                                |
-| Date                | 2026-02-12                                 |
+| Version             | 0.4 (Draft)                                |
+| Date                | 2026-02-13                                 |
 
 ---
 
@@ -35,6 +35,8 @@ This document covers the internal architecture of Dapanoskop: the static web app
 | IaC  | Infrastructure as Code           |
 | CE   | AWS Cost Explorer                |
 | OAC  | CloudFront Origin Access Control |
+| Identity Pool | Cognito Identity Pool — exchanges ID tokens for temporary scoped AWS credentials |
+| httpfs | DuckDB extension for querying remote files via HTTP(S) or S3 protocols |
 
 ---
 
@@ -46,7 +48,7 @@ This document covers the internal architecture of Dapanoskop: the static web app
 | Low operational cost         | The tool itself should not be a significant cost item                     | Serverless architecture (Lambda + S3 + CloudFront); no always-on compute            | §3.2, §5   |
 | Easy deployment              | A DevOps engineer deploys in minutes                                      | Single Terraform module encapsulating all resources                                 | §3.3       |
 | Data freshness               | Cost data is at most 1 day old                                            | Scheduled Lambda execution (daily) writing to S3                                    | §3.2, §4.1 |
-| Security                     | Only authenticated users access cost data                                 | Cognito authentication (existing or managed pool, optional SAML/OIDC federation); all authenticated users see all data | §3.1, §6.4 |
+| Security                     | Only authenticated users access cost data                                 | Cognito User Pool authentication + Identity Pool temporary AWS credentials; IAM-enforced S3 access; all authenticated users see all data | §3.1, §6.4, §7.7 |
 | Self-contained deployment    | A DevOps engineer deploys without local build tools                       | Pre-built release artifacts (Lambda zip + SPA tarball) downloaded at deploy time; runtime config.json instead of build-time env vars | §3.3, §6.7 |
 
 ---
@@ -67,50 +69,56 @@ This document covers the internal architecture of Dapanoskop: the static web app
 │  │  S3 App +    │   │  Lambda +    │   │  IaC for all     │     │
 │  │  CloudFront  │   │  EventBridge │   │  resources       │     │
 │  │  + Cognito   │   │              │   │                  │     │
+│  │  + Identity  │   │              │   │                  │     │
+│  │    Pool      │   │              │   │                  │     │
 │  └──────┬───────┘   └──────┬───────┘   └──────────────────┘     │
 │         │                  │                                    │
-│         │    reads         │    writes                          │
+│         │ reads (S3 SDK    │    writes                          │
+│         │ + DuckDB httpfs) │                                    │
 │         ▼                  ▼                                    │
 │       ┌──────────────────────┐                                  │
 │       │  SS-4                │                                  │
 │       │  Data Store          │                                  │
 │       │  (S3 Data Bucket)    │                                  │
 │       │                      │                                  │
+│       │  index.json +        │                                  │
 │       │  summary.json +      │                                  │
 │       │  parquet per period  │                                  │
 │       └──────────────────────┘                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-Note: The SPA static assets are hosted in a separate S3 App Bucket (part of SS-1). The Data Bucket (SS-4) stores only cost data JSON files.
+Note: The SPA static assets are hosted in a separate S3 App Bucket (part of SS-1). The Data Bucket (SS-4) stores only cost data files. The SPA accesses the Data Bucket directly via the AWS S3 SDK and DuckDB httpfs S3 protocol using temporary credentials from the Cognito Identity Pool — CloudFront serves only SPA static assets.
 
 ### 3.1 SS-1: Web Application
 
-**Purpose / Responsibility**: Serves the cost report UI to authenticated users. A React SPA hosted on a dedicated S3 bucket, delivered via CloudFront, with authentication via an existing Cognito User Pool.
+**Purpose / Responsibility**: Serves the cost report UI to authenticated users. A React SPA hosted on a dedicated S3 bucket, delivered via CloudFront, with authentication via Cognito User Pool and data access via temporary AWS credentials from Cognito Identity Pool.
 
 **Interfaces**:
-- **Inbound (User)**: HTTPS requests from browsers via CloudFront
-- **Outbound (Data Store)**: Reads pre-computed cost data JSON files from the data S3 bucket via CloudFront
-- **Outbound (Auth)**: Redirects to existing Cognito hosted UI for authentication; validates JWT tokens
+- **Inbound (User)**: HTTPS requests from browsers via CloudFront (SPA assets only)
+- **Outbound (Data Store)**: Reads summary JSON via AWS S3 SDK and queries parquet via DuckDB httpfs S3, both directly to the data S3 bucket using temporary AWS credentials
+- **Outbound (Auth)**: Redirects to Cognito hosted UI for authentication; validates JWT tokens
+- **Outbound (Credentials)**: Exchanges Cognito ID token for temporary AWS credentials via Identity Pool enhanced authflow
 
-**Variability**: Cognito Domain URL, Client ID, and redirect URI are loaded at runtime from a `/config.json` file served alongside the SPA. The config file is written to S3 by Terraform at deploy time, allowing the same SPA build artifact to work across environments.
+**Variability**: Cognito Domain URL, Client ID, User Pool ID, Identity Pool ID, AWS region, and data bucket name are loaded at runtime from a `/config.json` file served alongside the SPA. The config file is written to S3 by Terraform at deploy time, allowing the same SPA build artifact to work across environments.
 
 #### Level 2: Web Application Components
 
 ```
-┌──────────────────────────────────────────┐
-│              SS-1: Web App               │
-│                                          │
-│  ┌──────────────┐  ┌─────────────────┐   │
-│  │  C-1.1       │  │  C-1.2          │   │
-│  │  Auth Module │  │  Report Renderer│   │
-│  │              │  │                 │   │
-│  │  Cognito     │  │  Reads JSON,    │   │
-│  │  OIDC flow,  │  │  renders 1-page │   │
-│  │  token mgmt  │  │  cost report    │   │
-│  └──────────────┘  └─────────────────┘   │
-│                                          │
-└──────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                     SS-1: Web App                          │
+│                                                            │
+│  ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐  │
+│  │  C-1.1       │  │  C-1.3       │  │  C-1.2          │  │
+│  │  Auth Module │  │  Credentials │  │  Report Renderer│  │
+│  │              │  │  Module      │  │                 │  │
+│  │  Cognito     │  │              │  │  S3 SDK for     │  │
+│  │  OIDC flow,  │  │  Identity    │  │  JSON; DuckDB   │  │
+│  │  token mgmt  │──│  Pool creds, │──│  httpfs S3 for  │  │
+│  │              │  │  auto-refresh│  │  parquet         │  │
+│  └──────────────┘  └──────────────┘  └─────────────────┘  │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ##### 3.1.1 C-1.1: Auth Module
@@ -128,22 +136,45 @@ The Auth Module implements the OAuth 2.0 Authorization Code flow with PKCE again
 Refs: SRS-DP-310101, SRS-DP-310102, SRS-DP-310103, SRS-DP-410101, SRS-DP-410102
 
 **[SDS-DP-010102] Load Configuration at Runtime**
-The Auth Module fetches `/config.json` on first use via an async `getConfig()` singleton. The config file contains `cognitoDomain`, `cognitoClientId`, `redirectUri`, and `authBypass`. Each route calls `await initAuth()` before accessing auth state. The singleton ensures the config is fetched only once.
+The Auth Module fetches `/config.json` on first use via an async `getConfig()` singleton. The config file contains `cognitoDomain`, `cognitoClientId`, `userPoolId`, `identityPoolId`, `awsRegion`, `dataBucketName`, `redirectUri`, and `authBypass`. Each route calls `await initAuth()` before accessing auth state. The singleton ensures the config is fetched only once.
 Refs: SRS-DP-310103
+
+**[SDS-DP-010103] Clear Credentials on Logout**
+When the user logs out, the Auth Module clears cached AWS credentials (C-1.3) before removing tokens and redirecting to the Cognito logout endpoint.
+Refs: SRS-DP-450103
+
+##### 3.1.3 C-1.3: Credentials Module
+
+**Purpose / Responsibility**: Obtains temporary AWS credentials from the Cognito Identity Pool using the enhanced (simplified) authflow. Provides these credentials to the Report Renderer (C-1.2) for S3 data access.
+
+**Interfaces**:
+- **Inbound**: Called by C-1.2 (Report Renderer) before fetching data
+- **Outbound**: Cognito Identity Pool API (`GetId`, `GetCredentialsForIdentity`)
+
+**Variability**: Identity Pool ID and AWS region are loaded from runtime config (C-1.1).
+
+**[SDS-DP-010301] Obtain Temporary AWS Credentials**
+The Credentials Module implements the Cognito Identity Pool enhanced authflow: (1) `GetId` to obtain an identity ID using the ID token and Identity Pool ID, (2) `GetCredentialsForIdentity` to exchange the identity for temporary AWS credentials scoped to `s3:GetObject` on the data bucket. The identity ID is cached for reuse across credential refreshes.
+Refs: SRS-DP-450101
+
+**[SDS-DP-010302] Promise Deduplication and Auto-Refresh**
+The Credentials Module caches credentials in memory and refreshes them 5 minutes before expiry. Concurrent callers share the same in-flight request via promise deduplication, preventing redundant Identity Pool API calls when multiple components request credentials simultaneously.
+Refs: SRS-DP-450102
 
 ##### 3.1.2 C-1.2: Report Renderer
 
-**Purpose / Responsibility**: Fetches pre-computed cost data from the data S3 bucket (via CloudFront) and renders the 1-page cost report showing all cost centers. Uses summary.json for the initial view and DuckDB-wasm to query parquet files for drill-down.
+**Purpose / Responsibility**: Fetches pre-computed cost data directly from the data S3 bucket and renders the 1-page cost report showing all cost centers. Uses summary.json for the initial view and DuckDB-wasm to query parquet files for drill-down.
 
 **Interfaces**:
-- **Inbound**: Receives authenticated user context from C-1.1
-- **Outbound**: HTTP GET to CloudFront to fetch summary.json and parquet files
+- **Inbound**: Receives authenticated user context from C-1.1 and temporary AWS credentials from C-1.3
+- **Outbound (JSON)**: AWS S3 SDK `GetObjectCommand` to fetch summary.json and index.json from the data bucket
+- **Outbound (Parquet)**: DuckDB-wasm httpfs S3 protocol to query parquet files directly from the data bucket
 
-**Variability**: None.
+**Variability**: Data bucket name and AWS region are loaded from runtime config (C-1.1).
 
-**[SDS-DP-010201] Fetch Summary Data**
-The Report Renderer fetches `{year}-{month}/summary.json` for the selected reporting period and renders the 1-page cost report (global summary bar, cost center cards, storage metric cards).
-Refs: SRS-DP-310201, SRS-DP-310211
+**[SDS-DP-010201] Fetch Summary Data via S3 SDK**
+The Report Renderer fetches `{year}-{month}/summary.json` for the selected reporting period using the AWS S3 SDK `GetObjectCommand` with temporary credentials from C-1.3. In local dev mode (auth bypass), it falls back to a plain HTTP fetch from the local dev server. It renders the 1-page cost report (global summary bar, cost center cards, storage metric cards).
+Refs: SRS-DP-310201, SRS-DP-310211, SRS-DP-430102
 
 **[SDS-DP-010202] Render Cost Center Cards**
 The Report Renderer renders each cost center as an expandable card with summary (total, MoM, YoY, workload count, top mover) from summary.json. The workload breakdown table is rendered within the expanded card.
@@ -157,9 +188,9 @@ Refs: SRS-DP-310204, SRS-DP-310205
 The Report Renderer renders total storage cost, cost per TB, and hot tier percentage from the pre-computed summary.json.
 Refs: SRS-DP-310206, SRS-DP-310207, SRS-DP-310208
 
-**[SDS-DP-010206] Query Parquet via DuckDB-wasm**
-For drill-down views (e.g., usage types within a workload), the Report Renderer initializes DuckDB-wasm and queries the relevant parquet file (e.g., `{year}-{month}/cost-by-usage-type.parquet`) directly over HTTP. DuckDB-wasm supports querying remote parquet files via HTTP range requests, avoiding full file downloads.
-Refs: SRS-DP-310301
+**[SDS-DP-010206] Query Parquet via DuckDB-wasm httpfs S3**
+For drill-down views (e.g., usage types within a workload), the Report Renderer initializes DuckDB-wasm and configures it with temporary AWS credentials via `SET s3_region`, `SET s3_access_key_id`, `SET s3_secret_access_key`, and `SET s3_session_token` SQL statements. It then queries the relevant parquet file (e.g., `s3://{bucket}/{year}-{month}/cost-by-usage-type.parquet`) using the S3 protocol. Credential values are escaped (single quotes doubled) for defense-in-depth. In local dev mode (auth bypass), DuckDB uses the HTTP protocol against the local dev server instead.
+Refs: SRS-DP-310301, SRS-DP-430102
 
 **[SDS-DP-010205] Apply Business-Friendly Labels**
 The Report Renderer maps internal identifiers to business-friendly labels (e.g., App tag values displayed as "Workload", usage categories displayed without AWS terminology).
@@ -176,7 +207,7 @@ Refs: SRS-DP-310210, SRS-DP-310213
 **Interfaces**:
 - **Inbound (Trigger)**: EventBridge scheduled rule triggers Lambda execution
 - **Outbound (Cost Explorer)**: Calls `GetCostAndUsage` API
-- **Outbound (S3)**: Writes JSON cost data files to the data store bucket
+- **Outbound (S3)**: Writes JSON cost data files, parquet files, and the `index.json` manifest to the data store bucket
 
 **Variability**: The cost categories to query and the usage type categorization patterns are configured at deploy time.
 
@@ -250,6 +281,10 @@ Refs: SRS-DP-430101
 The Data Processor writes `{year}-{month}/cost-by-usage-type.parquet` containing per-usage-type cost data with columns: `workload`, `usage_type`, `category`, `period`, `cost_usd`, `usage_quantity`. Rows for all three periods are included.
 Refs: SRS-DP-430101
 
+**[SDS-DP-020207] Write Period Index Manifest**
+After writing period-specific files, the Data Processor lists all `YYYY-MM/` prefixes in the data bucket (via S3 `ListObjectsV2` with delimiter), writes a root-level `index.json` containing `{"periods": [...]}` sorted in reverse chronological order. This enables the SPA to discover available periods without requiring `s3:ListBucket` IAM permissions for browser users.
+Refs: SRS-DP-430103
+
 ### 3.3 SS-3: Terraform Module
 
 **Purpose / Responsibility**: Provides a single Terraform module that provisions all AWS resources needed for a complete Dapanoskop deployment.
@@ -281,16 +316,16 @@ Refs: SRS-DP-430101
 
 ##### 3.3.1 C-3.1: Hosting Infrastructure
 
-**Purpose / Responsibility**: Provisions the S3 app bucket for static web app hosting, CloudFront distribution with OAC (dual origin: app bucket + data bucket), and optional custom domain / TLS certificate.
+**Purpose / Responsibility**: Provisions the S3 app bucket for static web app hosting, CloudFront distribution with OAC (single origin: app bucket only), and optional custom domain / TLS certificate. CloudFront serves only the SPA static assets — cost data is accessed directly from S3 by the browser using temporary credentials.
 
 **[SDS-DP-030101] Provision Web Hosting Stack**
-The module creates an S3 app bucket (private, website hosting disabled), a CloudFront distribution with OAC pointing to both the app bucket and the data bucket as separate origins, and S3 bucket policies granting CloudFront read access.
+The module creates an S3 app bucket (private, website hosting disabled), a CloudFront distribution with OAC pointing to the app bucket as a single origin, and an S3 bucket policy granting CloudFront read access. The Content Security Policy `connect-src` directive includes the S3 data bucket endpoint and Cognito Identity endpoint to allow browser-initiated requests to these services.
 Refs: SRS-DP-520001, SRS-DP-520003
 
 The custom domain name and ACM certificate ARN are passed as optional Terraform input variables. The module does not create certificates or DNS records — those are managed externally.
 
 **[SDS-DP-030102] Deploy SPA from Release Archive**
-When a release version is specified, the hosting module extracts the pre-built SPA tarball and syncs the contents to the S3 app bucket. After sync, it writes a `config.json` file to the bucket containing the Cognito domain URL and client ID, and invalidates the CloudFront cache.
+When a release version is specified, the hosting module extracts the pre-built SPA tarball and syncs the contents to the S3 app bucket. After sync, it writes a `config.json` file to the bucket containing the Cognito domain URL, client ID, User Pool ID, Identity Pool ID, AWS region, and data bucket name, and invalidates the CloudFront cache.
 Refs: SRS-DP-310103, SRS-DP-530001
 
 ##### 3.3.2 C-3.2: Auth Infrastructure
@@ -317,24 +352,36 @@ Refs: SRS-DP-410105, SRS-DP-520005
 The module outputs `saml_entity_id` (format: `urn:amazon:cognito:sp:{pool_id}`) and `saml_acs_url` (format: `https://{domain_prefix}.auth.{region}.amazoncognito.com/saml2/idpresponse`) for IdP configuration.
 Refs: SRS-DP-410106
 
+**[SDS-DP-030206] Provision Cognito Identity Pool**
+The module creates a Cognito Identity Pool configured with the Cognito User Pool as the sole identity provider. Unauthenticated identities are disabled. The classic (basic) authflow is disabled; only the enhanced (simplified) authflow is allowed. Server-side token validation is enabled.
+Refs: SRS-DP-450101, SRS-DP-520003
+
+**[SDS-DP-030207] Provision IAM Role for Authenticated Users**
+The module creates an IAM role with an `AssumeRoleWithWebIdentity` trust policy restricted to the Identity Pool (`cognito-identity.amazonaws.com:aud` = pool ID, `amr` = `authenticated`). An inline policy grants only `s3:GetObject` on the data bucket. The role is attached to the Identity Pool as the default authenticated role.
+Refs: SRS-DP-450101, SRS-DP-520003
+
 ##### 3.3.3 C-3.3: Pipeline Infrastructure
 
 **Purpose / Responsibility**: Provisions the Lambda function for cost data collection, its IAM role (with Cost Explorer and S3 permissions), and the EventBridge scheduled rule.
 
 **[SDS-DP-030301] Provision Lambda and Schedule**
-The module creates a Lambda function (Python runtime) from a packaged deployment artifact, an IAM role with permissions for `ce:GetCostAndUsage`, `ce:GetCostCategories`, and `s3:PutObject` (to the data bucket), and an EventBridge rule to trigger the Lambda on a daily schedule.
+The module creates a Lambda function (Python runtime) from a packaged deployment artifact, an IAM role with permissions for `ce:GetCostAndUsage`, `ce:GetCostCategories`, `s3:PutObject` (to the data bucket), and `s3:ListBucket` (on the data bucket, for index.json generation), and an EventBridge rule to trigger the Lambda on a daily schedule.
 When a release version is specified, the Lambda zip is downloaded from the GitHub Release by the Artifacts module (C-3.5). Otherwise, the Lambda is packaged from the local source directory via Terraform's `archive_file` data source. Memory: 256 MB. Timeout: 5 minutes. EventBridge schedule: `cron(0 6 * * ? *)` (daily at 06:00 UTC).
-Refs: SRS-DP-510002, SRS-DP-520002, SRS-DP-530001
+Refs: SRS-DP-510002, SRS-DP-520002, SRS-DP-530001, SRS-DP-430103
 
 ##### 3.3.4 C-3.4: Data Store Infrastructure
 
 **Purpose / Responsibility**: Provisions a dedicated S3 data bucket for cost data storage, separate from the app bucket.
 
 **[SDS-DP-030401] Provision Data Bucket**
-The module creates a dedicated S3 bucket for cost data with versioning enabled, server-side encryption (SSE-S3 or SSE-KMS), and a bucket policy granting the Lambda function write access and CloudFront read access.
+The module creates a dedicated S3 bucket for cost data with versioning enabled and server-side encryption (SSE-S3 or SSE-KMS). The bucket has no bucket policy granting CloudFront access — authenticated browser users access data directly using temporary IAM credentials from the Identity Pool (C-3.2).
 Refs: SRS-DP-430101, SRS-DP-430102
 
 No lifecycle rules — all historical data is retained indefinitely. Storage cost is negligible (a few KB per period).
+
+**[SDS-DP-030402] Configure S3 CORS for Browser Access**
+The module configures CORS on the data bucket allowing `GET` and `HEAD` methods from the CloudFront distribution origin. Allowed headers include `Authorization`, `Range`, and `x-amz-*` (required by the AWS S3 SDK and DuckDB httpfs). Exposed headers include `Content-Length`, `Content-Range`, and `ETag`. Max age: 300 seconds.
+Refs: SRS-DP-430104
 
 ##### 3.3.5 C-3.5: Artifacts
 
@@ -355,22 +402,23 @@ Refs: SRS-DP-530001
 **Purpose / Responsibility**: Dedicated S3 bucket storing pre-computed cost data (summary JSON + parquet files). Separate from the app bucket that hosts the SPA.
 
 **Interfaces**:
-- **Inbound (Write)**: Lambda function writes summary JSON and parquet files
-- **Outbound (Read)**: CloudFront serves data files to the SPA (JSON fetched directly, parquet queried via DuckDB-wasm HTTP range requests)
+- **Inbound (Write)**: Lambda function writes summary JSON, parquet files, and index.json manifest
+- **Outbound (Read)**: Browser accesses data files directly via AWS S3 SDK (JSON) and DuckDB httpfs S3 protocol (parquet) using temporary IAM credentials from the Identity Pool
 
 **Variability**: Data partitioned by reporting period under date prefixes.
 
 **[SDS-DP-040001] Data File Layout**
-Each reporting period is stored under a `{year}-{month}/` prefix containing:
+A root-level manifest and per-period data files:
 
 ```
+index.json                       # Lists all available YYYY-MM periods (reverse chronological)
 {year}-{month}/
-  summary.json                 # Pre-computed aggregates for instant 1-page render
-  cost-by-workload.parquet     # Detailed workload cost data for all 3 periods
-  cost-by-usage-type.parquet   # Detailed usage type cost data for all 3 periods
+  summary.json                   # Pre-computed aggregates for instant 1-page render
+  cost-by-workload.parquet       # Detailed workload cost data for all 3 periods
+  cost-by-usage-type.parquet     # Detailed usage type cost data for all 3 periods
 ```
 
-Refs: SRS-DP-430101, SRS-DP-430102
+Refs: SRS-DP-430101, SRS-DP-430102, SRS-DP-430103
 
 **[SDS-DP-040002] summary.json Schema**
 
@@ -443,7 +491,7 @@ Both parquet files contain rows for all three periods (current, previous month, 
 
 Refs: SRS-DP-430101
 
-The SPA discovers available periods using a two-step approach: it first attempts to fetch an `index.json` file listing available periods; if that fails, it probes the last 13 months by making HEAD requests to `{year}-{month}/summary.json` and collects those that return 200.
+The SPA discovers available periods by reading `index.json` from the data bucket (via S3 SDK in production, or HTTP fetch in local dev mode). The Lambda pipeline updates this file on every run by listing all `YYYY-MM/` prefixes in the bucket.
 
 ---
 
@@ -480,44 +528,54 @@ EventBridge          Lambda (C-2.1 + C-2.2)          Cost Explorer       S3 Data
     │                         │   {y}-{m}/summary.json                        │
     │                         │   {y}-{m}/cost-by-workload.parquet            │
     │                         │   {y}-{m}/cost-by-usage-type.parquet          │
+    │                         │                                               │
+    │                         │── ListObjectsV2 (delimiter="/") ─────────────>│
+    │                         │<── CommonPrefixes (YYYY-MM/) ────────────────│
+    │                         │── PutObject index.json ──────────────────────>│
     │                         │<── 200 OK ────────────────────────────────────│
 ```
 
 ### 4.2 User Views Cost Report
 
 ```
-Browser              CloudFront       S3 App    S3 Data    Cognito (existing)
-   │                     │              │          │              │
-   │── GET / ───────────>│              │          │              │
-   │                     │── read ─────>│          │              │
-   │<── index.html ──────│<── file ─────│          │              │
-   │                     │              │          │              │
-   │ [SPA loads, Auth Module checks for valid token]              │
-   │                     │              │          │              │
-   │── redirect ─────────────────────────────────────────────────>│
-   │<── Cognito login page ──────────────────────────────────────│
-   │── credentials ──────────────────────────────────────────────>│
-   │<── redirect with auth code ─────────────────────────────────│
-   │                     │              │          │              │
-   │── exchange code ────────────────────────────────────────────>│
-   │<── tokens (ID + access) ────────────────────────────────────│
-   │                     │              │          │              │
-   │── GET /data/{y}-{m}/summary.json ──>│          │              │
-   │                     │──────────────────read──>│              │
-   │                     │<─────────────────file───│              │
-   │<── summary JSON ───│              │          │              │
-   │                     │              │          │              │
-   │ [render 1-page report from summary.json]                     │
-   │                     │              │          │              │
-   │ [user clicks workload for drill-down]                        │
-   │                     │              │          │              │
-   │── DuckDB HTTP range req ──────────>│          │              │
-   │   /data/{y}-{m}/cost-by-usage-type.parquet    │              │
-   │                     │──────────────────read──>│              │
-   │                     │<─────────────────bytes──│              │
-   │<── parquet bytes ──│              │          │              │
-   │                     │              │          │              │
-   │ [DuckDB-wasm queries parquet, renders drill-down]            │
+Browser              CloudFront    S3 App    Cognito      Identity     S3 Data
+                                             User Pool    Pool         Bucket
+   │                     │          │           │            │            │
+   │── GET / ───────────>│          │           │            │            │
+   │                     │── read ─>│           │            │            │
+   │<── index.html ──────│<── file ─│           │            │            │
+   │                     │          │           │            │            │
+   │ [SPA loads, Auth Module checks for valid token]                      │
+   │                     │          │           │            │            │
+   │── redirect ────────────────────────────────>│            │            │
+   │<── Cognito login page ─────────────────────│            │            │
+   │── credentials ─────────────────────────────>│            │            │
+   │<── redirect with auth code ────────────────│            │            │
+   │                     │          │           │            │            │
+   │── exchange code ───────────────────────────>│            │            │
+   │<── tokens (ID + access) ──────────────────│            │            │
+   │                     │          │           │            │            │
+   │ [Credentials Module: obtain temp AWS credentials]                    │
+   │── GetId (ID token) ────────────────────────────────────>│            │
+   │<── identityId ─────────────────────────────────────────│            │
+   │── GetCredentialsForIdentity ───────────────────────────>│            │
+   │<── AccessKeyId, SecretKey, SessionToken ───────────────│            │
+   │                     │          │           │            │            │
+   │── S3 GetObject index.json ──────────────────────────────────────────>│
+   │<── {"periods": [...]} ──────────────────────────────────────────────│
+   │                     │          │           │            │            │
+   │── S3 GetObject {y}-{m}/summary.json ────────────────────────────────>│
+   │<── summary JSON ────────────────────────────────────────────────────│
+   │                     │          │           │            │            │
+   │ [render 1-page report from summary.json]                             │
+   │                     │          │           │            │            │
+   │ [user clicks workload for drill-down]                                │
+   │                     │          │           │            │            │
+   │── DuckDB httpfs S3 (SET s3_* creds, then query) ───────────────────>│
+   │   s3://{bucket}/{y}-{m}/cost-by-usage-type.parquet                   │
+   │<── parquet bytes (range requests) ──────────────────────────────────│
+   │                     │          │           │            │            │
+   │ [DuckDB-wasm queries parquet, renders drill-down]                    │
 ```
 
 ### 4.3 Deployment
@@ -553,30 +611,34 @@ DevOps Engineer          Terraform          AWS
 │  ┌─────────────────┐       ┌─────────────┐  ┌────────────────┐  │
 │  │  CloudFront     │       │  S3 App     │  │  S3 Data       │  │
 │  │  Distribution   │──OAC──│  Bucket     │  │  Bucket        │  │
-│  │                 │──OAC──│  SPA assets │  │  Cost JSON     │  │
-│  │  HTTPS endpoint │       └─────────────┘  └────────────────┘  │
-│  └────────┬────────┘                              ▲              │
-│           │                                       │ PutObject    │
-│  ┌────────┴────────┐                     ┌────────┴──────────┐   │
-│  │  Cognito        │                     │  Lambda Function   │   │
-│  │  (existing or   │                     │  (Python)          │   │
-│  │   managed pool) │                     │                    │   │
-│  │                 │                     │  Cost Collector +  │   │
-│  │  App Client +   │                     │  Data Processor    │   │
-│  │  opt. SAML/OIDC │                     └────────┬───────────┘   │
-│  └─────────────────┘                              │              │
-│                                          ┌────────┴──────────┐   │
-│                                          │  EventBridge       │   │
-│                                          │  Scheduled Rule    │   │
-│                                          │  (daily cron)      │   │
-│                                          └───────────────────┘   │
+│  │                 │       │  SPA assets │  │  Cost data +   │  │
+│  │  HTTPS endpoint │       └─────────────┘  │  CORS enabled  │  │
+│  │  (SPA only)     │                        └───────┬────────┘  │
+│  └────────┬────────┘                          ▲     │ direct    │
+│           │                            PutObj │     │ S3 access │
+│  ┌────────┴────────┐  ┌─────────────┐  ┌─────┴─────┴────────┐  │
+│  │  Cognito        │  │  Cognito    │  │  Lambda Function    │  │
+│  │  User Pool      │  │  Identity   │  │  (Python)           │  │
+│  │  (existing or   │  │  Pool       │  │                     │  │
+│  │   managed)      │  │             │  │  Cost Collector +   │  │
+│  │                 │  │  IAM role:  │  │  Data Processor +   │  │
+│  │  App Client +   │  │  s3:GetObj  │  │  Index Generator    │  │
+│  │  opt. SAML/OIDC │  │  (data bkt) │  └─────────┬───────────┘  │
+│  └─────────────────┘  └─────────────┘            │              │
+│                                          ┌───────┴───────────┐  │
+│                                          │  EventBridge       │  │
+│                                          │  Scheduled Rule    │  │
+│                                          │  (daily cron)      │  │
+│                                          └───────────────────┘  │
 │                                                                  │
-│                                          ┌───────────────────┐   │
-│                                          │  Cost Explorer API │   │
-│                                          │  (AWS service)     │   │
-│                                          └───────────────────┘   │
+│                                          ┌───────────────────┐  │
+│                                          │  Cost Explorer API │  │
+│                                          │  (AWS service)     │  │
+│                                          └───────────────────┘  │
 └──────────────────────────────────────────────────────────────────┘
 ```
+
+The browser accesses S3 Data Bucket directly (CORS-enabled) using temporary credentials from the Identity Pool. CloudFront serves only SPA static assets from the App Bucket.
 
 **Deployable Artifacts:**
 
@@ -584,7 +646,7 @@ DevOps Engineer          Terraform          AWS
 |----------|---------|-------------|
 | `spa.tar.gz` | HTML, CSS, JS (compiled React app) | S3 App Bucket (extracted + synced by Terraform) |
 | `lambda.zip` | Python code (deployment package) | Lambda function |
-| `config.json` | Runtime auth configuration (Cognito domain, client ID) | S3 App Bucket (written by Terraform) |
+| `config.json` | Runtime configuration (Cognito domain, client ID, User Pool ID, Identity Pool ID, AWS region, data bucket name) | S3 App Bucket (written by Terraform) |
 | Terraform module | HCL files | Executed by DevOps engineer |
 
 When `release_version` is specified, `spa.tar.gz` and `lambda.zip` are downloaded from GitHub Releases. When not specified (local dev), they are built from source.
@@ -593,11 +655,12 @@ When `release_version` is specified, `spa.tar.gz` and `lambda.zip` are downloade
 
 | Node | Type | Purpose |
 |------|------|---------|
-| CloudFront | AWS managed CDN | Serve SPA and data to users globally |
+| CloudFront | AWS managed CDN | Serve SPA static assets to users globally |
 | S3 App Bucket | AWS managed object store | Host React SPA static assets |
-| S3 Data Bucket | AWS managed object store | Host pre-computed summary JSON and parquet files |
-| Lambda | AWS managed serverless compute | Run cost data collection |
-| Cognito | AWS managed identity (existing or managed User Pool) | User authentication (optional SAML/OIDC federation) |
+| S3 Data Bucket | AWS managed object store | Host pre-computed cost data (direct browser access via S3 SDK and httpfs) |
+| Lambda | AWS managed serverless compute | Run cost data collection and index generation |
+| Cognito User Pool | AWS managed identity (existing or managed) | User authentication (optional SAML/OIDC federation) |
+| Cognito Identity Pool | AWS managed identity federation | Issue temporary scoped AWS credentials to authenticated users |
 | EventBridge | AWS managed event bus | Schedule Lambda invocations |
 
 ---
@@ -611,9 +674,10 @@ Dapanoskop follows a **two-tier data pattern**:
 1. **summary.json** — Pre-computed aggregates for the 1-page report. Small, fast to fetch, renders instantly.
 2. **Parquet files** — Detailed cost data queryable via DuckDB-wasm for drill-down. Parquet's columnar format and DuckDB's HTTP range request support mean only the needed byte ranges are fetched, not the full file.
 
-All data is collected and processed by the Lambda function (server-side, scheduled). The SPA never calls the Cost Explorer API. This design:
+All data is collected and processed by the Lambda function (server-side, scheduled). The SPA never calls the Cost Explorer API. The SPA accesses pre-computed data from S3 using temporary, narrowly-scoped AWS credentials obtained via the Cognito Identity Pool. This design:
 
-- Eliminates the need for AWS credentials in the browser
+- Enforces data access at the IAM level (server-side, not client-side token checks)
+- Scopes browser credentials to `s3:GetObject` on the data bucket only
 - Enables instant report loading via small summary.json
 - Enables powerful drill-down via DuckDB-wasm + parquet without a backend API
 - Reduces Cost Explorer API costs (queries happen once daily, not per user visit)
@@ -628,17 +692,20 @@ The usage type categorization logic (mapping AWS usage types to Storage / Comput
 
 This categorization must be maintained as AWS introduces new usage types. Unknown usage types default to the "Other" category.
 
-### 6.4 Security — Authentication-Gated Access
+### 6.4 Security — IAM-Enforced Data Access
 
 All authenticated users can access all cost data. The security model is:
-1. The Lambda writes a single JSON file containing data for all cost centers
-2. The SPA is served behind CloudFront + OAC (no direct S3 access)
-3. The SPA requires a valid Cognito token before fetching data
-4. User management is handled via the Cognito User Pool console (existing pool), AWS CLI admin-create-user (managed pool), or automatically via IdP federation (SSO)
+1. The Lambda writes pre-computed data files to S3 (all cost centers in one dataset)
+2. The SPA static assets are served via CloudFront + OAC (no direct app bucket access)
+3. The SPA authenticates users via Cognito User Pool (OIDC + PKCE)
+4. After authentication, the SPA exchanges the Cognito ID token for temporary AWS credentials via the Cognito Identity Pool (enhanced authflow)
+5. These credentials are scoped to `s3:GetObject` on the data bucket only — enforced by IAM, not client-side logic
+6. The data S3 bucket has no public access and no CloudFront origin — the only read path is via these temporary credentials
+7. User management is handled via the Cognito User Pool console (existing pool), AWS CLI admin-create-user (managed pool), or automatically via IdP federation (SSO)
 
 When using the managed pool, security hardening is applied by default: admin-only signup prevents unauthorized account creation, strong password policy, configurable MFA, token revocation, and optional advanced security (compromised credentials detection). When federation is active, local Cognito password login is disabled — users must authenticate through the external IdP.
 
-This is appropriate for an internal cost monitoring tool where all stakeholders should have visibility into the full cost picture.
+This IAM-enforced model is stronger than the previous CloudFront-proxied approach because unauthenticated requests cannot reach the data at all (no public CloudFront path to the data bucket). See §7.7 for the design decision rationale.
 
 ### 6.5 Hot Tier Calculation
 
@@ -677,12 +744,14 @@ The `config.json` file is written to S3 by the Terraform hosting module (C-3.1) 
 {
   "cognitoDomain": "https://dapanoskop-myorg.auth.eu-west-1.amazoncognito.com",
   "cognitoClientId": "abc123...",
-  "redirectUri": "https://d1234.cloudfront.net",
-  "authBypass": false
+  "userPoolId": "eu-west-1_XXXXXXX",
+  "identityPoolId": "eu-west-1:xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "awsRegion": "eu-west-1",
+  "dataBucketName": "dapanoskop-data-xxxxxxxxxx"
 }
 ```
 
-The Auth Module (C-1.1) fetches this file once via an async singleton and falls back to `VITE_*` env vars for local development.
+The config module (`getConfig()`) fetches this file once via an async singleton. In local development, values fall back to `VITE_*` environment variables. The `authBypass` flag is derived from `VITE_AUTH_BYPASS=true` and is not present in the production config.json — when set, it bypasses authentication and uses local HTTP fetches instead of S3 SDK/Identity Pool.
 
 ---
 
@@ -836,6 +905,34 @@ How should the SPA obtain deployment-specific configuration (Cognito domain, cli
 #### 7.6.5 Decision
 **Option A: Runtime config.json**. The async fetch adds minimal complexity (one HTTP request, cached by the singleton) and enables the self-contained deployment model where Terraform downloads and deploys pre-built artifacts. Build-time env vars are retained as a fallback for local development.
 
+### 7.7 Direct S3 Access via Identity Pool vs. CloudFront Data Path
+
+#### 7.7.1 Issue
+How should the browser access cost data (JSON and parquet) stored in the data S3 bucket? The data must be accessible only to authenticated users.
+
+#### 7.7.2 Boundary Conditions
+- DuckDB-wasm httpfs requires direct HTTP(S) access to files (it cannot use CloudFront signed cookies due to browser cookie scope issues)
+- CloudFront `custom_error_response` with 403→200 rewrite would expose all data publicly
+- Lambda@Edge for cookie validation adds latency and complexity
+- The data bucket must not have public access
+
+#### 7.7.3 Assumptions
+- Temporary credential lifetime (1 hour) is sufficient for typical user sessions
+- Browser-originated S3 requests require CORS headers
+- The number of concurrent users is small, so S3 direct access is acceptable (no CDN caching needed for data)
+
+#### 7.7.4 Considered Alternatives
+
+| Option | Pros | Cons |
+|--------|------|------|
+| A: CloudFront dual-origin with OAC | Simple; all traffic through CDN; caching | No auth enforcement on `/data/*` path — either fully public or requires Lambda@Edge; CloudFront 403→200 rewrite exposes all data; DuckDB cannot attach cookies to httpfs requests |
+| B: CloudFront + signed cookies | Server-side enforcement via cookie validation | Lambda@Edge required for cookie exchange; DuckDB-wasm httpfs does not propagate cookies; cookie domain scoping issues with S3 origins |
+| C: Presigned S3 URLs | Temporary, scoped URLs; no CORS needed | Must generate a URL per file; complex for DuckDB-wasm which reads parquet in multiple range requests; URL management overhead |
+| **D: Cognito Identity Pool + direct S3 access** | IAM-enforced (server-side); works with both S3 SDK and DuckDB httpfs S3 protocol; no Lambda@Edge; least-privilege (`s3:GetObject` only) | Requires CORS on bucket; additional Cognito resource; temporary credentials in browser memory |
+
+#### 7.7.5 Decision
+**Option D: Cognito Identity Pool with direct S3 access**. This approach provides true server-side enforcement (IAM policy, not client-side token checks) and works natively with both the AWS S3 SDK (for JSON fetches) and DuckDB-wasm httpfs S3 protocol (for parquet queries). Options A and B were rejected because CloudFront cannot enforce authentication on the data path without Lambda@Edge, and DuckDB-wasm does not support cookies for httpfs requests. Option C was rejected because presigned URLs add management complexity for DuckDB-wasm, which issues multiple range requests per parquet file.
+
 ---
 
 ## 8. Change History
@@ -845,3 +942,4 @@ How should the SPA obtain deployment-specific configuration (Cognito domain, cli
 | 0.1     | 2026-02-08 | —      | Initial draft     |
 | 0.2     | 2026-02-10 | —      | Align with implementation: period discovery, Lambda deployment, auth config |
 | 0.3     | 2026-02-12 | —      | Add managed Cognito pool (C-3.2), SAML/OIDC federation, artifacts module (C-3.5), runtime config (§6.7), design decisions 7.5–7.6 |
+| 0.4     | 2026-02-13 | —      | Replace CloudFront data path with Cognito Identity Pool + direct S3 access; add C-1.3 Credentials Module; DuckDB httpfs S3 protocol; index.json manifest; S3 CORS; IAM-enforced data access (§6.4, §7.7) |

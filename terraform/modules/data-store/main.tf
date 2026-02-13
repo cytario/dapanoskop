@@ -39,3 +39,16 @@ resource "aws_s3_bucket_public_access_block" "data" {
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
+
+resource "aws_s3_bucket_cors_configuration" "data" {
+  count  = length(var.allowed_origins) > 0 ? 1 : 0
+  bucket = aws_s3_bucket.data.id
+
+  cors_rule {
+    allowed_headers = ["Authorization", "Range", "x-amz-*"]
+    allowed_methods = ["GET", "HEAD"]
+    allowed_origins = var.allowed_origins
+    expose_headers  = ["Content-Length", "Content-Range", "ETag"]
+    max_age_seconds = 300
+  }
+}

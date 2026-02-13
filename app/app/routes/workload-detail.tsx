@@ -3,6 +3,8 @@ import { Link, useParams, useSearchParams } from "react-router";
 import type { CostSummary, UsageTypeCostRow } from "~/types/cost-data";
 import { fetchSummary } from "~/lib/data";
 import { initAuth, isAuthenticated, login } from "~/lib/auth";
+import { getConfig } from "~/lib/config";
+import { getAwsCredentials } from "~/lib/credentials";
 import { formatUsd } from "~/lib/format";
 import { CostChange } from "~/components/CostChange";
 
@@ -37,10 +39,7 @@ export default function WorkloadDetail() {
         if (cancelled) return;
         setSummary(summaryData);
 
-        // Lazy-load DuckDB-wasm for parquet querying
-        const dataBase = import.meta.env.VITE_DATA_BASE_URL ?? "/data";
-        const parquetUrl = `${dataBase}/${period}/cost-by-usage-type.parquet`;
-
+        const cfg = await getConfig();
         const duckdb = await import("@duckdb/duckdb-wasm");
         if (cancelled) return;
 
@@ -75,18 +74,44 @@ export default function WorkloadDetail() {
         await db.instantiate(bundle.mainModule);
         if (cancelled) return;
 
-        await db.registerFileURL(
-          "usage.parquet",
-          parquetUrl,
-          duckdb.DuckDBDataProtocol.HTTP,
-          false,
-        );
+        let parquetSource: string;
+
+        if (cfg.authBypass) {
+          // Dev mode: register HTTP URL for local sirv middleware
+          const dataBase = import.meta.env.VITE_DATA_BASE_URL ?? "/data";
+          const parquetUrl = `${dataBase}/${period}/cost-by-usage-type.parquet`;
+          await db.registerFileURL(
+            "usage.parquet",
+            parquetUrl,
+            duckdb.DuckDBDataProtocol.HTTP,
+            false,
+          );
+          parquetSource = "'usage.parquet'";
+        } else {
+          // Production: configure S3 credentials for httpfs
+          const creds = await getAwsCredentials();
+          const conn = await db.connect();
+          await conn.query(
+            `SET s3_region='${cfg.awsRegion.replace(/'/g, "''")}'`,
+          );
+          await conn.query(
+            `SET s3_access_key_id='${creds.accessKeyId.replace(/'/g, "''")}'`,
+          );
+          await conn.query(
+            `SET s3_secret_access_key='${creds.secretAccessKey.replace(/'/g, "''")}'`,
+          );
+          await conn.query(
+            `SET s3_session_token='${creds.sessionToken.replace(/'/g, "''")}'`,
+          );
+          await conn.close();
+          parquetSource = `'s3://${cfg.dataBucketName}/${period}/cost-by-usage-type.parquet'`;
+        }
 
         const conn = await db.connect();
         try {
           const stmt = await conn.prepare(`
             SELECT workload, usage_type, category, period, cost_usd, usage_quantity
-            FROM read_parquet('usage.parquet')
+            FROM read_parquet(${parquetSource})
             WHERE workload = ?
             ORDER BY cost_usd DESC
           `);

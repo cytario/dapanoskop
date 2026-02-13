@@ -6,6 +6,7 @@
  */
 
 import { getConfig } from "./config";
+import { clearAwsCredentials } from "./credentials";
 
 let authBypass = false;
 let cognitoDomain = "";
@@ -112,6 +113,7 @@ export async function handleCallback(): Promise<boolean> {
 }
 
 export function logout(): void {
+  clearAwsCredentials();
   sessionStorage.removeItem("id_token");
   sessionStorage.removeItem("access_token");
   sessionStorage.removeItem("refresh_token");

@@ -104,22 +104,8 @@ resource "aws_s3_bucket_logging" "app" {
   target_prefix = "s3-app/"
 }
 
-resource "aws_s3_bucket_logging" "data" {
-  count         = var.enable_access_logging ? 1 : 0
-  bucket        = var.data_bucket_id
-  target_bucket = aws_s3_bucket.logs[0].id
-  target_prefix = "s3-data/"
-}
-
 resource "aws_cloudfront_origin_access_control" "app" {
   name                              = "dapanoskop-app"
-  origin_access_control_origin_type = "s3"
-  signing_behavior                  = "always"
-  signing_protocol                  = "sigv4"
-}
-
-resource "aws_cloudfront_origin_access_control" "data" {
-  name                              = "dapanoskop-data"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
@@ -152,7 +138,7 @@ resource "aws_cloudfront_response_headers_policy" "security" {
         "script-src 'self' 'unsafe-inline';",
         "style-src 'self' 'unsafe-inline';",
         "worker-src 'self' blob:;",
-        "connect-src 'self'${var.cognito_domain != "" ? " ${var.cognito_domain}" : ""};",
+        "connect-src 'self'${var.cognito_domain != "" ? " ${var.cognito_domain}" : ""}${var.data_bucket_s3_endpoint != "" ? " ${var.data_bucket_s3_endpoint}" : ""}${var.cognito_identity_endpoint != "" ? " ${var.cognito_identity_endpoint}" : ""};",
         "img-src 'self' data:;",
         "font-src 'self';",
         "object-src 'none';",
@@ -186,12 +172,6 @@ resource "aws_cloudfront_distribution" "main" {
     origin_access_control_id = aws_cloudfront_origin_access_control.app.id
   }
 
-  origin {
-    domain_name              = var.data_bucket_regional_domain
-    origin_id                = "data"
-    origin_access_control_id = aws_cloudfront_origin_access_control.data.id
-  }
-
   default_cache_behavior {
     allowed_methods            = ["GET", "HEAD"]
     cached_methods             = ["GET", "HEAD"]
@@ -202,24 +182,6 @@ resource "aws_cloudfront_distribution" "main" {
 
     forwarded_values {
       query_string = false
-      cookies {
-        forward = "none"
-      }
-    }
-  }
-
-  ordered_cache_behavior {
-    path_pattern               = "/data/*"
-    allowed_methods            = ["GET", "HEAD"]
-    cached_methods             = ["GET", "HEAD"]
-    target_origin_id           = "data"
-    viewer_protocol_policy     = "redirect-to-https"
-    compress                   = true
-    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
-
-    forwarded_values {
-      query_string = false
-      headers      = ["Range"]
       cookies {
         forward = "none"
       }
@@ -321,6 +283,10 @@ resource "aws_s3_object" "config_json" {
   content = jsonencode({
     cognitoDomain   = var.cognito_domain
     cognitoClientId = var.cognito_client_id
+    userPoolId      = var.user_pool_id
+    identityPoolId  = var.identity_pool_id
+    awsRegion       = var.aws_region
+    dataBucketName  = var.data_bucket_name
   })
 
   depends_on = [terraform_data.deploy_spa]
@@ -336,26 +302,4 @@ resource "terraform_data" "invalidate_cloudfront" {
   }
 
   depends_on = [aws_s3_object.config_json]
-}
-
-resource "aws_s3_bucket_policy" "data" {
-  bucket = var.data_bucket_id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "AllowCloudFrontServicePrincipal"
-        Effect    = "Allow"
-        Principal = { Service = "cloudfront.amazonaws.com" }
-        Action    = "s3:GetObject"
-        Resource  = "${var.data_bucket_arn}/*"
-        Condition = {
-          StringEquals = {
-            "AWS:SourceArn" = aws_cloudfront_distribution.main.arn
-          }
-        }
-      }
-    ]
-  })
 }

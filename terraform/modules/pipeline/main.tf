@@ -73,6 +73,11 @@ resource "aws_iam_role_policy" "lambda" {
         Resource = "${var.data_bucket_arn}/*"
       },
       {
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = var.data_bucket_arn
+      },
+      {
         Effect = "Allow"
         Action = [
           "logs:CreateLogStream",

@@ -1,3 +1,5 @@
+data "aws_region" "current" {}
+
 module "artifacts" {
   source = "./modules/artifacts"
 
@@ -7,19 +9,27 @@ module "artifacts" {
 
 module "data_store" {
   source = "./modules/data-store"
+
+  allowed_origins = compact([
+    "https://${module.hosting.cloudfront_domain_name}",
+    var.domain_name != "" ? "https://${var.domain_name}" : "",
+  ])
 }
 
 module "hosting" {
   source = "./modules/hosting"
 
-  data_bucket_arn             = module.data_store.bucket_arn
-  data_bucket_id              = module.data_store.bucket_name
-  data_bucket_regional_domain = module.data_store.bucket_regional_domain_name
-  domain_name                 = var.domain_name
-  acm_certificate_arn         = var.acm_certificate_arn
-  cognito_domain              = coalesce(var.cognito_domain, module.auth.cognito_domain)
-  spa_archive_path            = module.artifacts.spa_archive_path
-  cognito_client_id           = module.auth.client_id
+  domain_name               = var.domain_name
+  acm_certificate_arn       = var.acm_certificate_arn
+  cognito_domain            = coalesce(var.cognito_domain, module.auth.cognito_domain)
+  spa_archive_path          = module.artifacts.spa_archive_path
+  cognito_client_id         = module.auth.client_id
+  user_pool_id              = module.auth.user_pool_id
+  identity_pool_id          = module.auth.identity_pool_id
+  aws_region                = data.aws_region.current.id
+  data_bucket_name          = module.data_store.bucket_name
+  data_bucket_s3_endpoint   = "https://${module.data_store.bucket_regional_domain_name}"
+  cognito_identity_endpoint = "https://cognito-identity.${data.aws_region.current.id}.amazonaws.com"
 }
 
 module "auth" {
@@ -39,6 +49,7 @@ module "auth" {
   oidc_scopes               = var.oidc_scopes
   oidc_attribute_mapping    = var.oidc_attribute_mapping
   enable_advanced_security  = var.enable_advanced_security
+  data_bucket_arn           = module.data_store.bucket_arn
 }
 
 module "pipeline" {

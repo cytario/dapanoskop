@@ -139,6 +139,65 @@ resource "aws_cognito_identity_provider" "oidc" {
   }
 }
 
+resource "aws_cognito_identity_pool" "main" {
+  identity_pool_name               = "dapanoskop"
+  allow_unauthenticated_identities = false
+  allow_classic_flow               = false
+
+  cognito_identity_providers {
+    client_id               = aws_cognito_user_pool_client.app.id
+    provider_name           = "cognito-idp.${data.aws_region.current.id}.amazonaws.com/${local.user_pool_id}"
+    server_side_token_check = true
+  }
+}
+
+resource "aws_iam_role" "identity_pool_authenticated" {
+  name_prefix = "dapanoskop-cognito-auth-"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = { Federated = "cognito-identity.amazonaws.com" }
+        Action    = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "cognito-identity.amazonaws.com:aud" = aws_cognito_identity_pool.main.id
+          }
+          "ForAnyValue:StringLike" = {
+            "cognito-identity.amazonaws.com:amr" = "authenticated"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "identity_pool_s3_read" {
+  name_prefix = "dapanoskop-data-read-"
+  role        = aws_iam_role.identity_pool_authenticated.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "s3:GetObject"
+        Resource = "${var.data_bucket_arn}/*"
+      }
+    ]
+  })
+}
+
+resource "aws_cognito_identity_pool_roles_attachment" "main" {
+  identity_pool_id = aws_cognito_identity_pool.main.id
+
+  roles = {
+    authenticated = aws_iam_role.identity_pool_authenticated.arn
+  }
+}
+
 resource "aws_cognito_user_pool_client" "app" {
   name         = "dapanoskop"
   user_pool_id = local.user_pool_id
