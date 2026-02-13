@@ -45,8 +45,9 @@ resource "aws_iam_role" "lambda" {
 }
 
 resource "aws_cloudwatch_log_group" "lambda" {
+  #checkov:skip=CKV_AWS_158:Logs contain no secrets or PII; AWS managed encryption sufficient
   name              = "/aws/lambda/dapanoskop-pipeline"
-  retention_in_days = 30
+  retention_in_days = 365
 }
 
 resource "aws_iam_role_policy" "lambda" {
@@ -90,6 +91,11 @@ resource "aws_iam_role_policy" "lambda" {
 }
 
 resource "aws_lambda_function" "pipeline" {
+  #checkov:skip=CKV_AWS_50:Once-daily cron; CloudWatch provides sufficient observability
+  #checkov:skip=CKV_AWS_117:Lambda accesses only AWS APIs (Cost Explorer, S3); VPC adds cost with no benefit
+  #checkov:skip=CKV_AWS_116:Synchronous EventBridge invocation with built-in retry; failures visible in CloudWatch
+  #checkov:skip=CKV_AWS_173:Env vars contain only bucket name and feature flags, no secrets
+  #checkov:skip=CKV_AWS_272:Deployment integrity ensured by Terraform state and CI pipeline
   function_name    = "dapanoskop-pipeline"
   role             = aws_iam_role.lambda.arn
   handler          = "dapanoskop.handler.handler"

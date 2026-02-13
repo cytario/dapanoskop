@@ -191,6 +191,9 @@ resource "aws_cloudfront_response_headers_policy" "security" {
 }
 
 resource "aws_cloudfront_distribution" "main" {
+  #checkov:skip=CKV_AWS_68:WAF not justified for internal Cognito-gated static site
+  #checkov:skip=CKV_AWS_310:Single S3 origin; no failover target exists
+  #checkov:skip=CKV_AWS_374:No geo-restriction requirement; access controlled by Cognito auth
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
