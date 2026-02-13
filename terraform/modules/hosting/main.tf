@@ -10,6 +10,9 @@ terraform {
 }
 
 resource "aws_s3_bucket" "app" {
+  #checkov:skip=CKV2_AWS_62:Event notifications not needed for static SPA asset bucket
+  #checkov:skip=CKV_AWS_144:Cross-region replication not justified for internal tool
+  #checkov:skip=CKV_AWS_145:SSE-S3 (AES256) sufficient; no compliance requirement for KMS
   bucket_prefix = "dapanoskop-app-"
 }
 
@@ -63,6 +66,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "app" {
 }
 
 resource "aws_s3_bucket" "logs" {
+  #checkov:skip=CKV2_AWS_62:Event notifications not needed for access log bucket
+  #checkov:skip=CKV_AWS_144:Cross-region replication not justified for access logs
+  #checkov:skip=CKV_AWS_145:SSE-S3 (AES256) sufficient; no compliance requirement for KMS
+  #checkov:skip=CKV_AWS_21:Versioning unnecessary for ephemeral access logs with 90-day expiry
   count         = var.enable_access_logging ? 1 : 0
   bucket_prefix = "dapanoskop-logs-"
 }
@@ -112,6 +119,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs" {
 }
 
 resource "aws_s3_bucket_ownership_controls" "logs" {
+  #checkov:skip=CKV2_AWS_65:BucketOwnerPreferred + log-delivery-write ACL required for S3/CloudFront log delivery
   count  = var.enable_access_logging ? 1 : 0
   bucket = aws_s3_bucket.logs[0].id
 
@@ -194,6 +202,8 @@ resource "aws_cloudfront_distribution" "main" {
   #checkov:skip=CKV_AWS_68:WAF not justified for internal Cognito-gated static site
   #checkov:skip=CKV_AWS_310:Single S3 origin; no failover target exists
   #checkov:skip=CKV_AWS_374:No geo-restriction requirement; access controlled by Cognito auth
+  #checkov:skip=CKV2_AWS_42:Custom SSL certificate is optional; default *.cloudfront.net cert used when acm_certificate_arn not set
+  #checkov:skip=CKV2_AWS_47:WAF not justified for internal Cognito-gated static site (see CKV_AWS_68)
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_100"

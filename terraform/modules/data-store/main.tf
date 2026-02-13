@@ -10,6 +10,10 @@ terraform {
 }
 
 resource "aws_s3_bucket" "data" {
+  #checkov:skip=CKV2_AWS_62:Event notifications not needed for cost data bucket
+  #checkov:skip=CKV_AWS_144:Cross-region replication not justified for regenerable cost data
+  #checkov:skip=CKV_AWS_18:Access logging available via enable_access_logging variable at root module level
+  #checkov:skip=CKV_AWS_145:SSE-S3 (AES256) sufficient; no compliance requirement for KMS
   bucket_prefix = "dapanoskop-data-"
 }
 
