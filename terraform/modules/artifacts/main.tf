@@ -19,6 +19,8 @@ locals {
 # -----------------------------------------------------------------------------
 # Artifacts S3 bucket — stores release assets (Lambda zip, SPA tarball)
 # Separate from the app bucket to avoid CloudFront exposure and s3 sync --delete
+# Always created (empty bucket costs nothing) so checkov can trace companion
+# resources without count-index ambiguity.
 # -----------------------------------------------------------------------------
 
 resource "aws_s3_bucket" "artifacts" {
@@ -26,13 +28,11 @@ resource "aws_s3_bucket" "artifacts" {
   #checkov:skip=CKV_AWS_144:Cross-region replication not justified for deployment artifacts
   #checkov:skip=CKV_AWS_18:Access logging not needed for deployment artifact bucket with restricted access
   #checkov:skip=CKV_AWS_145:SSE-S3 (AES256) sufficient; no compliance requirement for KMS
-  count         = local.use_release ? 1 : 0
   bucket_prefix = "dapanoskop-artifacts-"
 }
 
 resource "aws_s3_bucket_versioning" "artifacts" {
-  count  = local.use_release ? 1 : 0
-  bucket = aws_s3_bucket.artifacts[0].id
+  bucket = aws_s3_bucket.artifacts.id
 
   versioning_configuration {
     status = "Enabled"
@@ -40,8 +40,7 @@ resource "aws_s3_bucket_versioning" "artifacts" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {
-  count  = local.use_release ? 1 : 0
-  bucket = aws_s3_bucket.artifacts[0].id
+  bucket = aws_s3_bucket.artifacts.id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -51,8 +50,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "artifacts" {
 }
 
 resource "aws_s3_bucket_public_access_block" "artifacts" {
-  count  = local.use_release ? 1 : 0
-  bucket = aws_s3_bucket.artifacts[0].id
+  bucket = aws_s3_bucket.artifacts.id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -61,8 +59,7 @@ resource "aws_s3_bucket_public_access_block" "artifacts" {
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
-  count  = local.use_release ? 1 : 0
-  bucket = aws_s3_bucket.artifacts[0].id
+  bucket = aws_s3_bucket.artifacts.id
 
   rule {
     id     = "abort-incomplete-multipart-uploads"
@@ -84,8 +81,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
 }
 
 resource "aws_s3_bucket_policy" "artifacts" {
-  count  = local.use_release ? 1 : 0
-  bucket = aws_s3_bucket.artifacts[0].id
+  bucket = aws_s3_bucket.artifacts.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -95,7 +91,7 @@ resource "aws_s3_bucket_policy" "artifacts" {
         Effect    = "Allow"
         Principal = { Service = "lambda.amazonaws.com" }
         Action    = "s3:GetObject"
-        Resource  = "${aws_s3_bucket.artifacts[0].arn}/*"
+        Resource  = "${aws_s3_bucket.artifacts.arn}/*"
         Condition = {
           StringEquals = {
             "aws:SourceAccount" = data.aws_caller_identity.current.account_id
@@ -119,7 +115,7 @@ resource "terraform_data" "upload_lambda" {
     command = <<-EOT
       TMPFILE=$(mktemp)
       curl -fsSL -o "$TMPFILE" "${local.base_url}/lambda.zip"
-      aws s3 cp "$TMPFILE" "s3://${aws_s3_bucket.artifacts[0].id}/${var.release_version}/lambda.zip"
+      aws s3 cp "$TMPFILE" "s3://${aws_s3_bucket.artifacts.id}/${var.release_version}/lambda.zip"
       rm -f "$TMPFILE"
     EOT
   }
@@ -134,7 +130,7 @@ resource "terraform_data" "upload_spa" {
     command = <<-EOT
       TMPFILE=$(mktemp)
       curl -fsSL -o "$TMPFILE" "${local.base_url}/spa.tar.gz"
-      aws s3 cp "$TMPFILE" "s3://${aws_s3_bucket.artifacts[0].id}/${var.release_version}/spa.tar.gz"
+      aws s3 cp "$TMPFILE" "s3://${aws_s3_bucket.artifacts.id}/${var.release_version}/spa.tar.gz"
       rm -f "$TMPFILE"
     EOT
   }
@@ -146,7 +142,7 @@ resource "terraform_data" "upload_spa" {
 
 data "aws_s3_object" "lambda_zip" {
   count  = local.use_release ? 1 : 0
-  bucket = aws_s3_bucket.artifacts[0].id
+  bucket = aws_s3_bucket.artifacts.id
   key    = "${var.release_version}/lambda.zip"
 
   depends_on = [terraform_data.upload_lambda]
@@ -154,7 +150,7 @@ data "aws_s3_object" "lambda_zip" {
 
 data "aws_s3_object" "spa_archive" {
   count  = local.use_release ? 1 : 0
-  bucket = aws_s3_bucket.artifacts[0].id
+  bucket = aws_s3_bucket.artifacts.id
   key    = "${var.release_version}/spa.tar.gz"
 
   depends_on = [terraform_data.upload_spa]

@@ -5,7 +5,7 @@ output "use_release" {
 
 output "lambda_s3_bucket" {
   description = "S3 bucket containing the Lambda zip"
-  value       = local.use_release ? aws_s3_bucket.artifacts[0].id : ""
+  value       = local.use_release ? aws_s3_bucket.artifacts.id : ""
 }
 
 output "lambda_s3_key" {
@@ -20,7 +20,7 @@ output "lambda_s3_object_version" {
 
 output "spa_s3_bucket" {
   description = "S3 bucket containing the SPA tarball"
-  value       = local.use_release ? aws_s3_bucket.artifacts[0].id : ""
+  value       = local.use_release ? aws_s3_bucket.artifacts.id : ""
 }
 
 output "spa_s3_key" {
