@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
-from dapanoskop.processor import process
+from moto import mock_aws
+
+from dapanoskop.processor import process, update_index
 
 
 def _make_group(app: str, usage_type: str, cost: float, quantity: float) -> dict:
@@ -152,3 +155,75 @@ def test_multiple_cost_centers() -> None:
     assert summary["cost_centers"][0]["current_cost_usd"] == 2000.0
     assert summary["cost_centers"][1]["name"] == "Frontend"
     assert summary["cost_centers"][1]["current_cost_usd"] == 1000.0
+
+
+@mock_aws
+def test_update_index_creates_sorted_index() -> None:
+    """Test that update_index creates reverse-sorted period index."""
+    import boto3
+
+    s3 = boto3.client("s3", region_name="us-east-1")
+    bucket = "test-bucket"
+    s3.create_bucket(Bucket=bucket)
+
+    # Create multiple period prefixes
+    s3.put_object(Bucket=bucket, Key="2026-01/summary.json", Body=b"{}")
+    s3.put_object(Bucket=bucket, Key="2025-12/summary.json", Body=b"{}")
+    s3.put_object(Bucket=bucket, Key="2025-11/summary.json", Body=b"{}")
+    s3.put_object(Bucket=bucket, Key="2026-02/summary.json", Body=b"{}")
+
+    update_index(bucket)
+
+    # Read index.json
+    response = s3.get_object(Bucket=bucket, Key="index.json")
+    index_data = json.loads(response["Body"].read())
+
+    # Should be reverse sorted (newest first)
+    assert index_data["periods"] == ["2026-02", "2026-01", "2025-12", "2025-11"]
+
+
+@mock_aws
+def test_update_index_ignores_non_period_prefixes() -> None:
+    """Test that update_index ignores non-period prefixes."""
+    import boto3
+
+    s3 = boto3.client("s3", region_name="us-east-1")
+    bucket = "test-bucket"
+    s3.create_bucket(Bucket=bucket)
+
+    # Create valid period prefixes and invalid ones
+    s3.put_object(Bucket=bucket, Key="2026-01/summary.json", Body=b"{}")
+    s3.put_object(Bucket=bucket, Key="2025-12/summary.json", Body=b"{}")
+    s3.put_object(Bucket=bucket, Key="logs/error.log", Body=b"error")
+    s3.put_object(Bucket=bucket, Key="backup/old-data.json", Body=b"{}")
+    s3.put_object(Bucket=bucket, Key="test/file.txt", Body=b"test")
+
+    update_index(bucket)
+
+    # Read index.json
+    response = s3.get_object(Bucket=bucket, Key="index.json")
+    index_data = json.loads(response["Body"].read())
+
+    # Should only include valid period prefixes
+    assert index_data["periods"] == ["2026-01", "2025-12"]
+    assert "logs" not in index_data["periods"]
+    assert "backup" not in index_data["periods"]
+    assert "test" not in index_data["periods"]
+
+
+@mock_aws
+def test_update_index_empty_bucket() -> None:
+    """Test that update_index handles empty bucket correctly."""
+    import boto3
+
+    s3 = boto3.client("s3", region_name="us-east-1")
+    bucket = "test-bucket"
+    s3.create_bucket(Bucket=bucket)
+
+    update_index(bucket)
+
+    # Read index.json
+    response = s3.get_object(Bucket=bucket, Key="index.json")
+    index_data = json.loads(response["Body"].read())
+
+    assert index_data["periods"] == []

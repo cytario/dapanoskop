@@ -1,5 +1,6 @@
 import type { UsageTypeCostRow } from "~/types/cost-data";
 import { formatUsd } from "~/lib/format";
+import { aggregateUsageTypes } from "~/lib/aggregate";
 import { CostChange } from "./CostChange";
 
 interface UsageTypeTableProps {
@@ -9,42 +10,17 @@ interface UsageTypeTableProps {
   yoyPeriod: string;
 }
 
-interface AggregatedRow {
-  usage_type: string;
-  category: string;
-  current: number;
-  prev: number;
-  yoy: number;
-}
-
 export function UsageTypeTable({
   rows,
   currentPeriod,
   prevPeriod,
   yoyPeriod,
 }: UsageTypeTableProps) {
-  // Aggregate by usage_type across periods
-  const byUsageType = new Map<string, AggregatedRow>();
-
-  for (const row of rows) {
-    let agg = byUsageType.get(row.usage_type);
-    if (!agg) {
-      agg = {
-        usage_type: row.usage_type,
-        category: row.category,
-        current: 0,
-        prev: 0,
-        yoy: 0,
-      };
-      byUsageType.set(row.usage_type, agg);
-    }
-    if (row.period === currentPeriod) agg.current += row.cost_usd;
-    else if (row.period === prevPeriod) agg.prev += row.cost_usd;
-    else if (row.period === yoyPeriod) agg.yoy += row.cost_usd;
-  }
-
-  const sorted = [...byUsageType.values()].sort(
-    (a, b) => b.current - a.current,
+  const sorted = aggregateUsageTypes(
+    rows,
+    currentPeriod,
+    prevPeriod,
+    yoyPeriod,
   );
 
   return (

@@ -46,6 +46,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Test
+        run: npm test
+
   python:
     name: Python Lambda
     runs-on: ubuntu-latest
@@ -75,6 +78,14 @@ jobs:
 
       - name: Tests
         run: uv run pytest
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-coverage-report
+          path: lambda/htmlcov/
+          retention-days: 30
 
   terraform:
     name: Terraform
@@ -115,3 +126,9 @@ jobs:
 
       - name: Run TFLint
         run: tflint -f compact --recursive
+
+      - name: Install checkov
+        run: pip install checkov
+
+      - name: Checkov
+        run: checkov -d . --compact --quiet --framework terraform

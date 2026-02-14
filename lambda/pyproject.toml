@@ -10,6 +10,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest",
+    "pytest-cov",
     "moto[ce,s3]",
     "boto3-stubs",
     "ruff",
@@ -27,6 +28,7 @@ target-version = "py312"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=dapanoskop --cov-report=term-missing --cov-report=html --cov-fail-under=70"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dapanoskop"]
