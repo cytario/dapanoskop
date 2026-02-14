@@ -49,6 +49,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "app" {
   rule {
     id     = "abort-incomplete-multipart-uploads"
     status = "Enabled"
+    filter {}
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 1
@@ -58,6 +59,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "app" {
   rule {
     id     = "expire-delete-markers"
     status = "Enabled"
+    filter {}
 
     expiration {
       expired_object_delete_marker = true
@@ -102,6 +104,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs" {
   rule {
     id     = "expire-logs"
     status = "Enabled"
+    filter {}
 
     expiration {
       days = 90
@@ -111,6 +114,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs" {
   rule {
     id     = "abort-incomplete-multipart-uploads"
     status = "Enabled"
+    filter {}
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 1
@@ -320,7 +324,7 @@ resource "terraform_data" "deploy_spa" {
 }
 
 resource "aws_s3_object" "config_json" {
-  count = var.cognito_client_id != "" ? 1 : 0
+  count = var.spa_s3_key != "" ? 1 : 0
 
   bucket       = aws_s3_bucket.app.id
   key          = "config.json"

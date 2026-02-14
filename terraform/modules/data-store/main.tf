@@ -50,6 +50,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data" {
   rule {
     id     = "abort-incomplete-multipart-uploads"
     status = "Enabled"
+    filter {}
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 1
@@ -59,6 +60,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data" {
   rule {
     id     = "expire-delete-markers"
     status = "Enabled"
+    filter {}
 
     expiration {
       expired_object_delete_marker = true
@@ -68,6 +70,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "data" {
   rule {
     id     = "transition-to-intelligent-tiering"
     status = "Enabled"
+    filter {}
 
     transition {
       days          = 5
