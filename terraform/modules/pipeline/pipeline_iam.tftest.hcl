@@ -1,4 +1,36 @@
-mock_provider "aws" {}
+mock_provider "aws" {
+  mock_data "aws_region" {
+    defaults = {
+      id   = "eu-north-1"
+      name = "eu-north-1"
+    }
+  }
+
+  mock_resource "aws_iam_role" {
+    defaults = {
+      arn = "arn:aws:iam::123456789012:role/test-lambda-role"
+    }
+  }
+
+  mock_resource "aws_lambda_function" {
+    defaults = {
+      arn = "arn:aws:lambda:eu-north-1:123456789012:function:test-pipeline"
+    }
+  }
+
+  mock_resource "aws_cloudwatch_event_rule" {
+    defaults = {
+      arn = "arn:aws:events:eu-north-1:123456789012:rule/test-daily"
+    }
+  }
+
+  mock_resource "aws_cloudwatch_log_group" {
+    defaults = {
+      arn = "arn:aws:logs:eu-north-1:123456789012:log-group:/aws/lambda/dapanoskop-pipeline"
+    }
+  }
+}
+
 mock_provider "archive" {}
 
 variables {

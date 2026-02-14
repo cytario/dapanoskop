@@ -16,9 +16,10 @@ run "saml_url_not_https" {
   command = plan
 
   variables {
-    saml_metadata_url = "http://insecure.example.com/metadata"
-    callback_urls     = ["https://example.com"]
-    data_bucket_arn   = "arn:aws:s3:::test-bucket"
+    saml_metadata_url     = "http://insecure.example.com/metadata"
+    cognito_domain_prefix = "test-domain"
+    callback_urls         = ["https://example.com"]
+    data_bucket_arn       = "arn:aws:s3:::test-bucket"
   }
 
   expect_failures = [var.saml_metadata_url]
@@ -28,9 +29,10 @@ run "oidc_issuer_not_https" {
   command = plan
 
   variables {
-    oidc_issuer     = "http://insecure.example.com"
-    callback_urls   = ["https://example.com"]
-    data_bucket_arn = "arn:aws:s3:::test-bucket"
+    oidc_issuer           = "http://insecure.example.com"
+    cognito_domain_prefix = "test-domain"
+    callback_urls         = ["https://example.com"]
+    data_bucket_arn       = "arn:aws:s3:::test-bucket"
   }
 
   expect_failures = [var.oidc_issuer]

@@ -127,6 +127,16 @@ jobs:
       - name: Run TFLint
         run: tflint -f compact --recursive
 
+      - name: Module tests
+        run: |
+          for dir in modules/*/; do
+            if ls "$dir"*.tftest.hcl 1>/dev/null 2>&1; then
+              echo "==> Testing $dir"
+              tofu -chdir="$dir" init -backend=false
+              tofu -chdir="$dir" test
+            fi
+          done
+
       - name: Install checkov
         run: pip install checkov
 

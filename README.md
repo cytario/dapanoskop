@@ -2,6 +2,9 @@
 [![Release](https://github.com/cytario/dapanoskop/actions/workflows/release.yml/badge.svg)](https://github.com/cytario/dapanoskop/actions/workflows/release.yml)
 [![GitHub release](https://img.shields.io/github/v/release/cytario/dapanoskop)](https://github.com/cytario/dapanoskop/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+![Frontend Tests](https://img.shields.io/badge/frontend_tests-71-blue)
+![Python Tests](https://img.shields.io/badge/python_tests-61-blue)
+![Python Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)
 
 # Dapanoskop
 
@@ -121,6 +124,7 @@ aws lambda invoke \
 ```
 
 Parameters:
+
 - `backfill` (boolean, required): Set to `true` to enable backfill mode
 - `months` (integer, optional): Number of historical months to process (default: 13)
 - `force` (boolean, optional): Reprocess months that already exist in S3 (default: false)
@@ -131,76 +135,92 @@ Backfill processes months sequentially, skips existing data unless forced, and r
 
 ### Terraform Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `cognito_user_pool_id` | No | Existing Cognito User Pool ID. Leave empty for a managed pool. |
-| `cognito_domain_prefix` | No | Domain prefix for managed pool hosted UI (required if no `cognito_user_pool_id`) |
-| `cognito_domain` | No | Cognito domain for CSP (only needed with BYO pool) |
-| `cognito_mfa_configuration` | No | MFA for managed pool: `OFF`, `OPTIONAL` (default), or `ON` |
-| `saml_provider_name` | No | SAML IdP display name (e.g. `AzureAD`) |
-| `saml_metadata_url` | No | SAML federation metadata URL from your IdP |
-| `saml_attribute_mapping` | No | SAML claim-to-attribute mapping |
-| `oidc_provider_name` | No | OIDC IdP display name |
-| `oidc_issuer` | No | OIDC issuer URL |
-| `oidc_client_id` | No | OIDC client ID |
-| `oidc_client_secret` | No | OIDC client secret (sensitive — prefer SAML to avoid secrets in state) |
-| `release_version` | No | GitHub release tag (e.g. `v1.3.0`). Stages pre-built artifacts in a dedicated S3 bucket. |
-| `github_repo` | No | GitHub repo for release artifacts (default: `cytario/dapanoskop`) |
-| `cost_category_name` | No | AWS Cost Category for cost center mapping |
-| `domain_name` | No | Custom domain for CloudFront |
-| `acm_certificate_arn` | No | ACM certificate ARN (required with `domain_name`) |
-| `schedule_expression` | No | EventBridge cron (default: `cron(0 6 * * ? *)`) |
-| `include_efs` | No | Include EFS in storage metrics (default: `false`) |
-| `include_ebs` | No | Include EBS in storage metrics (default: `false`) |
-| `enable_access_logging` | No | Enable S3 and CloudFront access logging (default: `false`) |
+| Variable                    | Required | Description                                                                              |
+| --------------------------- | -------- | ---------------------------------------------------------------------------------------- |
+| `cognito_user_pool_id`      | No       | Existing Cognito User Pool ID. Leave empty for a managed pool.                           |
+| `cognito_domain_prefix`     | No       | Domain prefix for managed pool hosted UI (required if no `cognito_user_pool_id`)         |
+| `cognito_domain`            | No       | Cognito domain for CSP (only needed with BYO pool)                                       |
+| `cognito_mfa_configuration` | No       | MFA for managed pool: `OFF`, `OPTIONAL` (default), or `ON`                               |
+| `saml_provider_name`        | No       | SAML IdP display name (e.g. `AzureAD`)                                                   |
+| `saml_metadata_url`         | No       | SAML federation metadata URL from your IdP                                               |
+| `saml_attribute_mapping`    | No       | SAML claim-to-attribute mapping                                                          |
+| `oidc_provider_name`        | No       | OIDC IdP display name                                                                    |
+| `oidc_issuer`               | No       | OIDC issuer URL                                                                          |
+| `oidc_client_id`            | No       | OIDC client ID                                                                           |
+| `oidc_client_secret`        | No       | OIDC client secret (sensitive — prefer SAML to avoid secrets in state)                   |
+| `release_version`           | No       | GitHub release tag (e.g. `v1.3.0`). Stages pre-built artifacts in a dedicated S3 bucket. |
+| `github_repo`               | No       | GitHub repo for release artifacts (default: `cytario/dapanoskop`)                        |
+| `cost_category_name`        | No       | AWS Cost Category for cost center mapping                                                |
+| `domain_name`               | No       | Custom domain for CloudFront                                                             |
+| `acm_certificate_arn`       | No       | ACM certificate ARN (required with `domain_name`)                                        |
+| `schedule_expression`       | No       | EventBridge cron (default: `cron(0 6 * * ? *)`)                                          |
+| `include_efs`               | No       | Include EFS in storage metrics (default: `false`)                                        |
+| `include_ebs`               | No       | Include EBS in storage metrics (default: `false`)                                        |
+| `enable_access_logging`     | No       | Enable S3 and CloudFront access logging (default: `false`)                               |
 
 ### Terraform Outputs
 
-| Output | Description |
-|--------|-------------|
-| `cloudfront_url` | URL of the CloudFront distribution |
-| `data_bucket_name` | S3 bucket for cost data |
-| `app_bucket_name` | S3 bucket for SPA assets |
-| `cognito_client_id` | Cognito app client ID |
-| `cognito_user_pool_id` | Cognito User Pool ID |
-| `cognito_domain_url` | Cognito hosted UI URL (managed pool only) |
-| `saml_entity_id` | SAML Entity ID for IdP configuration |
-| `saml_acs_url` | SAML ACS URL for IdP configuration |
-| `lambda_function_name` | Lambda function name |
-| `identity_pool_id` | Cognito Identity Pool ID |
+| Output                 | Description                               |
+| ---------------------- | ----------------------------------------- |
+| `cloudfront_url`       | URL of the CloudFront distribution        |
+| `data_bucket_name`     | S3 bucket for cost data                   |
+| `app_bucket_name`      | S3 bucket for SPA assets                  |
+| `cognito_client_id`    | Cognito app client ID                     |
+| `cognito_user_pool_id` | Cognito User Pool ID                      |
+| `cognito_domain_url`   | Cognito hosted UI URL (managed pool only) |
+| `saml_entity_id`       | SAML Entity ID for IdP configuration      |
+| `saml_acs_url`         | SAML ACS URL for IdP configuration        |
+| `lambda_function_name` | Lambda function name                      |
+| `identity_pool_id`     | Cognito Identity Pool ID                  |
 
 ### SPA Configuration
 
 In production, the SPA reads `/config.json` from S3 (written by Terraform) with the following fields:
 
-| Field | Description |
-|-------|-------------|
-| `cognitoDomain` | Cognito hosted UI domain |
-| `cognitoClientId` | Cognito app client ID |
-| `userPoolId` | Cognito User Pool ID |
-| `identityPoolId` | Cognito Identity Pool ID |
-| `awsRegion` | AWS region for S3 and Cognito calls |
-| `dataBucketName` | S3 bucket containing cost data |
+| Field             | Description                         |
+| ----------------- | ----------------------------------- |
+| `cognitoDomain`   | Cognito hosted UI domain            |
+| `cognitoClientId` | Cognito app client ID               |
+| `userPoolId`      | Cognito User Pool ID                |
+| `identityPoolId`  | Cognito Identity Pool ID            |
+| `awsRegion`       | AWS region for S3 and Cognito calls |
+| `dataBucketName`  | S3 bucket containing cost data      |
 
 For local development, the SPA falls back to `VITE_*` env vars:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VITE_AUTH_BYPASS` | `false` | Skip auth for local dev |
-| `VITE_COGNITO_DOMAIN` | — | Cognito hosted UI domain |
-| `VITE_COGNITO_CLIENT_ID` | — | Cognito app client ID |
-| `VITE_REDIRECT_URI` | `window.location.origin + "/"` | OAuth redirect URI |
+| Variable                 | Default                        | Description              |
+| ------------------------ | ------------------------------ | ------------------------ |
+| `VITE_AUTH_BYPASS`       | `false`                        | Skip auth for local dev  |
+| `VITE_COGNITO_DOMAIN`    | —                              | Cognito hosted UI domain |
+| `VITE_COGNITO_CLIENT_ID` | —                              | Cognito app client ID    |
+| `VITE_REDIRECT_URI`      | `window.location.origin + "/"` | OAuth redirect URI       |
 
 ### Lambda Environment Variables
 
 These are set by Terraform automatically:
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATA_BUCKET` | Yes | S3 bucket name for output files |
-| `COST_CATEGORY_NAME` | No | AWS Cost Category name (auto-discovers if empty) |
-| `INCLUDE_EFS` | No | Include EFS in storage metrics |
-| `INCLUDE_EBS` | No | Include EBS in storage metrics |
+| Variable             | Required | Description                                      |
+| -------------------- | -------- | ------------------------------------------------ |
+| `DATA_BUCKET`        | Yes      | S3 bucket name for output files                  |
+| `COST_CATEGORY_NAME` | No       | AWS Cost Category name (auto-discovers if empty) |
+| `INCLUDE_EFS`        | No       | Include EFS in storage metrics                   |
+| `INCLUDE_EBS`        | No       | Include EBS in storage metrics                   |
+
+## Testing
+
+The project maintains automated tests across all three sub-systems, run in CI on every push and pull request.
+
+| Sub-system | Framework                | Tests | Coverage |
+| ---------- | ------------------------ | ----: | -------- |
+| Frontend   | Vitest + Testing Library |    71 | —        |
+| Lambda     | pytest + moto            |    61 | 98%      |
+| Terraform  | checkov + tofu test      |    15 | —        |
+
+**Frontend** — Unit tests for utility functions (`format.ts`, `aggregate.ts`, `auth.ts`, `config.ts`, `duckdb-config.ts`, `data.ts`) and component tests for key UI elements (`WorkloadTable`, `CostCenterCard`, `PeriodSelector`, `ErrorBoundary`, `SummaryHeader`, `Layout`).
+
+**Lambda** — Full handler integration tests with moto-mocked AWS services, plus unit tests for the collector, processor, and category modules. Coverage is enforced at 70% minimum via `pytest-cov`.
+
+**Terraform** — Checkov security scanning, TFLint linting, and `.tftest.hcl` contract tests using `mock_provider` for CSP header construction, auth input validations, and IAM policy least-privilege regression.
 
 ## Development
 
