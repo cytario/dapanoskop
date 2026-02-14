@@ -111,7 +111,7 @@ resource "aws_s3_bucket_policy" "artifacts" {
 resource "terraform_data" "upload_lambda" {
   count = local.use_release ? 1 : 0
 
-  input = var.release_version
+  triggers_replace = var.release_version
 
   provisioner "local-exec" {
     command = <<-EOT
@@ -126,7 +126,7 @@ resource "terraform_data" "upload_lambda" {
 resource "terraform_data" "upload_spa" {
   count = local.use_release ? 1 : 0
 
-  input = var.release_version
+  triggers_replace = var.release_version
 
   provisioner "local-exec" {
     command = <<-EOT

@@ -309,7 +309,7 @@ resource "aws_s3_bucket_policy" "app" {
 resource "terraform_data" "deploy_spa" {
   count = var.spa_s3_key != "" ? 1 : 0
 
-  input = var.spa_s3_object_version
+  triggers_replace = var.spa_s3_object_version
 
   provisioner "local-exec" {
     command = <<-EOT
@@ -343,7 +343,7 @@ resource "aws_s3_object" "config_json" {
 resource "terraform_data" "invalidate_cloudfront" {
   count = var.spa_s3_key != "" ? 1 : 0
 
-  input = terraform_data.deploy_spa[0].output
+  triggers_replace = terraform_data.deploy_spa[0].id
 
   provisioner "local-exec" {
     command = "aws cloudfront create-invalidation --distribution-id ${aws_cloudfront_distribution.main.id} --paths '/*'"
