@@ -26,7 +26,7 @@ export function PeriodSelector({
               px-3 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors
               ${
                 isSelected
-                  ? "bg-blue-600 text-white"
+                  ? "bg-primary-600 text-white"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }
             `}

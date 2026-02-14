@@ -66,9 +66,9 @@ export function UsageTypeTable({
               <span
                 className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
                   row.category === "Storage"
-                    ? "bg-purple-100 text-purple-700"
+                    ? "bg-primary-100 text-primary-700"
                     : row.category === "Compute"
-                      ? "bg-blue-100 text-blue-700"
+                      ? "bg-secondary-100 text-secondary-700"
                       : row.category === "Support"
                         ? "bg-yellow-100 text-yellow-700"
                         : "bg-gray-100 text-gray-700"

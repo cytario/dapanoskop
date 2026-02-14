@@ -20,7 +20,7 @@ export function TaggingCoverage({ data }: TaggingCoverageProps) {
       </div>
       <div className="w-full bg-gray-200 rounded-full h-3">
         <div
-          className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+          className="bg-primary-600 h-3 rounded-full transition-all duration-300"
           style={{ width: `${data.tagged_percentage}%` }}
         />
       </div>

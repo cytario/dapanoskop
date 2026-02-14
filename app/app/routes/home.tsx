@@ -108,7 +108,7 @@ export default function Home() {
           </p>
           <button
             onClick={login}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition-colors"
           >
             Sign In
           </button>
@@ -120,11 +120,11 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-bold">Dapanoskop</h1>
+      <header className="bg-cytario-gradient px-6 py-3 flex items-center justify-between shadow-sm">
+        <h1 className="text-lg font-bold text-white">Dapanoskop</h1>
         <button
           onClick={logout}
-          className="text-sm text-gray-600 hover:text-gray-900"
+          className="text-sm text-white/90 hover:text-white"
         >
           Logout
         </button>
@@ -142,8 +142,10 @@ export default function Home() {
         )}
 
         {loading && (
-          <div className="text-center py-12 text-gray-500">
-            Loading cost data...
+          <div className="text-center py-12">
+            <div className="inline-block animate-pulse text-primary-600 font-medium">
+              Loading cost data...
+            </div>
           </div>
         )}
 

@@ -31,7 +31,7 @@ export function CostCenterCard({ costCenter, period }: CostCenterCardProps) {
       : "0.0";
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden transition-shadow hover:shadow-md">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full p-4 text-left hover:bg-gray-50 transition-colors"

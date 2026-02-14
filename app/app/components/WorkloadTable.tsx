@@ -43,7 +43,7 @@ export function WorkloadTable({ workloads, period }: WorkloadTableProps) {
                 ) : (
                   <Link
                     to={`/workload/${encodeURIComponent(wl.name)}?period=${period}`}
-                    className="text-blue-600 hover:underline"
+                    className="text-primary-600 hover:underline"
                   >
                     {wl.name}
                   </Link>

@@ -175,15 +175,15 @@ export default function WorkloadDetail() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-bold">Dapanoskop</h1>
+      <header className="bg-cytario-gradient px-6 py-3 flex items-center justify-between shadow-sm">
+        <h1 className="text-lg font-bold text-white">Dapanoskop</h1>
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-6 space-y-6">
         <div className="flex items-center gap-4">
           <Link
             to={`/?period=${period}`}
-            className="text-blue-600 hover:underline text-sm"
+            className="text-primary-600 hover:underline text-sm"
           >
             ← Back to Report
           </Link>
@@ -210,13 +210,13 @@ export default function WorkloadDetail() {
             </div>
 
             <div className="grid grid-cols-3 gap-4">
-              <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
                 <div className="text-sm text-gray-500">Current</div>
                 <div className="text-xl font-semibold mt-1">
                   {formatUsd(workload.current_cost_usd)}
                 </div>
               </div>
-              <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
                 <div className="text-sm text-gray-500">vs Last Month</div>
                 <div className="text-lg font-medium mt-1">
                   <CostChange
@@ -225,7 +225,7 @@ export default function WorkloadDetail() {
                   />
                 </div>
               </div>
-              <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
                 <div className="text-sm text-gray-500">vs Last Year</div>
                 <div className="text-lg font-medium mt-1">
                   {workload.yoy_cost_usd > 0 ? (
@@ -243,8 +243,10 @@ export default function WorkloadDetail() {
         )}
 
         {loading && (
-          <div className="text-center py-12 text-gray-500">
-            Loading usage type data...
+          <div className="text-center py-12">
+            <div className="inline-block animate-pulse text-primary-600 font-medium">
+              Loading usage type data...
+            </div>
           </div>
         )}
 
