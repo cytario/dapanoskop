@@ -324,8 +324,6 @@ resource "terraform_data" "deploy_spa" {
 }
 
 resource "aws_s3_object" "config_json" {
-  count = var.spa_s3_key != "" ? 1 : 0
-
   bucket       = aws_s3_bucket.app.id
   key          = "config.json"
   content_type = "application/json"

@@ -120,7 +120,7 @@ export function logout(): void {
   if (!authBypass && cognitoDomain) {
     const params = new URLSearchParams({
       client_id: clientId,
-      logout_uri: redirectUri,
+      redirect_uri: redirectUri,
     });
     window.location.href = `${cognitoDomain}/logout?${params}`;
   } else {
