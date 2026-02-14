@@ -5,8 +5,8 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.5 (Draft)                                |
-| Date                | 2026-02-13                                 |
+| Version             | 0.6 (Draft)                                |
+| Date                | 2026-02-14                                 |
 
 ---
 
@@ -205,7 +205,7 @@ Refs: SRS-DP-310210, SRS-DP-310213
 **Purpose / Responsibility**: Periodically collects cost data from the AWS Cost Explorer API, processes and categorizes it, and writes pre-computed summary JSON and parquet files to S3 for consumption by the web application.
 
 **Interfaces**:
-- **Inbound (Trigger)**: EventBridge scheduled rule triggers Lambda execution
+- **Inbound (Trigger)**: EventBridge scheduled rule triggers Lambda execution (daily mode); manual invocation with `{"backfill": true}` event payload triggers backfill mode
 - **Outbound (Cost Explorer)**: Calls `GetCostAndUsage` API
 - **Outbound (S3)**: Writes JSON cost data files, parquet files, and the `index.json` manifest to the data store bucket
 
@@ -246,8 +246,12 @@ The Cost Collector queries `GetCostAndUsage` for three time periods: the current
 Refs: SRS-DP-420101, SRS-DP-420102
 
 **[SDS-DP-020102] Query Cost Category Mapping**
-The Cost Collector queries the configured AWS Cost Category (by name, or the first one returned by `GetCostCategories` if not configured) to obtain the mapping of workloads (App tag values) to cost centers. The Cost Category's values are the cost center names. This mapping is applied during data processing (C-2.2) to allocate workload costs to cost centers.
+The Cost Collector queries the configured AWS Cost Category (by name, or the first one returned by `GetCostCategories` if not configured) to obtain the mapping of workloads (App tag values) to cost centers. The AWS CE API returns cost category group keys with the format `{CategoryName}${Value}` (e.g., `CostCenter$IT`). The collector strips the `{CategoryName}$` prefix to extract the clean cost center name. This mapping is applied during data processing (C-2.2) to allocate workload costs to cost centers.
 Refs: SRS-DP-420103
+
+**[SDS-DP-020103] Support Parameterized Period Generation**
+The Cost Collector supports generating target periods for an arbitrary month (specified by year and month) in addition to the default "current month" logic. This enables the backfill handler to request data for any historical month using the same collection logic.
+Refs: SRS-DP-420106
 
 ##### 3.2.2 C-2.2: Data Processor & Writer
 
@@ -282,8 +286,12 @@ The Data Processor writes `{year}-{month}/cost-by-usage-type.parquet` containing
 Refs: SRS-DP-430101
 
 **[SDS-DP-020207] Write Period Index Manifest**
-After writing period-specific files, the Data Processor lists all `YYYY-MM/` prefixes in the data bucket (via S3 `ListObjectsV2` with delimiter), writes a root-level `index.json` containing `{"periods": [...]}` sorted in reverse chronological order. This enables the SPA to discover available periods without requiring `s3:ListBucket` IAM permissions for browser users.
+After writing period-specific files, the Data Processor lists all `YYYY-MM/` prefixes in the data bucket (via S3 `ListObjectsV2` with delimiter), writes a root-level `index.json` containing `{"periods": [...]}` sorted in reverse chronological order. This enables the SPA to discover available periods without requiring `s3:ListBucket` IAM permissions for browser users. The index update can be called independently (without writing period data) to support backfill scenarios where the index is updated once after all months are processed.
 Refs: SRS-DP-430103
+
+**[SDS-DP-020208] Handle Backfill Mode**
+The Lambda handler detects backfill mode via the event payload `{"backfill": true, "months": N, "force": false}`. In backfill mode, the handler generates a list of N target months (ending at the current month), processes each sequentially by invoking `collect_for_month()` (C-2.1) and `write_to_s3()` (C-2.2) per month with index updates suppressed. Before processing each month, the handler checks whether data already exists in S3 (by probing for `{year}-{month}/summary.json`) and skips existing months unless `force` is true. After all months are processed, the handler calls `update_index()` once to rebuild the period manifest. The response includes a multi-status report: `{"statusCode": 200|207, "succeeded": [...], "failed": [...], "skipped": [...]}`.
+Refs: SRS-DP-420106
 
 ### 3.3 SS-3: Terraform Module
 
@@ -319,7 +327,7 @@ Refs: SRS-DP-430103
 **Purpose / Responsibility**: Provisions the S3 app bucket for static web app hosting, CloudFront distribution with OAC (single origin: app bucket only), and optional custom domain / TLS certificate. CloudFront serves only the SPA static assets — cost data is accessed directly from S3 by the browser using temporary credentials.
 
 **[SDS-DP-030101] Provision Web Hosting Stack**
-The module creates an S3 app bucket (private, website hosting disabled), a CloudFront distribution with OAC pointing to the app bucket as a single origin, and an S3 bucket policy granting CloudFront read access. The Content Security Policy `connect-src` directive includes the S3 data bucket endpoint and Cognito Identity endpoint to allow browser-initiated requests to these services.
+The module creates an S3 app bucket (private, website hosting disabled), a CloudFront distribution with OAC pointing to the app bucket as a single origin, and an S3 bucket policy granting CloudFront read access. The CloudFront response headers policy sets a Content Security Policy with: `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'` (wasm-unsafe-eval required for DuckDB-wasm WebAssembly instantiation); `worker-src 'self' blob:` (for DuckDB web workers); `connect-src` includes the S3 data bucket endpoint and Cognito Identity endpoint; `font-src 'self'` (fonts are self-hosted).
 Refs: SRS-DP-520001, SRS-DP-520003
 
 The custom domain name and ACM certificate ARN are passed as optional Terraform input variables. The module does not create certificates or DNS records — those are managed externally.
@@ -386,7 +394,7 @@ The data bucket has a lifecycle configuration that aborts incomplete multipart u
 Refs: SRS-DP-510003
 
 **[SDS-DP-030402] Configure S3 CORS for Browser Access**
-The module configures CORS on the data bucket allowing `GET` and `HEAD` methods from the CloudFront distribution origin. Allowed headers include `Authorization`, `Range`, and `x-amz-*` (required by the AWS S3 SDK and DuckDB httpfs). Exposed headers include `Content-Length`, `Content-Range`, and `ETag`. Max age: 300 seconds.
+The module configures CORS on the data bucket allowing `GET` and `HEAD` methods from the CloudFront distribution origin. Allowed headers include `Authorization`, `Range`, `x-amz-*`, and `amz-sdk-*`. The `amz-sdk-*` pattern is required because AWS SDK v3 sends `amz-sdk-invocation-id` and `amz-sdk-request` headers that do not match the `x-amz-*` prefix — without this, S3 returns 403 without CORS headers, which browsers report as a CORS error. Exposed headers include `Content-Length`, `Content-Range`, and `ETag`. Max age: 300 seconds.
 Refs: SRS-DP-430104
 
 ##### 3.3.5 C-3.5: Artifacts
@@ -622,6 +630,40 @@ DevOps Engineer          Terraform           GitHub Releases       AWS
       │ [output: CloudFront URL, Cognito details]                    │
 ```
 
+### 4.4 Backfill Historical Data
+
+```
+DevOps Engineer          Lambda (handler)              Cost Explorer       S3 Data Bucket
+      │                         │                            │                  │
+      │── invoke with           │                            │                  │
+      │   {"backfill":true,     │                            │                  │
+      │    "months":13}  ──────>│                            │                  │
+      │                         │                            │                  │
+      │                         │ [generate list of 13 target months]           │
+      │                         │                            │                  │
+      │                         │── for each month:          │                  │
+      │                         │   HeadObject summary.json ────────────────────>│
+      │                         │<── 404 (not found) ───────────────────────────│
+      │                         │                            │                  │
+      │                         │   [month not yet collected — proceed]         │
+      │                         │                            │                  │
+      │                         │── collect_for_month() ────>│                  │
+      │                         │   (queries CE for 3 periods)                  │
+      │                         │<── cost data ──────────────│                  │
+      │                         │                            │                  │
+      │                         │── write_to_s3() ──────────────────────────────>│
+      │                         │   (summary.json + parquet, index update off)  │
+      │                         │                            │                  │
+      │                         │   [repeat for remaining months]               │
+      │                         │                            │                  │
+      │                         │── update_index() ─────────────────────────────>│
+      │                         │   (rebuild index.json once)                   │
+      │                         │                            │                  │
+      │<── {"statusCode":200,   │                            │                  │
+      │     "succeeded":[...],  │                            │                  │
+      │     "skipped":[...]}  ──│                            │                  │
+```
+
 ---
 
 ## 5. Deployment View
@@ -782,6 +824,16 @@ The `config.json` file is written to S3 by the Terraform hosting module (C-3.1) 
 ```
 
 The config module (`getConfig()`) fetches this file once via an async singleton. In local development, values fall back to `VITE_*` environment variables. The `authBypass` flag is derived from `VITE_AUTH_BYPASS=true` and is not present in the production config.json — when set, it bypasses authentication and uses local HTTP fetches instead of S3 SDK/Identity Pool.
+
+### 6.8 Design System
+
+The web application follows the Cytario design system (documented in `DESIGN.md`). Key design tokens:
+
+- **Typography**: Self-hosted Montserrat variable font (`woff2-variations` format, weight range 200–900), loaded via `@font-face` in the SPA stylesheet. No external font CDN dependency.
+- **Color palette**: Primary purple (`#6C2BD9`) and secondary teal (`#0D9488`), defined as Tailwind v4 `@theme` custom tokens (`--color-primary-*`, `--color-secondary-*`).
+- **Visual patterns**: Gradient headers (`bg-cytario-gradient`), card hover effects (`hover:shadow-md`), and color-coded cost direction indicators (green for decreases, red for increases).
+
+The design system is enforced through Tailwind utility classes using the custom color tokens. All components reference `primary-*` and `secondary-*` palette names rather than hard-coded color values.
 
 ---
 
@@ -1002,3 +1054,4 @@ Where should release artifacts (Lambda zip, SPA tarball) be stored during and af
 | 0.3     | 2026-02-12 | —      | Add managed Cognito pool (C-3.2), SAML/OIDC federation, artifacts module (C-3.5), runtime config (§6.7), design decisions 7.5–7.6 |
 | 0.4     | 2026-02-13 | —      | Replace CloudFront data path with Cognito Identity Pool + direct S3 access; add C-1.3 Credentials Module; DuckDB httpfs S3 protocol; index.json manifest; S3 CORS; IAM-enforced data access (§6.4, §7.7); S3 lifecycle policies (§3.3.1, §3.3.4) |
 | 0.5     | 2026-02-13 | —      | Replace local artifact download with dedicated S3 artifacts bucket; C-3.5 now creates bucket and uploads artifacts; C-3.3 Lambda deployed from S3; C-3.1 SPA synced from artifacts bucket; S3 version-based change detection; new design decision §7.8 |
+| 0.6     | 2026-02-14 | —      | Add backfill mode (SDS-DP-020103, 020208, §4.4); CSP updated with wasm-unsafe-eval and self-hosted fonts (SDS-DP-030101); CORS updated with amz-sdk-* headers (SDS-DP-030402); cost center prefix stripping (SDS-DP-020102); Cytario design system (§6.8) |

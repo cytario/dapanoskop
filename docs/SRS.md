@@ -5,8 +5,8 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.4 (Draft)                                |
-| Date                | 2026-02-13                                 |
+| Version             | 0.5 (Draft)                                |
+| Date                | 2026-02-14                                 |
 
 ---
 
@@ -369,6 +369,10 @@ Refs: URS-DP-10306, URS-DP-10307
 The system categorizes AWS usage types into Storage, Compute, Other, and Support based on usage type string pattern matching.
 Refs: URS-DP-10305, URS-DP-10401
 
+**[SRS-DP-420106] Backfill Historical Cost Data**
+The system supports a backfill mode that collects cost data for all available historical months in Cost Explorer (up to 13 months). Backfill processes months sequentially, skips months for which data already exists in the data store (unless forced), and updates the period index once upon completion. The backfill returns a per-month status report indicating which months succeeded, failed, or were skipped.
+Refs: URS-DP-10105
+
 #### 4.2.2 Models
 
 **Cost Explorer Query Parameters:**
@@ -410,7 +414,7 @@ The data bucket contains a root-level `index.json` file listing all available re
 Refs: URS-DP-10301
 
 **[SRS-DP-430104] S3 CORS for Browser Access**
-The data S3 bucket is configured with CORS rules allowing browser-originated requests (GET, HEAD) from the CloudFront distribution domain. This is required because the SPA accesses S3 directly (not via CloudFront proxy) using the AWS S3 SDK and DuckDB httpfs.
+The data S3 bucket is configured with CORS rules allowing browser-originated requests (GET, HEAD) from the CloudFront distribution domain. Allowed headers include `Authorization`, `Range`, `x-amz-*`, and `amz-sdk-*` (the latter required by AWS SDK v3 which sends `amz-sdk-invocation-id` and `amz-sdk-request` headers). This is required because the SPA accesses S3 directly (not via CloudFront proxy) using the AWS S3 SDK and DuckDB httpfs.
 Refs: URS-DP-10301, URS-DP-20301
 
 #### 4.3.2 Models
@@ -512,3 +516,4 @@ Refs: URS-DP-10101
 | 0.2     | 2026-02-12 | —      | Add managed Cognito pool, SAML/OIDC federation, runtime config, release artifacts |
 | 0.3     | 2026-02-13 | —      | Add Cognito Identity Pool (SI-5) for temporary AWS credentials; SPA accesses S3 directly (not via CloudFront); add index.json period discovery; IAM-enforced data access; S3 CORS; expanded runtime config; S3 lifecycle policies for storage cost optimization |
 | 0.4     | 2026-02-13 | —      | Release artifacts staged in dedicated S3 artifacts bucket; Lambda deployed from S3; SPA synced from artifacts bucket; S3 version-based change detection; artifacts bucket lifecycle policy |
+| 0.5     | 2026-02-14 | —      | Add backfill historical data capability (SRS-DP-420106); update S3 CORS to include `amz-sdk-*` headers for AWS SDK v3 compatibility |

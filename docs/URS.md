@@ -5,8 +5,8 @@
 | Document ID         | URS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.4 (Draft)                                |
-| Date                | 2026-02-13                                 |
+| Version             | 0.5 (Draft)                                |
+| Date                | 2026-02-14                                 |
 
 ---
 
@@ -71,6 +71,7 @@ The name comes from Greek δαπάνη (dapáni, "cost") + σκοπέω (skopéo
 - "I don't have a Cognito User Pool; the module should create one for me"
 - "I want to deploy without needing Node.js or Python installed"
 - "I want my users to log in with their corporate identity (Azure Entra ID / SSO)"
+- "I want to populate historical cost data when I first deploy, not wait months to accumulate it"
 
 #### 2.2.2 Macro-Step 2: Tag Resources for Cost Visibility
 
@@ -151,6 +152,9 @@ A DevOps engineer configures authentication for Dapanoskop so that only authoriz
 
 **[URS-DP-10104] Configure SSO Federation**
 A DevOps engineer configures single sign-on so that users authenticate through their organization's identity provider (e.g., Azure Entra ID via SAML or an OIDC provider) instead of managing separate Cognito credentials.
+
+**[URS-DP-10105] Backfill Historical Cost Data**
+A DevOps engineer triggers collection of historical cost data for all months available in Cost Explorer, so that Dapanoskop is populated with past cost trends immediately after initial deployment rather than accumulating data month by month.
 
 #### 3.1.2 Tag Resources for Cost Visibility (Macro-Step 2)
 
@@ -254,3 +258,4 @@ A Budget Owner understands the cost report without separate documentation. The r
 | 0.2     | 2026-02-12 | —      | Add managed Cognito pool, SSO federation, release artifacts |
 | 0.3     | 2026-02-13 | —      | Review for Cognito Identity Pool data access; no user-facing task changes (authentication remains transparent to users) |
 | 0.4     | 2026-02-13 | —      | Review for artifacts S3 bucket deployment mechanism; no user-facing task changes (deployment workflow remains identical) |
+| 0.5     | 2026-02-14 | —      | Add backfill historical cost data requirement (URS-DP-10105) |
