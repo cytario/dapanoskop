@@ -13,6 +13,8 @@ Dapanoskop is an opinionated approach to cloud cost monitoring. Rather than tryi
 
 A daily Lambda queries AWS Cost Explorer, aggregates costs by workload and cost center, and writes pre-computed `summary.json`, Parquet files, and an `index.json` manifest to S3. The SPA authenticates via Cognito, obtains temporary AWS credentials from a Cognito Identity Pool, and accesses S3 directly — JSON via the AWS S3 SDK, Parquet via DuckDB-wasm's native S3 support (httpfs). Data access is enforced at the IAM level: only authenticated users receive scoped `s3:GetObject` credentials.
 
+For initial setup, the Lambda supports backfill mode to populate up to 13 months of historical Cost Explorer data in a single invocation.
+
 ```
 app/          React SPA — cost report with drill-down via DuckDB-wasm
 lambda/       Python Lambda — collects AWS Cost Explorer data, writes JSON + Parquet to S3
@@ -106,6 +108,24 @@ When `release_version` is set, the module creates a dedicated S3 artifacts bucke
 ### Local development mode
 
 When `release_version` is not set, no artifacts bucket is created. The module builds the Lambda zip from source via `archive_file` and skips SPA deployment (deploy manually with `aws s3 sync`).
+
+### Backfilling historical data
+
+After deployment, you can populate historical cost data (up to 13 months) by invoking the Lambda with a backfill event:
+
+```bash
+aws lambda invoke \
+  --function-name $(tofu output -raw lambda_function_name) \
+  --payload '{"backfill": true, "months": 13, "force": false}' \
+  response.json
+```
+
+Parameters:
+- `backfill` (boolean, required): Set to `true` to enable backfill mode
+- `months` (integer, optional): Number of historical months to process (default: 13)
+- `force` (boolean, optional): Reprocess months that already exist in S3 (default: false)
+
+Backfill processes months sequentially, skips existing data unless forced, and returns a status report showing which months succeeded, failed, or were skipped. This is idempotent and safe to run multiple times. See [lambda/BACKFILL.md](lambda/BACKFILL.md) for detailed usage examples.
 
 ## Configuration
 
