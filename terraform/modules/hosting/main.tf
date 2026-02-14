@@ -303,14 +303,16 @@ resource "aws_s3_bucket_policy" "app" {
 }
 
 resource "terraform_data" "deploy_spa" {
-  count = var.spa_archive_path != "" ? 1 : 0
+  count = var.spa_s3_key != "" ? 1 : 0
 
-  input = filemd5(var.spa_archive_path)
+  input = var.spa_s3_object_version
 
   provisioner "local-exec" {
     command = <<-EOT
       TMPDIR=$(mktemp -d)
-      tar -xzf "${var.spa_archive_path}" -C "$TMPDIR"
+      aws s3 cp "s3://${var.spa_s3_bucket}/${var.spa_s3_key}" "$TMPDIR/spa.tar.gz"
+      tar -xzf "$TMPDIR/spa.tar.gz" -C "$TMPDIR"
+      rm -f "$TMPDIR/spa.tar.gz"
       aws s3 sync "$TMPDIR" "s3://${aws_s3_bucket.app.id}" --delete --exclude "config.json"
       rm -rf "$TMPDIR"
     EOT
@@ -337,7 +339,7 @@ resource "aws_s3_object" "config_json" {
 }
 
 resource "terraform_data" "invalidate_cloudfront" {
-  count = var.spa_archive_path != "" ? 1 : 0
+  count = var.spa_s3_key != "" ? 1 : 0
 
   input = terraform_data.deploy_spa[0].output
 

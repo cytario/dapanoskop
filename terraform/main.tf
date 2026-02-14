@@ -22,7 +22,9 @@ module "hosting" {
   domain_name               = var.domain_name
   acm_certificate_arn       = var.acm_certificate_arn
   cognito_domain            = coalesce(var.cognito_domain, module.auth.cognito_domain)
-  spa_archive_path          = module.artifacts.spa_archive_path
+  spa_s3_bucket             = module.artifacts.spa_s3_bucket
+  spa_s3_key                = module.artifacts.spa_s3_key
+  spa_s3_object_version     = module.artifacts.spa_s3_object_version
   cognito_client_id         = module.auth.client_id
   user_pool_id              = module.auth.user_pool_id
   identity_pool_id          = module.auth.identity_pool_id
@@ -55,12 +57,13 @@ module "auth" {
 module "pipeline" {
   source = "./modules/pipeline"
 
-  data_bucket_arn     = module.data_store.bucket_arn
-  data_bucket_name    = module.data_store.bucket_name
-  cost_category_name  = var.cost_category_name
-  schedule_expression = var.schedule_expression
-  include_efs         = var.include_efs
-  include_ebs         = var.include_ebs
-  lambda_zip_path     = module.artifacts.lambda_zip_path
-  lambda_zip_hash     = module.artifacts.lambda_zip_hash
+  data_bucket_arn          = module.data_store.bucket_arn
+  data_bucket_name         = module.data_store.bucket_name
+  cost_category_name       = var.cost_category_name
+  schedule_expression      = var.schedule_expression
+  include_efs              = var.include_efs
+  include_ebs              = var.include_ebs
+  lambda_s3_bucket         = module.artifacts.lambda_s3_bucket
+  lambda_s3_key            = module.artifacts.lambda_s3_key
+  lambda_s3_object_version = module.artifacts.lambda_s3_object_version
 }

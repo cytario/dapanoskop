@@ -99,9 +99,13 @@ tofu output saml_acs_url    # Set as Reply URL in Azure
 
 When federation is active, local Cognito password login is automatically disabled — users must authenticate through the IdP.
 
+### Release deployment
+
+When `release_version` is set, the module creates a dedicated S3 artifacts bucket, downloads `lambda.zip` and `spa.tar.gz` from the GitHub Release, and uploads them to the bucket. The Lambda function is deployed directly from S3, and the SPA is extracted from the artifacts bucket and synced to the app bucket. Subsequent `tofu plan` runs detect changes via S3 object versions — no local files needed.
+
 ### Local development mode
 
-When `release_version` is not set, the module builds the Lambda zip from source via `archive_file` and skips SPA deployment (deploy manually with `aws s3 sync`).
+When `release_version` is not set, no artifacts bucket is created. The module builds the Lambda zip from source via `archive_file` and skips SPA deployment (deploy manually with `aws s3 sync`).
 
 ## Configuration
 
@@ -120,7 +124,7 @@ When `release_version` is not set, the module builds the Lambda zip from source 
 | `oidc_issuer` | No | OIDC issuer URL |
 | `oidc_client_id` | No | OIDC client ID |
 | `oidc_client_secret` | No | OIDC client secret (sensitive — prefer SAML to avoid secrets in state) |
-| `release_version` | No | GitHub release tag (e.g. `v1.3.0`). Downloads pre-built artifacts. |
+| `release_version` | No | GitHub release tag (e.g. `v1.3.0`). Stages pre-built artifacts in a dedicated S3 bucket. |
 | `github_repo` | No | GitHub repo for release artifacts (default: `cytario/dapanoskop`) |
 | `cost_category_name` | No | AWS Cost Category for cost center mapping |
 | `domain_name` | No | Custom domain for CloudFront |

@@ -5,7 +5,7 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.3 (Draft)                                |
+| Version             | 0.4 (Draft)                                |
 | Date                | 2026-02-13                                 |
 
 ---
@@ -438,7 +438,7 @@ Cost data is refreshed at least once per day. The report displays the timestamp 
 Refs: URS-DP-20401
 
 **[SRS-DP-510003] Storage Cost Optimization**
-All S3 buckets have lifecycle policies to minimize storage cost: incomplete multipart uploads are aborted after 1 day, obsolete delete markers are expired, and data bucket objects are transitioned to S3 Intelligent-Tiering after 5 days. Intelligent-Tiering archive tiers are not enabled, so all data remains instantly accessible.
+All S3 buckets have lifecycle policies to minimize storage cost: incomplete multipart uploads are aborted after 1 day, obsolete delete markers are expired, and data bucket objects are transitioned to S3 Intelligent-Tiering after 5 days. Intelligent-Tiering archive tiers are not enabled, so all data remains instantly accessible. The artifacts bucket expires noncurrent object versions after 30 days to prevent unbounded version accumulation.
 Refs: URS-DP-10101
 
 ### 5.2 Safety & Security Requirements
@@ -466,7 +466,7 @@ Refs: URS-DP-10104, URS-DP-20301
 ### 5.3 Service Requirements
 
 **[SRS-DP-530001] Update via Terraform**
-The system is updated to new versions by running `terraform apply` with the updated release version. Pre-built Lambda and SPA artifacts are downloaded from GitHub Releases. No local build tools (Node.js, Python) are required.
+The system is updated to new versions by running `terraform apply` with the updated release version. Pre-built Lambda and SPA artifacts are downloaded from GitHub Releases and staged in a dedicated S3 artifacts bucket. The Lambda function is deployed directly from S3, and the SPA is extracted from the artifacts bucket and synced to the app bucket. Subsequent plans detect changes via S3 object versions. No local build tools (Node.js, Python) are required.
 Refs: URS-DP-10101
 
 **[SRS-DP-530002] Zero-Downtime Updates**
@@ -483,7 +483,7 @@ None — non-regulated software.
 
 **[SRS-DP-600001] AWS Cloud Environment**
 The system runs entirely on AWS. Required AWS services:
-- Amazon S3 (static hosting + data storage)
+- Amazon S3 (static hosting, data storage, and deployment artifact staging)
 - Amazon CloudFront (CDN for SPA static assets)
 - Amazon Cognito User Pool (authentication — existing or module-managed)
 - Amazon Cognito Identity Pool (temporary AWS credentials for browser-to-S3 access)
@@ -511,3 +511,4 @@ Refs: URS-DP-10101
 | 0.1     | 2026-02-08 | —      | Initial draft     |
 | 0.2     | 2026-02-12 | —      | Add managed Cognito pool, SAML/OIDC federation, runtime config, release artifacts |
 | 0.3     | 2026-02-13 | —      | Add Cognito Identity Pool (SI-5) for temporary AWS credentials; SPA accesses S3 directly (not via CloudFront); add index.json period discovery; IAM-enforced data access; S3 CORS; expanded runtime config; S3 lifecycle policies for storage cost optimization |
+| 0.4     | 2026-02-13 | —      | Release artifacts staged in dedicated S3 artifacts bucket; Lambda deployed from S3; SPA synced from artifacts bucket; S3 version-based change detection; artifacts bucket lifecycle policy |

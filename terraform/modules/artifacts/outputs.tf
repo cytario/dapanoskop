@@ -3,18 +3,32 @@ output "use_release" {
   value       = local.use_release
 }
 
-output "lambda_zip_path" {
-  description = "Path to the downloaded Lambda zip, or empty if not using release"
-  value       = local.use_release ? "${local.download_dir}/lambda.zip" : ""
+output "lambda_s3_bucket" {
+  description = "S3 bucket containing the Lambda zip"
+  value       = local.use_release ? aws_s3_bucket.artifacts[0].id : ""
 }
 
-output "lambda_zip_hash" {
-  description = "Base64-encoded SHA256 hash of the Lambda zip, or empty if not using release"
-  value       = local.use_release ? filebase64sha256("${local.download_dir}/lambda.zip") : ""
-  depends_on  = [terraform_data.download]
+output "lambda_s3_key" {
+  description = "S3 key of the Lambda zip"
+  value       = local.use_release ? data.aws_s3_object.lambda_zip[0].key : ""
 }
 
-output "spa_archive_path" {
-  description = "Path to the downloaded SPA tarball, or empty if not using release"
-  value       = local.use_release ? "${local.download_dir}/spa.tar.gz" : ""
+output "lambda_s3_object_version" {
+  description = "S3 version ID of the Lambda zip"
+  value       = local.use_release ? data.aws_s3_object.lambda_zip[0].version_id : ""
+}
+
+output "spa_s3_bucket" {
+  description = "S3 bucket containing the SPA tarball"
+  value       = local.use_release ? aws_s3_bucket.artifacts[0].id : ""
+}
+
+output "spa_s3_key" {
+  description = "S3 key of the SPA tarball"
+  value       = local.use_release ? data.aws_s3_object.spa_archive[0].key : ""
+}
+
+output "spa_s3_object_version" {
+  description = "S3 version ID of the SPA tarball"
+  value       = local.use_release ? data.aws_s3_object.spa_archive[0].version_id : ""
 }

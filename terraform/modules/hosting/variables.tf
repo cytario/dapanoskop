@@ -22,8 +22,20 @@ variable "enable_access_logging" {
   default     = false
 }
 
-variable "spa_archive_path" {
-  description = "Path to the SPA tarball. If empty, SPA is deployed manually."
+variable "spa_s3_bucket" {
+  description = "S3 bucket containing the SPA tarball. If empty, SPA is deployed manually."
+  type        = string
+  default     = ""
+}
+
+variable "spa_s3_key" {
+  description = "S3 key of the SPA tarball"
+  type        = string
+  default     = ""
+}
+
+variable "spa_s3_object_version" {
+  description = "S3 version ID of the SPA tarball"
   type        = string
   default     = ""
 }

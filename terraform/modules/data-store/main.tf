@@ -77,7 +77,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "data" {
 }
 
 resource "aws_s3_bucket_cors_configuration" "data" {
-  count  = length(var.allowed_origins) > 0 ? 1 : 0
   bucket = aws_s3_bucket.data.id
 
   cors_rule {

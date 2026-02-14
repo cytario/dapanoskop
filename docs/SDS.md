@@ -5,7 +5,7 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.4 (Draft)                                |
+| Version             | 0.5 (Draft)                                |
 | Date                | 2026-02-13                                 |
 
 ---
@@ -49,7 +49,7 @@ This document covers the internal architecture of Dapanoskop: the static web app
 | Easy deployment              | A DevOps engineer deploys in minutes                                      | Single Terraform module encapsulating all resources                                 | §3.3       |
 | Data freshness               | Cost data is at most 1 day old                                            | Scheduled Lambda execution (daily) writing to S3                                    | §3.2, §4.1 |
 | Security                     | Only authenticated users access cost data                                 | Cognito User Pool authentication + Identity Pool temporary AWS credentials; IAM-enforced S3 access; all authenticated users see all data | §3.1, §6.4, §7.7 |
-| Self-contained deployment    | A DevOps engineer deploys without local build tools                       | Pre-built release artifacts (Lambda zip + SPA tarball) downloaded at deploy time; runtime config.json instead of build-time env vars | §3.3, §6.7 |
+| Self-contained deployment    | A DevOps engineer deploys without local build tools                       | Pre-built release artifacts (Lambda zip + SPA tarball) staged in a dedicated S3 artifacts bucket at deploy time; Lambda deployed from S3; SPA synced from artifacts bucket; runtime config.json instead of build-time env vars | §3.3, §6.7, §7.8 |
 
 ---
 
@@ -306,8 +306,8 @@ Refs: SRS-DP-430103
 │  │ Hosting  │ │ Auth     │ │ Pipeline │ │ Data     │ │ Arti-  │  │
 │  │ Infra    │ │ Infra    │ │ Infra    │ │ Store    │ │ facts  │  │
 │  │          │ │          │ │          │ │ Infra    │ │        │  │
-│  │ S3 App + │ │ Cognito  │ │ Lambda + │ │ S3 Data  │ │ DL +   │  │
-│  │ CF + DNS │ │ Pool/Clnt│ │ EB Rule  │ │ bucket   │ │ unpack │  │
+│  │ S3 App + │ │ Cognito  │ │ Lambda + │ │ S3 Data  │ │ S3 +   │  │
+│  │ CF + DNS │ │ Pool/Clnt│ │ EB Rule  │ │ bucket   │ │ upload │  │
 │  │ + config │ │ + Federn │ │          │ │          │ │        │  │
 │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └────────┘  │
 │                                                                   │
@@ -324,8 +324,8 @@ Refs: SRS-DP-520001, SRS-DP-520003
 
 The custom domain name and ACM certificate ARN are passed as optional Terraform input variables. The module does not create certificates or DNS records — those are managed externally.
 
-**[SDS-DP-030102] Deploy SPA from Release Archive**
-When a release version is specified, the hosting module extracts the pre-built SPA tarball and syncs the contents to the S3 app bucket. After sync, it writes a `config.json` file to the bucket containing the Cognito domain URL, client ID, User Pool ID, Identity Pool ID, AWS region, and data bucket name, and invalidates the CloudFront cache.
+**[SDS-DP-030102] Deploy SPA from Artifacts Bucket**
+When S3 artifact references are provided (from C-3.5), the hosting module downloads the SPA tarball from the artifacts S3 bucket, extracts it to a temporary directory, and syncs the contents to the S3 app bucket (excluding `config.json`). The `spa_s3_object_version` serves as the change trigger — a new version triggers re-download, extract, sync, and CloudFront invalidation. After sync, it writes a `config.json` file to the bucket containing the Cognito domain URL, client ID, User Pool ID, Identity Pool ID, AWS region, and data bucket name, and invalidates the CloudFront cache.
 Refs: SRS-DP-310103, SRS-DP-530001
 
 **[SDS-DP-030103] App Bucket Lifecycle Policy**
@@ -370,7 +370,7 @@ Refs: SRS-DP-450101, SRS-DP-520003
 
 **[SDS-DP-030301] Provision Lambda and Schedule**
 The module creates a Lambda function (Python runtime) from a packaged deployment artifact, an IAM role with permissions for `ce:GetCostAndUsage`, `ce:GetCostCategories`, `s3:PutObject` (to the data bucket), and `s3:ListBucket` (on the data bucket, for index.json generation), and an EventBridge rule to trigger the Lambda on a daily schedule.
-When a release version is specified, the Lambda zip is downloaded from the GitHub Release by the Artifacts module (C-3.5). Otherwise, the Lambda is packaged from the local source directory via Terraform's `archive_file` data source. Memory: 256 MB. Timeout: 5 minutes. EventBridge schedule: `cron(0 6 * * ? *)` (daily at 06:00 UTC).
+When S3 artifact references are provided (from C-3.5), the Lambda function is deployed using `s3_bucket`, `s3_key`, and `s3_object_version` — an `s3_object_version` change triggers a Lambda code update. Otherwise, the Lambda is packaged from the local source directory via Terraform's `archive_file` data source and deployed using `filename` and `source_code_hash`. Memory: 256 MB. Timeout: 5 minutes. EventBridge schedule: `cron(0 6 * * ? *)` (daily at 06:00 UTC).
 Refs: SRS-DP-510002, SRS-DP-520002, SRS-DP-530001, SRS-DP-430103
 
 ##### 3.3.4 C-3.4: Data Store Infrastructure
@@ -391,16 +391,16 @@ Refs: SRS-DP-430104
 
 ##### 3.3.5 C-3.5: Artifacts
 
-**Purpose / Responsibility**: Downloads pre-built Lambda and SPA deployment artifacts from a GitHub Release when a release version is specified.
+**Purpose / Responsibility**: Creates a dedicated S3 artifacts bucket and stages pre-built Lambda and SPA deployment artifacts from a GitHub Release when a release version is specified. Provides S3 references for downstream modules.
 
 **Interfaces**:
 - **Inbound**: `release_version` and `github_repo` Terraform variables
-- **Outbound**: Downloads `lambda.zip` and `spa.tar.gz` from GitHub Releases via `curl`; outputs file paths and hashes for consumption by C-3.3 (Pipeline) and C-3.1 (Hosting)
+- **Outbound**: Downloads `lambda.zip` and `spa.tar.gz` from GitHub Releases via `curl`, uploads them to a versioned S3 artifacts bucket; outputs S3 bucket, key, and object version for consumption by C-3.3 (Pipeline) and C-3.1 (Hosting)
 
-**Variability**: When `release_version` is empty (local dev mode), artifact paths are empty and downstream modules fall back to building from source.
+**Variability**: When `release_version` is empty (local dev mode), the artifacts bucket is not created and all S3 outputs are empty strings. Downstream modules fall back to building from source (Pipeline) or skipping deployment (Hosting).
 
-**[SDS-DP-030501] Download Release Artifacts**
-When `release_version` is set, the module uses `terraform_data` with `local-exec` provisioners to download `lambda.zip` and `spa.tar.gz` from the specified GitHub Release. The artifacts are stored in a local `.terraform/artifacts/` directory. The module outputs `lambda_zip_path`, `lambda_zip_hash`, `spa_archive_path`, and a boolean `use_release` for conditional logic in downstream modules.
+**[SDS-DP-030501] Stage Release Artifacts in S3**
+When `release_version` is set, the module creates a dedicated S3 artifacts bucket (`dapanoskop-artifacts-*`) with versioning enabled, SSE-S3 encryption, public access blocked, and lifecycle rules (abort incomplete multipart uploads after 1 day, expire noncurrent versions after 30 days). A bucket policy grants `s3:GetObject` to the `lambda.amazonaws.com` service principal, scoped to the deploying account via `aws:SourceAccount`. Two `terraform_data` resources (`upload_lambda`, `upload_spa`) download artifacts from GitHub to temporary files and upload them to the bucket under the `{version}/` prefix. Data sources (`data "aws_s3_object"`) read the uploaded objects to obtain their `version_id` for change detection. The module outputs `lambda_s3_bucket`, `lambda_s3_key`, `lambda_s3_object_version`, `spa_s3_bucket`, `spa_s3_key`, `spa_s3_object_version`, and `use_release`. On first apply, data sources are deferred ("known after apply"). On subsequent plans, S3 objects exist and resolve at plan time. A version change triggers resource replacement, re-upload, and data source re-read.
 Refs: SRS-DP-530001
 
 ### 3.4 SS-4: Data Store (S3 Data Bucket)
@@ -587,23 +587,39 @@ Browser              CloudFront    S3 App    Cognito      Identity     S3 Data
 ### 4.3 Deployment
 
 ```
-DevOps Engineer          Terraform          AWS
-      │                      │                │
-      │── terraform init ───>│                │
-      │── terraform plan ───>│                │
-      │<── plan output ──────│                │
-      │── terraform apply ──>│                │
-      │                      │── create S3 buckets ────────>│
-      │                      │── create CloudFront ────────>│
-      │                      │── create Cognito app client ─>│
-      │                      │── create Lambda ────────────>│
-      │                      │── create EventBridge rule ──>│
-      │                      │── create IAM roles ─────────>│
-      │                      │── upload SPA assets ────────>│
-      │                      │<── all resources created ────│
-      │<── apply complete ───│                │
-      │                      │                │
-      │ [output: CloudFront URL, Cognito details]           │
+DevOps Engineer          Terraform           GitHub Releases       AWS
+      │                      │                      │                │
+      │── terraform init ───>│                      │                │
+      │── terraform plan ───>│                      │                │
+      │<── plan output ──────│                      │                │
+      │── terraform apply ──>│                      │                │
+      │                      │                      │                │
+      │                      │── create S3 buckets (app, data, artifacts) ──>│
+      │                      │── create CloudFront ────────────────────────>│
+      │                      │── create Cognito + Identity Pool ──────────>│
+      │                      │── create IAM roles ────────────────────────>│
+      │                      │                      │                │
+      │                      │── curl lambda.zip ──>│                │
+      │                      │<── artifact ─────────│                │
+      │                      │── aws s3 cp ──────────────────────────────>│
+      │                      │   (to artifacts bucket)                    │
+      │                      │                      │                │
+      │                      │── curl spa.tar.gz ──>│                │
+      │                      │<── artifact ─────────│                │
+      │                      │── aws s3 cp ──────────────────────────────>│
+      │                      │   (to artifacts bucket)                    │
+      │                      │                      │                │
+      │                      │── create Lambda (s3_bucket/s3_key) ───────>│
+      │                      │── create EventBridge rule ────────────────>│
+      │                      │                      │                │
+      │                      │── download SPA from artifacts bucket ─────>│
+      │                      │── extract + sync to app bucket ──────────>│
+      │                      │── write config.json ─────────────────────>│
+      │                      │── invalidate CloudFront ─────────────────>│
+      │                      │<── all resources created ─────────────────│
+      │<── apply complete ───│                      │                │
+      │                      │                      │                │
+      │ [output: CloudFront URL, Cognito details]                    │
 ```
 
 ---
@@ -618,11 +634,18 @@ DevOps Engineer          Terraform          AWS
 │  │  CloudFront     │       │  S3 App     │  │  S3 Data       │  │
 │  │  Distribution   │──OAC──│  Bucket     │  │  Bucket        │  │
 │  │                 │       │  SPA assets │  │  Cost data +   │  │
-│  │  HTTPS endpoint │       └─────────────┘  │  CORS enabled  │  │
-│  │  (SPA only)     │                        └───────┬────────┘  │
-│  └────────┬────────┘                          ▲     │ direct    │
-│           │                            PutObj │     │ S3 access │
-│  ┌────────┴────────┐  ┌─────────────┐  ┌─────┴─────┴────────┐  │
+│  │  HTTPS endpoint │       └──────▲──────┘  │  CORS enabled  │  │
+│  │  (SPA only)     │             │ sync    └───────┬────────┘  │
+│  └────────┬────────┘             │           ▲     │ direct    │
+│           │              ┌───────┴────────┐  │     │ S3 access │
+│           │              │  S3 Artifacts  │  │     │           │
+│           │              │  Bucket        │  │PutOb│           │
+│           │              │  lambda.zip +  │  │     │           │
+│           │              │  spa.tar.gz    │  │     │           │
+│           │              └───────┬────────┘  │     │           │
+│           │                 s3_  │           │     │           │
+│           │                 src  │           │     │           │
+│  ┌────────┴────────┐  ┌─────────┴───┐  ┌────┴─────┴────────┐  │
 │  │  Cognito        │  │  Cognito    │  │  Lambda Function    │  │
 │  │  User Pool      │  │  Identity   │  │  (Python)           │  │
 │  │  (existing or   │  │  Pool       │  │                     │  │
@@ -644,18 +667,18 @@ DevOps Engineer          Terraform          AWS
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-The browser accesses S3 Data Bucket directly (CORS-enabled) using temporary credentials from the Identity Pool. CloudFront serves only SPA static assets from the App Bucket.
+The browser accesses S3 Data Bucket directly (CORS-enabled) using temporary credentials from the Identity Pool. CloudFront serves only SPA static assets from the App Bucket. The Artifacts Bucket stages release assets during deployment — Lambda deploys from S3, and the SPA is extracted and synced to the App Bucket.
 
 **Deployable Artifacts:**
 
 | Artifact | Content | Deployed To |
 |----------|---------|-------------|
-| `spa.tar.gz` | HTML, CSS, JS (compiled React app) | S3 App Bucket (extracted + synced by Terraform) |
-| `lambda.zip` | Python code (deployment package) | Lambda function |
+| `spa.tar.gz` | HTML, CSS, JS (compiled React app) | S3 Artifacts Bucket → extracted + synced to S3 App Bucket by Terraform |
+| `lambda.zip` | Python code (deployment package) | S3 Artifacts Bucket → Lambda function deployed via S3 reference |
 | `config.json` | Runtime configuration (Cognito domain, client ID, User Pool ID, Identity Pool ID, AWS region, data bucket name) | S3 App Bucket (written by Terraform) |
 | Terraform module | HCL files | Executed by DevOps engineer |
 
-When `release_version` is specified, `spa.tar.gz` and `lambda.zip` are downloaded from GitHub Releases. When not specified (local dev), they are built from source.
+When `release_version` is specified, `spa.tar.gz` and `lambda.zip` are downloaded from GitHub Releases and staged in a dedicated S3 artifacts bucket. The Lambda function is deployed directly from S3 using `s3_bucket`/`s3_key`/`s3_object_version`. The SPA is downloaded from the artifacts bucket, extracted, and synced to the app bucket. When not specified (local dev), they are built from source.
 
 **Execution Nodes:**
 
@@ -663,6 +686,7 @@ When `release_version` is specified, `spa.tar.gz` and `lambda.zip` are downloade
 |------|------|---------|
 | CloudFront | AWS managed CDN | Serve SPA static assets to users globally |
 | S3 App Bucket | AWS managed object store | Host React SPA static assets |
+| S3 Artifacts Bucket | AWS managed object store | Stage deployment artifacts (Lambda zip, SPA tarball) from GitHub Releases |
 | S3 Data Bucket | AWS managed object store | Host pre-computed cost data (direct browser access via S3 SDK and httpfs) |
 | Lambda | AWS managed serverless compute | Run cost data collection and index generation |
 | Cognito User Pool | AWS managed identity (existing or managed) | User authentication (optional SAML/OIDC federation) |
@@ -939,6 +963,34 @@ How should the browser access cost data (JSON and parquet) stored in the data S3
 #### 7.7.5 Decision
 **Option D: Cognito Identity Pool with direct S3 access**. This approach provides true server-side enforcement (IAM policy, not client-side token checks) and works natively with both the AWS S3 SDK (for JSON fetches) and DuckDB-wasm httpfs S3 protocol (for parquet queries). Options A and B were rejected because CloudFront cannot enforce authentication on the data path without Lambda@Edge, and DuckDB-wasm does not support cookies for httpfs requests. Option C was rejected because presigned URLs add management complexity for DuckDB-wasm, which issues multiple range requests per parquet file.
 
+### 7.8 Dedicated Artifacts S3 Bucket vs. Local Files or App Bucket
+
+#### 7.8.1 Issue
+Where should release artifacts (Lambda zip, SPA tarball) be stored during and after deployment? The original approach downloaded artifacts to the local filesystem, but Terraform evaluates `filebase64sha256()` and `filemd5()` at plan time — before `local-exec` provisioners run at apply time — causing failures when the files don't yet exist.
+
+#### 7.8.2 Boundary Conditions
+- Terraform data functions (`filebase64sha256`, `filemd5`) execute at plan time
+- `local-exec` provisioners execute at apply time (after plan)
+- Lambda supports deployment from S3 via `s3_bucket`/`s3_key`/`s3_object_version`
+- The app bucket is served via CloudFront and subject to `s3 sync --delete`
+- Change detection must work reliably across plan/apply cycles
+
+#### 7.8.3 Assumptions
+- First apply will have data sources as "known after apply" (acceptable)
+- Subsequent plans will resolve S3 data sources at plan time
+- S3 versioning provides reliable change detection via `version_id`
+
+#### 7.8.4 Considered Alternatives
+
+| Option | Pros | Cons |
+|--------|------|------|
+| A: Local filesystem (original) | Simple; no additional resources | `filebase64sha256`/`filemd5` fail at plan time before files exist; artifacts lost on workspace cleanup |
+| B: Reuse app bucket | No additional bucket | Artifacts exposed via CloudFront; `s3 sync --delete` during SPA deploy would delete the artifacts; mixing deployment and runtime concerns |
+| **C: Dedicated artifacts S3 bucket** | Clean separation; no CloudFront exposure; no sync collision; S3 versioning enables reliable change detection; Lambda deploys directly from S3 | One additional S3 bucket |
+
+#### 7.8.5 Decision
+**Option C: Dedicated artifacts S3 bucket**. This avoids the plan-time/apply-time mismatch entirely by using S3 data sources (deferred on first apply, resolved at plan time thereafter). The dedicated bucket prevents CloudFront exposure of raw deployment artifacts and avoids collision with `s3 sync --delete` during SPA deployment. S3 object versions provide reliable change detection for both Lambda code updates and SPA redeployment.
+
 ---
 
 ## 8. Change History
@@ -949,3 +1001,4 @@ How should the browser access cost data (JSON and parquet) stored in the data S3
 | 0.2     | 2026-02-10 | —      | Align with implementation: period discovery, Lambda deployment, auth config |
 | 0.3     | 2026-02-12 | —      | Add managed Cognito pool (C-3.2), SAML/OIDC federation, artifacts module (C-3.5), runtime config (§6.7), design decisions 7.5–7.6 |
 | 0.4     | 2026-02-13 | —      | Replace CloudFront data path with Cognito Identity Pool + direct S3 access; add C-1.3 Credentials Module; DuckDB httpfs S3 protocol; index.json manifest; S3 CORS; IAM-enforced data access (§6.4, §7.7); S3 lifecycle policies (§3.3.1, §3.3.4) |
+| 0.5     | 2026-02-13 | —      | Replace local artifact download with dedicated S3 artifacts bucket; C-3.5 now creates bucket and uploads artifacts; C-3.3 Lambda deployed from S3; C-3.1 SPA synced from artifacts bucket; S3 version-based change detection; new design decision §7.8 |

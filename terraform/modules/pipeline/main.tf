@@ -15,16 +15,15 @@ terraform {
 
 data "aws_region" "current" {}
 
+locals {
+  use_s3_source = var.lambda_s3_key != ""
+}
+
 data "archive_file" "lambda" {
-  count       = var.lambda_zip_path != "" ? 0 : 1
+  count       = local.use_s3_source ? 0 : 1
   type        = "zip"
   source_dir  = "${path.module}/../../../lambda/src"
   output_path = "${path.module}/lambda.zip"
-}
-
-locals {
-  lambda_filename = var.lambda_zip_path != "" ? var.lambda_zip_path : data.archive_file.lambda[0].output_path
-  lambda_hash     = var.lambda_zip_path != "" ? var.lambda_zip_hash : data.archive_file.lambda[0].output_base64sha256
 }
 
 resource "aws_iam_role" "lambda" {
@@ -96,14 +95,17 @@ resource "aws_lambda_function" "pipeline" {
   #checkov:skip=CKV_AWS_116:Synchronous EventBridge invocation with built-in retry; failures visible in CloudWatch
   #checkov:skip=CKV_AWS_173:Env vars contain only bucket name and feature flags, no secrets
   #checkov:skip=CKV_AWS_272:Deployment integrity ensured by Terraform state and CI pipeline
-  function_name    = "dapanoskop-pipeline"
-  role             = aws_iam_role.lambda.arn
-  handler          = "dapanoskop.handler.handler"
-  runtime          = "python3.12"
-  filename         = local.lambda_filename
-  source_code_hash = local.lambda_hash
-  memory_size      = 256
-  timeout          = 300
+  function_name     = "dapanoskop-pipeline"
+  role              = aws_iam_role.lambda.arn
+  handler           = "dapanoskop.handler.handler"
+  runtime           = "python3.12"
+  s3_bucket         = local.use_s3_source ? var.lambda_s3_bucket : null
+  s3_key            = local.use_s3_source ? var.lambda_s3_key : null
+  s3_object_version = local.use_s3_source ? var.lambda_s3_object_version : null
+  filename          = local.use_s3_source ? null : data.archive_file.lambda[0].output_path
+  source_code_hash  = local.use_s3_source ? null : data.archive_file.lambda[0].output_base64sha256
+  memory_size       = 256
+  timeout           = 300
 
   reserved_concurrent_executions = 1
 

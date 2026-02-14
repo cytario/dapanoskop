@@ -32,14 +32,20 @@ variable "include_ebs" {
   default     = false
 }
 
-variable "lambda_zip_path" {
-  description = "Path to a pre-built Lambda zip. If empty, archive_file builds from source."
+variable "lambda_s3_bucket" {
+  description = "S3 bucket containing a pre-built Lambda zip. If empty, archive_file builds from source."
   type        = string
   default     = ""
 }
 
-variable "lambda_zip_hash" {
-  description = "Base64-encoded SHA256 hash of the pre-built Lambda zip"
+variable "lambda_s3_key" {
+  description = "S3 key of the pre-built Lambda zip"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_s3_object_version" {
+  description = "S3 version ID of the pre-built Lambda zip"
   type        = string
   default     = ""
 }

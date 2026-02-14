@@ -5,7 +5,7 @@
 | Document ID         | URS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.3 (Draft)                                |
+| Version             | 0.4 (Draft)                                |
 | Date                | 2026-02-13                                 |
 
 ---
@@ -253,3 +253,4 @@ A Budget Owner understands the cost report without separate documentation. The r
 | 0.1     | 2026-02-08 | —      | Initial draft     |
 | 0.2     | 2026-02-12 | —      | Add managed Cognito pool, SSO federation, release artifacts |
 | 0.3     | 2026-02-13 | —      | Review for Cognito Identity Pool data access; no user-facing task changes (authentication remains transparent to users) |
+| 0.4     | 2026-02-13 | —      | Review for artifacts S3 bucket deployment mechanism; no user-facing task changes (deployment workflow remains identical) |
