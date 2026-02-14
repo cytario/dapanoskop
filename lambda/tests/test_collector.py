@@ -10,6 +10,7 @@ from moto import mock_aws
 from dapanoskop.collector import (
     _get_periods,
     _month_range,
+    collect,
     get_cost_and_usage,
     get_cost_categories,
 )
@@ -219,3 +220,171 @@ def test_get_cost_categories_empty() -> None:
     mapping = get_cost_categories(mock_client, "", "2026-01-01", "2026-02-01")
 
     assert mapping == {}
+
+
+def test_collect_integration() -> None:
+    """Test collect() end-to-end with mocked boto3 client."""
+    from unittest.mock import patch
+
+    # Mock the entire boto3.client call to return a mock CE client
+    mock_ce_client = MagicMock()
+
+    # Mock get_cost_and_usage responses for three periods
+    mock_ce_client.get_cost_and_usage.side_effect = [
+        # Current month
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                            "Metrics": {
+                                "UnblendedCost": {"Amount": "1000.0", "Unit": "USD"},
+                                "UsageQuantity": {"Amount": "744.0", "Unit": "Hrs"},
+                            },
+                        },
+                        {
+                            "Keys": ["App$api", "TimedStorage-ByteHrs"],
+                            "Metrics": {
+                                "UnblendedCost": {"Amount": "100.0", "Unit": "USD"},
+                                "UsageQuantity": {
+                                    "Amount": "1000000.0",
+                                    "Unit": "GB-Mo",
+                                },
+                            },
+                        },
+                    ]
+                }
+            ],
+        },
+        # Previous month
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                            "Metrics": {
+                                "UnblendedCost": {"Amount": "900.0", "Unit": "USD"},
+                                "UsageQuantity": {"Amount": "720.0", "Unit": "Hrs"},
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # YoY month
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                            "Metrics": {
+                                "UnblendedCost": {"Amount": "800.0", "Unit": "USD"},
+                                "UsageQuantity": {"Amount": "700.0", "Unit": "Hrs"},
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # Cost category mapping query
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["App$web-app", "CostCenter$Engineering"],
+                            "Metrics": {
+                                "UnblendedCost": {"Amount": "1000.0", "Unit": "USD"}
+                            },
+                        },
+                        {
+                            "Keys": ["App$api", "CostCenter$Engineering"],
+                            "Metrics": {
+                                "UnblendedCost": {"Amount": "100.0", "Unit": "USD"}
+                            },
+                        },
+                    ]
+                }
+            ],
+        },
+    ]
+
+    # Mock get_cost_categories response
+    mock_ce_client.get_cost_categories.side_effect = [
+        {"CostCategoryNames": ["CostCenter"]},
+        {},
+    ]
+
+    with patch("boto3.client", return_value=mock_ce_client):
+        result = collect(cost_category_name="CostCenter")
+
+    # Verify structure of returned data
+    assert "now" in result
+    assert "period_labels" in result
+    assert "raw_data" in result
+    assert "cc_mapping" in result
+
+    # Verify period labels
+    assert "current" in result["period_labels"]
+    assert "prev_month" in result["period_labels"]
+    assert "yoy" in result["period_labels"]
+
+    # Verify raw_data contains all three periods
+    assert "current" in result["raw_data"]
+    assert "prev_month" in result["raw_data"]
+    assert "yoy" in result["raw_data"]
+
+    # Verify data was collected
+    assert len(result["raw_data"]["current"]) == 2
+    assert len(result["raw_data"]["prev_month"]) == 1
+    assert len(result["raw_data"]["yoy"]) == 1
+
+    # Verify cost category mapping
+    assert result["cc_mapping"] == {"web-app": "Engineering", "api": "Engineering"}
+
+    # Verify get_cost_and_usage was called 4 times (3 periods + 1 for cost categories)
+    assert mock_ce_client.get_cost_and_usage.call_count == 4
+
+
+def test_collect_with_target_month() -> None:
+    """Test collect() with explicit target_month generates correct date ranges."""
+    from unittest.mock import patch
+
+    mock_ce_client = MagicMock()
+
+    # Mock empty responses
+    mock_ce_client.get_cost_and_usage.return_value = {"ResultsByTime": [{"Groups": []}]}
+    mock_ce_client.get_cost_categories.return_value = {"CostCategoryNames": []}
+
+    with patch("boto3.client", return_value=mock_ce_client):
+        result = collect(
+            cost_category_name="",
+            target_year=2025,
+            target_month=6,
+        )
+
+    # Verify period labels reflect the target month
+    assert result["period_labels"]["current"] == "2025-06"
+    assert result["period_labels"]["prev_month"] == "2025-05"
+    assert result["period_labels"]["yoy"] == "2024-06"
+
+    # Verify get_cost_and_usage was called with correct date ranges
+    calls = mock_ce_client.get_cost_and_usage.call_args_list
+
+    # First call should be for current period (2025-06)
+    first_call_time_period = calls[0][1]["TimePeriod"]
+    assert first_call_time_period["Start"] == "2025-06-01"
+    assert first_call_time_period["End"] == "2025-07-01"
+
+    # Second call should be for prev_month (2025-05)
+    second_call_time_period = calls[1][1]["TimePeriod"]
+    assert second_call_time_period["Start"] == "2025-05-01"
+    assert second_call_time_period["End"] == "2025-06-01"
+
+    # Third call should be for yoy (2024-06)
+    third_call_time_period = calls[2][1]["TimePeriod"]
+    assert third_call_time_period["Start"] == "2024-06-01"
+    assert third_call_time_period["End"] == "2024-07-01"

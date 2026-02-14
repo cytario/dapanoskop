@@ -9,6 +9,7 @@ interface WorkloadTableProps {
 }
 
 const ANOMALY_THRESHOLD = 0.1; // 10% MoM change
+const NEW_WORKLOAD_COST_THRESHOLD = 100; // Flag new workloads above $100
 
 export function WorkloadTable({ workloads, period }: WorkloadTableProps) {
   return (
@@ -23,12 +24,16 @@ export function WorkloadTable({ workloads, period }: WorkloadTableProps) {
       </thead>
       <tbody>
         {workloads.map((wl) => {
+          const isNewWorkload =
+            wl.prev_month_cost_usd === 0 &&
+            wl.current_cost_usd >= NEW_WORKLOAD_COST_THRESHOLD;
           const momPct =
             wl.prev_month_cost_usd !== 0
               ? (wl.current_cost_usd - wl.prev_month_cost_usd) /
                 wl.prev_month_cost_usd
               : 0;
-          const isAnomaly = Math.abs(momPct) >= ANOMALY_THRESHOLD;
+          const isAnomaly =
+            Math.abs(momPct) >= ANOMALY_THRESHOLD || isNewWorkload;
           const isUntagged = wl.name === "Untagged";
           const highlight = isAnomaly || isUntagged;
 

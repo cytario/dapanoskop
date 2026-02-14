@@ -25,7 +25,12 @@ async function s3GetJson<T>(key: string): Promise<T> {
   return JSON.parse(await res.Body.transformToString()) as T;
 }
 
+const PERIOD_FORMAT = /^\d{4}-\d{2}$/;
+
 export async function fetchSummary(period: string): Promise<CostSummary> {
+  if (!PERIOD_FORMAT.test(period)) {
+    throw new Error(`Invalid period format: ${period}`);
+  }
   const cfg = await getConfig();
   if (cfg.authBypass) {
     const response = await fetch(`${DATA_BASE}/${period}/summary.json`);

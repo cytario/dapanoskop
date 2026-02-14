@@ -13,16 +13,21 @@ export function CostCenterCard({ costCenter, period }: CostCenterCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   // Find top mover (workload with highest absolute MoM change)
-  const topMover = costCenter.workloads.reduce(
-    (best, wl) => {
-      const delta = Math.abs(wl.current_cost_usd - wl.prev_month_cost_usd);
-      return delta > best.delta ? { name: wl.name, delta, wl } : best;
-    },
-    { name: "", delta: 0, wl: costCenter.workloads[0] },
-  );
+  const topMover =
+    costCenter.workloads.length > 0
+      ? costCenter.workloads.reduce(
+          (best, wl) => {
+            const delta = Math.abs(
+              wl.current_cost_usd - wl.prev_month_cost_usd,
+            );
+            return delta > best.delta ? { name: wl.name, delta, wl } : best;
+          },
+          { name: "", delta: 0, wl: costCenter.workloads[0] },
+        )
+      : null;
 
   const topMoverPct =
-    topMover.wl && topMover.wl.prev_month_cost_usd !== 0
+    topMover?.wl && topMover.wl.prev_month_cost_usd !== 0
       ? (
           ((topMover.wl.current_cost_usd - topMover.wl.prev_month_cost_usd) /
             topMover.wl.prev_month_cost_usd) *
@@ -66,8 +71,13 @@ export function CostCenterCard({ costCenter, period }: CostCenterCardProps) {
           )}
         </div>
         <div className="mt-1 ml-7 text-xs text-gray-500">
-          {costCenter.workloads.length} workloads · Top mover: {topMover.name} (
-          {topMoverPct}% MoM)
+          {costCenter.workloads.length} workloads
+          {topMover && (
+            <>
+              {" "}
+              · Top mover: {topMover.name} ({topMoverPct}% MoM)
+            </>
+          )}
         </div>
       </button>
       {expanded && (

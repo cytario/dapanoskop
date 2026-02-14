@@ -17,6 +17,17 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+def _sanitize_error_message(error_msg: str) -> str:
+    """Sanitize error messages to prevent AWS account ID leakage.
+
+    Replaces 12-digit AWS account IDs with REDACTED.
+    """
+    import re
+
+    # Replace 12-digit account IDs (commonly found in ARNs)
+    return re.sub(r"\b\d{12}\b", "REDACTED", error_msg)
+
+
 def _month_exists_in_s3(s3_client: Any, bucket: str, year: int, month: int) -> bool:
     """Check if data already exists for a given month in S3."""
     period = f"{year:04d}-{month:02d}"
@@ -96,7 +107,9 @@ def _handle_backfill(
 
         except Exception as e:
             logger.exception("Failed to process %s", period_label)
-            failed.append({"period": period_label, "error": str(e)})
+            failed.append(
+                {"period": period_label, "error": _sanitize_error_message(str(e))}
+            )
 
     # Update index once at the end
     logger.info("Updating index.json")
