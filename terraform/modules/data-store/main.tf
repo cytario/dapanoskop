@@ -83,7 +83,7 @@ resource "aws_s3_bucket_cors_configuration" "data" {
   bucket = aws_s3_bucket.data.id
 
   cors_rule {
-    allowed_headers = ["Authorization", "Range", "x-amz-*"]
+    allowed_headers = ["Authorization", "Range", "x-amz-*", "amz-sdk-*"]
     allowed_methods = ["GET", "HEAD"]
     allowed_origins = var.allowed_origins
     expose_headers  = ["Content-Length", "Content-Range", "ETag"]

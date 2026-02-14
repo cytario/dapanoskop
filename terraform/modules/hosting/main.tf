@@ -179,11 +179,11 @@ resource "aws_cloudfront_response_headers_policy" "security" {
       content_security_policy = join(" ", [
         "default-src 'self';",
         "script-src 'self' 'unsafe-inline';",
-        "style-src 'self' 'unsafe-inline';",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;",
         "worker-src 'self' blob:;",
         "connect-src 'self'${var.cognito_domain != "" ? " ${var.cognito_domain}" : ""}${var.data_bucket_s3_endpoint != "" ? " ${var.data_bucket_s3_endpoint}" : ""}${var.cognito_identity_endpoint != "" ? " ${var.cognito_identity_endpoint}" : ""};",
         "img-src 'self' data:;",
-        "font-src 'self';",
+        "font-src 'self' https://fonts.gstatic.com;",
         "object-src 'none';",
         "frame-ancestors 'none';",
         "base-uri 'self';",
