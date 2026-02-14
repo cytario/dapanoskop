@@ -57,3 +57,24 @@ def test_get_periods_january_first() -> None:
     assert periods["current"][0] == "2025-12-01"
     assert periods["prev_month"][0] == "2025-11-01"
     assert periods["yoy"][0] == "2024-12-01"
+
+
+def test_get_periods_with_target_month() -> None:
+    """Explicit target month overrides now parameter."""
+    now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
+    # Request data for March 2025
+    periods = _get_periods(now, target_year=2025, target_month=3)
+
+    assert periods["current"][0] == "2025-03-01"
+    assert periods["prev_month"][0] == "2025-02-01"
+    assert periods["yoy"][0] == "2024-03-01"
+
+
+def test_get_periods_with_target_january() -> None:
+    """Target January handles year rollover correctly."""
+    now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
+    periods = _get_periods(now, target_year=2025, target_month=1)
+
+    assert periods["current"][0] == "2025-01-01"
+    assert periods["prev_month"][0] == "2024-12-01"
+    assert periods["yoy"][0] == "2024-01-01"

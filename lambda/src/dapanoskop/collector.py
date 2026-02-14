@@ -22,20 +22,29 @@ def _month_range(year: int, month: int) -> tuple[str, str]:
     return start, end
 
 
-def _get_periods(now: datetime) -> dict[str, tuple[str, str]]:
+def _get_periods(
+    now: datetime,
+    target_year: int | None = None,
+    target_month: int | None = None,
+) -> dict[str, tuple[str, str]]:
     """Compute the three reporting periods.
 
     Returns dict with keys: current, prev_month, yoy.
     Each value is (start_date, end_date) for CE API.
 
-    "current" is the most recent complete month (i.e., the previous calendar month).
+    If target_year and target_month are provided, use that as the target period.
+    Otherwise, "current" is the most recent complete month (i.e., the previous calendar month).
     The pipeline runs at 06:00 UTC daily, so by the 1st the previous month is complete.
     """
-    year, month = now.year, now.month
-
-    # Current period = previous complete month
-    prev_year = year if month > 1 else year - 1
-    prev_month = month - 1 if month > 1 else 12
+    if target_year is not None and target_month is not None:
+        # Use explicit target month
+        prev_year = target_year
+        prev_month = target_month
+    else:
+        # Default: use previous complete month relative to now
+        year, month = now.year, now.month
+        prev_year = year if month > 1 else year - 1
+        prev_month = month - 1 if month > 1 else 12
 
     current_start, current_end = _month_range(prev_year, prev_month)
 
@@ -150,11 +159,19 @@ def get_cost_categories(
 
 def collect(
     cost_category_name: str = "",
+    target_year: int | None = None,
+    target_month: int | None = None,
 ) -> dict[str, Any]:
-    """Main collection entry point. Returns raw data for processing."""
+    """Main collection entry point. Returns raw data for processing.
+
+    Args:
+        cost_category_name: AWS Cost Category name for workload grouping
+        target_year: Optional target year for backfill (uses current if not provided)
+        target_month: Optional target month for backfill (uses current if not provided)
+    """
     ce_client = boto3.client("ce")
     now = datetime.now(timezone.utc)
-    periods = _get_periods(now)
+    periods = _get_periods(now, target_year, target_month)
 
     period_labels = {k: _period_label(v[0]) for k, v in periods.items()}
     logger.info("Collecting data for periods: %s", period_labels)
