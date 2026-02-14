@@ -17,3 +17,8 @@ output "cloudfront_domain_name" {
   description = "Domain name of the CloudFront distribution"
   value       = aws_cloudfront_distribution.main.domain_name
 }
+
+output "content_security_policy" {
+  description = "Computed Content-Security-Policy header value"
+  value       = aws_cloudfront_response_headers_policy.security.security_headers_config[0].content_security_policy[0].content_security_policy
+}

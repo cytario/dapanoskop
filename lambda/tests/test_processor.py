@@ -227,3 +227,273 @@ def test_update_index_empty_bucket() -> None:
     index_data = json.loads(response["Body"].read())
 
     assert index_data["periods"] == []
+
+
+@mock_aws
+def test_write_to_s3_creates_all_files() -> None:
+    """Test that write_to_s3 creates summary.json, parquet files, and index.json."""
+    import io
+
+    import boto3
+
+    import pyarrow.parquet as pq
+
+    from dapanoskop.processor import write_to_s3
+
+    s3 = boto3.client("s3", region_name="us-east-1")
+    bucket = "test-bucket"
+    s3.create_bucket(Bucket=bucket)
+
+    # Create processed data
+    collected = _make_collected(
+        current_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 1000, 744),
+            _make_group("api", "TimedStorage-ByteHrs", 200, 100000000),
+        ],
+        prev_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 900, 720),
+        ],
+        yoy_groups=[],
+        cc_mapping={"web-app": "Engineering", "api": "Engineering"},
+    )
+    processed = process(collected)
+
+    write_to_s3(processed, bucket)
+
+    # Verify all files were created
+    objects = s3.list_objects_v2(Bucket=bucket)
+    keys = [obj["Key"] for obj in objects.get("Contents", [])]
+
+    assert "2026-01/summary.json" in keys
+    assert "2026-01/cost-by-workload.parquet" in keys
+    assert "2026-01/cost-by-usage-type.parquet" in keys
+    assert "index.json" in keys
+
+    # Verify summary.json is valid JSON
+    summary_obj = s3.get_object(Bucket=bucket, Key="2026-01/summary.json")
+    summary = json.loads(summary_obj["Body"].read())
+    assert summary["period"] == "2026-01"
+
+    # Verify parquet files can be read
+    wl_obj = s3.get_object(Bucket=bucket, Key="2026-01/cost-by-workload.parquet")
+    wl_data = io.BytesIO(wl_obj["Body"].read())
+    wl_table = pq.read_table(wl_data)
+    assert wl_table.num_rows > 0
+
+    ut_obj = s3.get_object(Bucket=bucket, Key="2026-01/cost-by-usage-type.parquet")
+    ut_data = io.BytesIO(ut_obj["Body"].read())
+    ut_table = pq.read_table(ut_data)
+    assert ut_table.num_rows > 0
+
+
+@mock_aws
+def test_write_to_s3_skip_index_update() -> None:
+    """Test that update_index_file=False does not create index.json."""
+    import boto3
+
+    from dapanoskop.processor import write_to_s3
+
+    s3 = boto3.client("s3", region_name="us-east-1")
+    bucket = "test-bucket"
+    s3.create_bucket(Bucket=bucket)
+
+    # Create processed data
+    collected = _make_collected(
+        current_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 1000, 744),
+        ],
+        prev_groups=[],
+        yoy_groups=[],
+    )
+    processed = process(collected)
+
+    write_to_s3(processed, bucket, update_index_file=False)
+
+    # Verify files were created except index.json
+    objects = s3.list_objects_v2(Bucket=bucket)
+    keys = [obj["Key"] for obj in objects.get("Contents", [])]
+
+    assert "2026-01/summary.json" in keys
+    assert "2026-01/cost-by-workload.parquet" in keys
+    assert "2026-01/cost-by-usage-type.parquet" in keys
+    assert "index.json" not in keys
+
+
+@mock_aws
+def test_write_to_s3_empty_rows() -> None:
+    """Test that no parquet files are created when rows are empty."""
+    import boto3
+
+    from dapanoskop.processor import write_to_s3
+
+    s3 = boto3.client("s3", region_name="us-east-1")
+    bucket = "test-bucket"
+    s3.create_bucket(Bucket=bucket)
+
+    # Create processed data with no groups (empty rows)
+    collected = _make_collected(
+        current_groups=[],
+        prev_groups=[],
+        yoy_groups=[],
+    )
+    processed = process(collected)
+
+    write_to_s3(processed, bucket)
+
+    # Verify files
+    objects = s3.list_objects_v2(Bucket=bucket)
+    keys = [obj["Key"] for obj in objects.get("Contents", [])]
+
+    # summary.json and index.json should be created
+    assert "2026-01/summary.json" in keys
+    assert "index.json" in keys
+
+    # Parquet files should NOT be created when rows are empty
+    assert "2026-01/cost-by-workload.parquet" not in keys
+    assert "2026-01/cost-by-usage-type.parquet" not in keys
+
+
+@mock_aws
+def test_write_to_s3_parquet_schema() -> None:
+    """Test that parquet files have correct column names and types."""
+    import io
+
+    import boto3
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from dapanoskop.processor import write_to_s3
+
+    s3 = boto3.client("s3", region_name="us-east-1")
+    bucket = "test-bucket"
+    s3.create_bucket(Bucket=bucket)
+
+    # Create processed data
+    collected = _make_collected(
+        current_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 1000, 744),
+            _make_group("api", "TimedStorage-ByteHrs", 200, 100000000),
+        ],
+        prev_groups=[],
+        yoy_groups=[],
+        cc_mapping={"web-app": "Engineering", "api": "Engineering"},
+    )
+    processed = process(collected)
+
+    write_to_s3(processed, bucket, update_index_file=False)
+
+    # Check cost-by-workload.parquet schema
+    wl_obj = s3.get_object(Bucket=bucket, Key="2026-01/cost-by-workload.parquet")
+    wl_data = io.BytesIO(wl_obj["Body"].read())
+    wl_table = pq.read_table(wl_data)
+
+    assert wl_table.column_names == ["cost_center", "workload", "period", "cost_usd"]
+    assert wl_table.schema.field("cost_center").type == pa.string()
+    assert wl_table.schema.field("workload").type == pa.string()
+    assert wl_table.schema.field("period").type == pa.string()
+    assert wl_table.schema.field("cost_usd").type == pa.float64()
+
+    # Check cost-by-usage-type.parquet schema
+    ut_obj = s3.get_object(Bucket=bucket, Key="2026-01/cost-by-usage-type.parquet")
+    ut_data = io.BytesIO(ut_obj["Body"].read())
+    ut_table = pq.read_table(ut_data)
+
+    assert ut_table.column_names == [
+        "workload",
+        "usage_type",
+        "category",
+        "period",
+        "cost_usd",
+        "usage_quantity",
+    ]
+    assert ut_table.schema.field("workload").type == pa.string()
+    assert ut_table.schema.field("usage_type").type == pa.string()
+    assert ut_table.schema.field("category").type == pa.string()
+    assert ut_table.schema.field("period").type == pa.string()
+    assert ut_table.schema.field("cost_usd").type == pa.float64()
+    assert ut_table.schema.field("usage_quantity").type == pa.float64()
+
+
+def test_parse_groups_empty_keys() -> None:
+    """Test that _parse_groups handles empty Keys array gracefully."""
+    from dapanoskop.processor import _parse_groups
+
+    groups = [
+        {
+            "Keys": [],
+            "Metrics": {
+                "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                "UsageQuantity": {"Amount": "10", "Unit": "N/A"},
+            },
+        }
+    ]
+
+    result = _parse_groups(groups)
+
+    # Empty Keys should be skipped (len(keys) != 2)
+    assert result == []
+
+
+def test_parse_groups_single_key() -> None:
+    """Test that _parse_groups handles single key (expects 2) gracefully."""
+    from dapanoskop.processor import _parse_groups
+
+    groups = [
+        {
+            "Keys": ["App$web-app"],
+            "Metrics": {
+                "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                "UsageQuantity": {"Amount": "10", "Unit": "N/A"},
+            },
+        }
+    ]
+
+    result = _parse_groups(groups)
+
+    # Single key should be skipped (len(keys) != 2)
+    assert result == []
+
+
+def test_parse_groups_missing_keys_field() -> None:
+    """Test that _parse_groups handles missing Keys field gracefully."""
+    from dapanoskop.processor import _parse_groups
+
+    groups = [
+        {
+            "Metrics": {
+                "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                "UsageQuantity": {"Amount": "10", "Unit": "N/A"},
+            },
+        }
+    ]
+
+    result = _parse_groups(groups)
+
+    # Missing Keys should be handled gracefully
+    assert result == []
+
+
+def test_storage_metrics_zero_volume() -> None:
+    """Test storage metrics with zero volume (no storage usage types)."""
+    collected = _make_collected(
+        current_groups=[
+            # Only compute, no storage
+            _make_group("app", "BoxUsage:m5.xlarge", 1000, 744),
+            _make_group("app", "Lambda-GB-Second", 200, 5000),
+        ],
+        prev_groups=[
+            _make_group("app", "BoxUsage:m5.xlarge", 900, 720),
+        ],
+        yoy_groups=[],
+    )
+
+    result = process(collected)
+    sm = result["summary"]["storage_metrics"]
+
+    # No storage usage -> zero volume, zero cost, and safe division
+    assert sm["total_cost_usd"] == 0.0
+    assert sm["prev_month_cost_usd"] == 0.0
+    assert sm["total_volume_bytes"] == 0
+    assert sm["hot_tier_percentage"] == 0.0
+    assert sm["cost_per_tb_usd"] == 0.0  # No crash from division by zero

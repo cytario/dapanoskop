@@ -38,3 +38,27 @@ from dapanoskop.categories import categorize
 )
 def test_categorize(usage_type: str, expected: str) -> None:
     assert categorize(usage_type) == expected
+
+
+def test_categorize_pattern_priority_ebs() -> None:
+    """Test that EBS volumes are categorized as Storage (not Other).
+
+    This verifies first-match-wins pattern ordering. EBS: pattern comes before
+    catch-all patterns, ensuring EBS volumes are correctly categorized as Storage.
+    Reordering patterns could break this categorization.
+    """
+    assert categorize("EBS:VolumeUsage") == "Storage"
+    assert categorize("EBS:VolumeUsage.gp3") == "Storage"
+    assert categorize("EBS:SnapshotUsage") == "Storage"
+
+
+def test_categorize_pattern_priority_timed_storage() -> None:
+    """Test that TimedStorage is categorized as Storage (not Support).
+
+    This verifies first-match-wins pattern ordering. Support patterns (Tax, Fee, etc.)
+    are checked first but don't match TimedStorage. Then Storage patterns match.
+    Reordering patterns could break this categorization.
+    """
+    assert categorize("TimedStorage-ByteHrs") == "Storage"
+    assert categorize("TimedStorage-INT-FA-ByteHrs") == "Storage"
+    assert categorize("TimedStorage-GlacierStaging") == "Storage"

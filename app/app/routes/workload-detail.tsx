@@ -5,6 +5,7 @@ import { fetchSummary } from "~/lib/data";
 import { initAuth, isAuthenticated, login } from "~/lib/auth";
 import { getConfig } from "~/lib/config";
 import { getAwsCredentials } from "~/lib/credentials";
+import { buildS3ConfigStatements } from "~/lib/duckdb-config";
 import { formatUsd } from "~/lib/format";
 import { CostChange } from "~/components/CostChange";
 
@@ -91,18 +92,15 @@ export default function WorkloadDetail() {
           // Production: configure S3 credentials for httpfs
           const creds = await getAwsCredentials();
           const conn = await db.connect();
-          await conn.query(
-            `SET s3_region='${cfg.awsRegion.replace(/'/g, "''")}'`,
-          );
-          await conn.query(
-            `SET s3_access_key_id='${creds.accessKeyId.replace(/'/g, "''")}'`,
-          );
-          await conn.query(
-            `SET s3_secret_access_key='${creds.secretAccessKey.replace(/'/g, "''")}'`,
-          );
-          await conn.query(
-            `SET s3_session_token='${creds.sessionToken.replace(/'/g, "''")}'`,
-          );
+          const stmts = buildS3ConfigStatements({
+            region: cfg.awsRegion,
+            accessKeyId: creds.accessKeyId,
+            secretAccessKey: creds.secretAccessKey,
+            sessionToken: creds.sessionToken,
+          });
+          for (const stmt of stmts) {
+            await conn.query(stmt);
+          }
           await conn.close();
           parquetSource = `'s3://${cfg.dataBucketName}/${period}/cost-by-usage-type.parquet'`;
         }
