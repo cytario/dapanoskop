@@ -137,7 +137,7 @@ def get_cost_categories(
                 keys = group.get("Keys", [])
                 if len(keys) == 2:
                     app_tag = keys[0].removeprefix("App$")
-                    cost_center = keys[1]
+                    cost_center = keys[1].removeprefix(f"{category_name}$")
                     if app_tag and cost_center:
                         mapping[app_tag] = cost_center
         token = response.get("NextPageToken")
