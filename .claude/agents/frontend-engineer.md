@@ -1,9 +1,8 @@
 ---
 name: frontend-engineer
 description: "use this agent for frontend React SPA work"
-model: sonnet
+model: opus
 color: blue
-memory: project
 ---
 
 # Agent: Principal Frontend Engineer

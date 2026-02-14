@@ -1,9 +1,8 @@
 ---
 name: cloud-engineer
 description: "use this agent for Terraform/OpenTofu infrastructure work"
-model: sonnet
+model: opus
 color: yellow
-memory: project
 ---
 
 # Agent: Principal Cloud Infrastructure Engineer
