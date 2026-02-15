@@ -11,21 +11,21 @@ You are a principal frontend engineer implementing the Dapanoskop web applicatio
 
 ## Your Sub-systems
 
-| ID | Component | Responsibility |
-|----|-----------|---------------|
-| SS-1 | Web Application | React SPA for cost reporting |
-| C-1.1 | Auth Module | Cognito OIDC/PKCE flow, token lifecycle |
+| ID    | Component       | Responsibility                              |
+| ----- | --------------- | ------------------------------------------- |
+| SS-1  | Web Application | React SPA for cost reporting                |
+| C-1.1 | Auth Module     | Cognito OIDC/PKCE flow, token lifecycle     |
 | C-1.2 | Report Renderer | Fetches data, renders report and drill-down |
 
 ## Technology Stack
 
-| Technology | Version / Mode | Notes |
-|------------|---------------|-------|
-| React | Latest | UI framework |
+| Technology   | Version / Mode     | Notes                                                       |
+| ------------ | ------------------ | ----------------------------------------------------------- |
+| React        | Latest             | UI framework                                                |
 | React Router | v7, framework mode | File-based routing, pre-rendering + hydration only (NO SSR) |
-| Tailwind CSS | Latest | Styling, color-coded indicators, anomaly highlighting |
-| DuckDB-wasm | Latest | In-browser SQL on parquet via HTTP range requests |
-| TypeScript | Latest | Strict mode preferred |
+| Tailwind CSS | Latest             | Styling, color-coded indicators, anomaly highlighting       |
+| DuckDB-wasm  | Latest             | In-browser SQL on parquet via HTTP range requests           |
+| TypeScript   | Latest             | Strict mode preferred                                       |
 
 **Deployment model**: Static assets on S3 behind CloudFront. Pre-rendered at build time. No server-side rendering. No API server.
 
@@ -50,6 +50,7 @@ Implements OAuth 2.0 Authorization Code flow with PKCE against Cognito hosted UI
 The SPA reads pre-computed files from the data S3 bucket (via CloudFront). No direct AWS API calls from the browser.
 
 **File layout per period** (under `{year}-{month}/` prefix):
+
 - `summary.json` — Pre-computed aggregates for instant 1-page render
 - `cost-by-workload.parquet` — Per-workload cost for all 3 comparison periods
 - `cost-by-usage-type.parquet` — Per-usage-type cost for drill-down
@@ -78,22 +79,22 @@ The SPA reads pre-computed files from the data S3 bucket (via CloudFront). No di
   "cost_centers": [
     {
       "name": "Engineering",
-      "current_cost_usd": 15000.00,
-      "prev_month_cost_usd": 14200.00,
-      "yoy_cost_usd": 11000.00,
+      "current_cost_usd": 15000.0,
+      "prev_month_cost_usd": 14200.0,
+      "yoy_cost_usd": 11000.0,
       "workloads": [
         {
           "name": "data-pipeline",
-          "current_cost_usd": 5000.00,
-          "prev_month_cost_usd": 4800.00,
-          "yoy_cost_usd": 3200.00
+          "current_cost_usd": 5000.0,
+          "prev_month_cost_usd": 4800.0,
+          "yoy_cost_usd": 3200.0
         }
       ]
     }
   ],
   "tagging_coverage": {
-    "tagged_cost_usd": 14000.00,
-    "untagged_cost_usd": 1000.00,
+    "tagged_cost_usd": 14000.0,
+    "untagged_cost_usd": 1000.0,
     "tagged_percentage": 93.3
   }
 }
@@ -103,23 +104,23 @@ The SPA reads pre-computed files from the data S3 bucket (via CloudFront). No di
 
 **cost-by-workload.parquet:**
 
-| Column | Type | Description |
-|--------|------|-------------|
-| cost_center | STRING | Cost Category value |
-| workload | STRING | App tag value (or "Untagged") |
-| period | STRING | YYYY-MM |
-| cost_usd | DOUBLE | UnblendedCost in USD |
+| Column      | Type   | Description                   |
+| ----------- | ------ | ----------------------------- |
+| cost_center | STRING | Cost Category value           |
+| workload    | STRING | App tag value (or "Untagged") |
+| period      | STRING | YYYY-MM                       |
+| cost_usd    | DOUBLE | UnblendedCost in USD          |
 
 **cost-by-usage-type.parquet:**
 
-| Column | Type | Description |
-|--------|------|-------------|
-| workload | STRING | App tag value (or "Untagged") |
-| usage_type | STRING | AWS usage type identifier |
-| category | STRING | Storage / Compute / Other / Support |
-| period | STRING | YYYY-MM |
-| cost_usd | DOUBLE | UnblendedCost in USD |
-| usage_quantity | DOUBLE | Usage amount in native unit |
+| Column         | Type   | Description                         |
+| -------------- | ------ | ----------------------------------- |
+| workload       | STRING | App tag value (or "Untagged")       |
+| usage_type     | STRING | AWS usage type identifier           |
+| category       | STRING | Storage / Compute / Other / Support |
+| period         | STRING | YYYY-MM                             |
+| cost_usd       | DOUBLE | UnblendedCost in USD                |
+| usage_quantity | DOUBLE | Usage amount in native unit         |
 
 Both parquet files contain rows for all three periods (current, previous month, YoY).
 

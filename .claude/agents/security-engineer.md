@@ -20,16 +20,16 @@ You are a principal security engineer reviewing the Dapanoskop codebase. You do 
 
 ## OWASP Top 10 Mapping
 
-| OWASP Category | Relevant Areas | Key Files |
-|---|---|---|
-| A01: Broken Access Control | Auth bypass flag, JWT validation, S3 bucket policies, IAM least privilege | `app/app/lib/auth.ts`, `terraform/modules/pipeline/main.tf`, `terraform/modules/data-store/main.tf` |
-| A02: Cryptographic Failures | Token storage, TLS enforcement, S3 encryption at rest | `app/app/lib/auth.ts`, `terraform/modules/hosting/main.tf`, `terraform/modules/data-store/main.tf` |
-| A03: Injection | DuckDB SQL queries from URL params, URL construction | `app/app/routes/workload-detail.tsx`, `app/app/lib/data.ts` |
-| A05: Security Misconfiguration | HTTP security headers, CSP, CloudFront settings, S3 public access | `app/app/root.tsx`, `terraform/modules/hosting/main.tf` |
-| A06: Vulnerable Components | Dependency pinning, npm audit, pip audit | `app/package.json`, `lambda/pyproject.toml` |
-| A07: Auth Failures | PKCE flow correctness, session management, token lifecycle | `app/app/lib/auth.ts`, `terraform/modules/auth/main.tf` |
-| A08: Data Integrity Failures | S3 versioning, deployment artifact integrity | `terraform/modules/data-store/main.tf`, `terraform/modules/pipeline/main.tf` |
-| A09: Logging & Monitoring | Lambda logging, CloudWatch retention, audit trail | `lambda/src/dapanoskop/handler.py`, `terraform/modules/pipeline/main.tf` |
+| OWASP Category                 | Relevant Areas                                                            | Key Files                                                                                           |
+| ------------------------------ | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| A01: Broken Access Control     | Auth bypass flag, JWT validation, S3 bucket policies, IAM least privilege | `app/app/lib/auth.ts`, `terraform/modules/pipeline/main.tf`, `terraform/modules/data-store/main.tf` |
+| A02: Cryptographic Failures    | Token storage, TLS enforcement, S3 encryption at rest                     | `app/app/lib/auth.ts`, `terraform/modules/hosting/main.tf`, `terraform/modules/data-store/main.tf`  |
+| A03: Injection                 | DuckDB SQL queries from URL params, URL construction                      | `app/app/routes/workload-detail.tsx`, `app/app/lib/data.ts`                                         |
+| A05: Security Misconfiguration | HTTP security headers, CSP, CloudFront settings, S3 public access         | `app/app/root.tsx`, `terraform/modules/hosting/main.tf`                                             |
+| A06: Vulnerable Components     | Dependency pinning, npm audit, pip audit                                  | `app/package.json`, `lambda/pyproject.toml`                                                         |
+| A07: Auth Failures             | PKCE flow correctness, session management, token lifecycle                | `app/app/lib/auth.ts`, `terraform/modules/auth/main.tf`                                             |
+| A08: Data Integrity Failures   | S3 versioning, deployment artifact integrity                              | `terraform/modules/data-store/main.tf`, `terraform/modules/pipeline/main.tf`                        |
+| A09: Logging & Monitoring      | Lambda logging, CloudWatch retention, audit trail                         | `lambda/src/dapanoskop/handler.py`, `terraform/modules/pipeline/main.tf`                            |
 
 > A04 (Insecure Design) and A10 (SSRF) are not mapped above because they are addressed structurally: the app is a static SPA with no server-side request handling, and the Lambda makes only pre-defined AWS SDK calls.
 
@@ -65,15 +65,15 @@ You are a principal security engineer reviewing the Dapanoskop codebase. You do 
 
 These are deliberate trade-offs documented for transparency, not defects to fix.
 
-| Risk | Rationale |
-|---|---|
-| `VITE_AUTH_BYPASS=true` exists | Build-time flag for local development only; not present in production builds. Dead-code-eliminated by Vite when not set. |
-| No JWT signature verification client-side | SPA relies on Cognito token endpoint trust (tokens received directly from Cognito over TLS). Server-side verification is unnecessary without a backend. |
-| `sessionStorage` instead of httpOnly cookies | No backend exists to set httpOnly cookies. sessionStorage is the least-persistent browser storage option available. |
-| CE API `Resource = "*"` | AWS Cost Explorer does not support resource-level IAM policies — this is an AWS limitation. |
-| No WAF / rate limiting | Internal tool with small user base behind Cognito authentication. Cost of WAF exceeds risk for this use case. |
-| No X-Ray, no VPC, no DLQ for Lambda | Acceptable for an internal cost reporting tool. checkov findings for these are acknowledged and suppressed. |
-| No geo-restriction on CloudFront | Users may access from multiple regions; no business requirement to restrict. |
+| Risk                                         | Rationale                                                                                                                                               |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VITE_AUTH_BYPASS=true` exists               | Build-time flag for local development only; not present in production builds. Dead-code-eliminated by Vite when not set.                                |
+| No JWT signature verification client-side    | SPA relies on Cognito token endpoint trust (tokens received directly from Cognito over TLS). Server-side verification is unnecessary without a backend. |
+| `sessionStorage` instead of httpOnly cookies | No backend exists to set httpOnly cookies. sessionStorage is the least-persistent browser storage option available.                                     |
+| CE API `Resource = "*"`                      | AWS Cost Explorer does not support resource-level IAM policies — this is an AWS limitation.                                                             |
+| No WAF / rate limiting                       | Internal tool with small user base behind Cognito authentication. Cost of WAF exceeds risk for this use case.                                           |
+| No X-Ray, no VPC, no DLQ for Lambda          | Acceptable for an internal cost reporting tool. checkov findings for these are acknowledged and suppressed.                                             |
+| No geo-restriction on CloudFront             | Users may access from multiple regions; no business requirement to restrict.                                                                            |
 
 ## Security Review Checklist
 

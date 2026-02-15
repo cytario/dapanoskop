@@ -14,7 +14,7 @@ You are a principal cloud infrastructure engineer implementing the Dapanoskop in
 ## Your Sub-systems
 
 | ID    | Component                 | Responsibility                                                  |
-|-------|---------------------------|-----------------------------------------------------------------|
+| ----- | ------------------------- | --------------------------------------------------------------- |
 | SS-3  | Terraform Module          | Single module provisioning all AWS resources                    |
 | C-3.1 | Hosting Infrastructure    | S3 app bucket, CloudFront (dual origin), optional custom domain |
 | C-3.2 | Auth Infrastructure       | Cognito app client on existing User Pool                        |
@@ -25,7 +25,7 @@ You are a principal cloud infrastructure engineer implementing the Dapanoskop in
 ## Technology Stack
 
 | Technology   | Version / Constraint | Notes                               |
-|--------------|----------------------|-------------------------------------|
+| ------------ | -------------------- | ----------------------------------- |
 | OpenTofu     | Primary target       | Use `tofu` CLI                      |
 | Terraform    | >= 1.5 compatibility | Must be compatible                  |
 | AWS Provider | >= 5.0               | hashicorp/aws                       |
@@ -48,6 +48,7 @@ A single module that provisions a complete Dapanoskop deployment.
 ### C-3.1: Hosting Infrastructure
 
 **[SDS-DP-030101] Web Hosting Stack**
+
 - S3 app bucket (private, website hosting disabled)
 - CloudFront distribution with OAC, dual origin (app bucket + data bucket as separate origins)
 - S3 bucket policies granting CloudFront read access
@@ -58,6 +59,7 @@ Refs: SRS-DP-520001, SRS-DP-520003
 ### C-3.2: Auth Infrastructure
 
 **[SDS-DP-030201] Cognito App Client**
+
 - Create app client on existing User Pool (Pool ID provided via input variable)
 - Authorization code flow with PKCE
 - Callback URLs point to CloudFront distribution domain
@@ -67,6 +69,7 @@ Refs: SRS-DP-410101
 ### C-3.3: Pipeline Infrastructure
 
 **[SDS-DP-030301] Lambda and Schedule**
+
 - Lambda function from local zip via `archive_file` data source (deployed directly, not via S3)
 - IAM role with `ce:GetCostAndUsage`, `ce:GetCostCategories`, `s3:PutObject`
 - EventBridge rule: `cron(0 6 * * ? *)`
@@ -76,6 +79,7 @@ Refs: SRS-DP-510002, SRS-DP-520002
 ### C-3.4: Data Store Infrastructure
 
 **[SDS-DP-030401] Data Bucket**
+
 - Dedicated S3 bucket (separate from app bucket)
 - Versioning enabled
 - Server-side encryption (SSE-S3 or SSE-KMS)
@@ -86,15 +90,15 @@ Refs: SRS-DP-430101, SRS-DP-430102
 
 ### Terraform Input Variables (expected)
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| cognito_user_pool_id | Yes | Existing Cognito User Pool ID |
-| cost_category_name | No | AWS Cost Category name (default: first from API) |
-| domain_name | No | Custom domain for CloudFront |
-| acm_certificate_arn | No | ACM cert ARN for custom domain |
-| schedule_expression | No | EventBridge cron (default: `cron(0 6 * * ? *)`) |
-| include_efs | No | Include EFS in storage metrics (default: false) |
-| include_ebs | No | Include EBS in storage metrics (default: false) |
+| Variable             | Required | Description                                      |
+| -------------------- | -------- | ------------------------------------------------ |
+| cognito_user_pool_id | Yes      | Existing Cognito User Pool ID                    |
+| cost_category_name   | No       | AWS Cost Category name (default: first from API) |
+| domain_name          | No       | Custom domain for CloudFront                     |
+| acm_certificate_arn  | No       | ACM cert ARN for custom domain                   |
+| schedule_expression  | No       | EventBridge cron (default: `cron(0 6 * * ? *)`)  |
+| include_efs          | No       | Include EFS in storage metrics (default: false)  |
+| include_ebs          | No       | Include EBS in storage metrics (default: false)  |
 
 ### Compatibility
 

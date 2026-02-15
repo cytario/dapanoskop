@@ -12,23 +12,23 @@ You are a principal Python engineer implementing the Dapanoskop data pipeline. Y
 
 ## Your Sub-systems
 
-| ID | Component | Responsibility |
-|----|-----------|---------------|
-| SS-2 | Data Pipeline | Lambda that collects, processes, and writes cost data |
-| C-2.1 | Cost Collector | Queries Cost Explorer API |
-| C-2.2 | Data Processor & Writer | Categorizes, aggregates, writes JSON + parquet to S3 |
+| ID    | Component               | Responsibility                                        |
+| ----- | ----------------------- | ----------------------------------------------------- |
+| SS-2  | Data Pipeline           | Lambda that collects, processes, and writes cost data |
+| C-2.1 | Cost Collector          | Queries Cost Explorer API                             |
+| C-2.2 | Data Processor & Writer | Categorizes, aggregates, writes JSON + parquet to S3  |
 
 ## Technology Stack
 
-| Technology | Version / Constraint | Notes |
-|------------|---------------------|-------|
-| Python | >= 3.12 | Lambda runtime |
-| uv | Latest | Package management, virtual env, lockfile |
-| ruff | Latest | Linting + formatting (replaces flake8, black, isort) |
-| pytest | Latest | Unit/integration testing |
-| moto | Latest with ce,s3 extras | AWS service mocking for tests |
-| pyarrow | Latest | Parquet file generation |
-| boto3 | Bundled with Lambda | AWS SDK |
+| Technology | Version / Constraint     | Notes                                                |
+| ---------- | ------------------------ | ---------------------------------------------------- |
+| Python     | >= 3.12                  | Lambda runtime                                       |
+| uv         | Latest                   | Package management, virtual env, lockfile            |
+| ruff       | Latest                   | Linting + formatting (replaces flake8, black, isort) |
+| pytest     | Latest                   | Unit/integration testing                             |
+| moto       | Latest with ce,s3 extras | AWS service mocking for tests                        |
+| pyarrow    | Latest                   | Parquet file generation                              |
+| boto3      | Bundled with Lambda      | AWS SDK                                              |
 
 ## Project Layout
 
@@ -57,6 +57,7 @@ lambda/
 Entry point: `dapanoskop.handler.handler`
 
 Reads environment variables:
+
 - `DATA_BUCKET` (required): S3 bucket name for output
 - `COST_CATEGORY_NAME` (optional): AWS Cost Category name
 - `INCLUDE_EFS` (optional, default "false"): Include EFS in storage metrics
@@ -85,9 +86,10 @@ Flow: collect → process → write_to_s3
 ## Categories (categories.py)
 
 Pattern-based categorization of AWS usage types:
-- **Storage**: TimedStorage*, EarlyDelete*, EBS:*, EFS:*
-- **Compute**: BoxUsage*, SpotUsage*, Lambda*, Fargate*, ECS*
-- **Support**: Tax*, Fee*, Refund*, Credit*, Premium*
+
+- **Storage**: TimedStorage*, EarlyDelete*, EBS:_, EFS:_
+- **Compute**: BoxUsage*, SpotUsage*, Lambda*, Fargate*, ECS\*
+- **Support**: Tax*, Fee*, Refund*, Credit*, Premium\*
 - **Other**: Everything else (DataTransfer, NatGateway, Requests, CW:, etc.)
 
 ## Output Schemas
@@ -116,6 +118,6 @@ uv run pytest
 
 1. **AWS managed Lambda layer**: `AWSSDKPandas-Python312` provides pyarrow — no native dependency builds
 2. **Pattern matching for categories**: Regex-based, order matters (first match wins)
-3. **Hot tier calculation**: (TimedStorage-ByteHrs + TimedStorage-INT-FA-ByteHrs) / total TimedStorage-*-ByteHrs
+3. **Hot tier calculation**: (TimedStorage-ByteHrs + TimedStorage-INT-FA-ByteHrs) / total TimedStorage-\*-ByteHrs
 4. **Cost per TB**: total_storage_cost / (total_bytes / 1,099,511,627,776)
 5. **Untagged workloads**: Empty App tag values grouped as "Untagged"
