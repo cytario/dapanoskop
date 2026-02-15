@@ -124,7 +124,7 @@ export default function Home() {
         <h1 className="text-lg font-bold text-white">Dapanoskop</h1>
         <button
           onClick={logout}
-          className="text-sm text-white/90 hover:text-white"
+          className="text-sm text-white/90 hover:text-white cursor-pointer hover:underline"
         >
           Logout
         </button>

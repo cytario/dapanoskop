@@ -70,7 +70,7 @@ export default function WorkloadDetail() {
         const bundle = await duckdb.selectBundle(DUCKDB_BUNDLES);
         if (!bundle.mainWorker) throw new Error("DuckDB bundle has no worker");
         worker = new Worker(bundle.mainWorker);
-        const logger = new duckdb.ConsoleLogger();
+        const logger = new duckdb.VoidLogger();
         db = new duckdb.AsyncDuckDB(logger, worker);
         await db.instantiate(bundle.mainModule);
         if (cancelled) return;
@@ -78,7 +78,6 @@ export default function WorkloadDetail() {
         let parquetSource: string;
 
         if (cfg.authBypass) {
-          // Dev mode: register HTTP URL for local sirv middleware
           const dataBase = import.meta.env.VITE_DATA_BASE_URL ?? "/data";
           const parquetUrl = `${dataBase}/${period}/cost-by-usage-type.parquet`;
           await db.registerFileURL(
@@ -89,9 +88,12 @@ export default function WorkloadDetail() {
           );
           parquetSource = "'usage.parquet'";
         } else {
-          // Production: configure S3 credentials for httpfs
+          // Load experimental httpfs for S3 protocol support (see duckdb/duckdb-wasm#2107)
           const creds = await getAwsCredentials();
           const conn = await db.connect();
+          await conn.query("SET builtin_httpfs = false");
+          await conn.query("LOAD httpfs");
+          await conn.query("SET enable_object_cache = true");
           const stmts = buildS3ConfigStatements({
             region: cfg.awsRegion,
             accessKeyId: creds.accessKeyId,
