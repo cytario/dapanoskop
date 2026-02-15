@@ -62,7 +62,7 @@ export function CostCenterCard({ costCenter, period }: CostCenterCardProps) {
               previous={costCenter.prev_month_cost_usd}
               label="MoM"
             />
-            <InfoTooltip text="Month-over-month cost change." />
+            <InfoTooltip text="Cost change from the previous calendar month, shown as absolute and percentage." />
           </span>
           {costCenter.yoy_cost_usd > 0 ? (
             <span className="inline-flex items-center">
@@ -71,7 +71,7 @@ export function CostCenterCard({ costCenter, period }: CostCenterCardProps) {
                 previous={costCenter.yoy_cost_usd}
                 label="YoY"
               />
-              <InfoTooltip text="Year-over-year cost change." />
+              <InfoTooltip text="Cost change compared to the same month last year. Helps identify long-term trends." />
             </span>
           ) : (
             <span className="text-gray-400 text-sm">YoY N/A</span>
@@ -83,7 +83,7 @@ export function CostCenterCard({ costCenter, period }: CostCenterCardProps) {
             <>
               {" "}
               · Top mover: {topMover.name} ({topMoverPct}% MoM)
-              <InfoTooltip text="Workload with the largest absolute cost change vs last month." />
+              <InfoTooltip text="The workload with the largest absolute dollar change compared to last month. Identifies where costs shifted the most." />
             </>
           )}
         </div>

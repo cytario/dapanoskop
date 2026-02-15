@@ -537,3 +537,48 @@ def test_storage_metrics_zero_volume() -> None:
     assert sm["total_volume_bytes"] == 0
     assert sm["hot_tier_percentage"] == 0.0
     assert sm["cost_per_tb_usd"] == 0.0  # No crash from division by zero
+
+
+def test_storage_metrics_with_efs_and_ebs() -> None:
+    """Test that EFS and EBS usage types are included in volume when flags are set.
+
+    Without include_efs/include_ebs, only TimedStorage-* types count toward volume.
+    With the flags enabled, EFS: and EBS: prefixes should also contribute.
+    """
+    collected = _make_collected(
+        current_groups=[
+            # S3 standard: 100 GB * 730 hours = 73,000 GB-hours
+            _make_group("app", "TimedStorage-ByteHrs", 50, 73_000),
+            # EFS usage (should only count when include_efs=True)
+            _make_group("app", "EFS:TimedStorage-ByteHrs", 30, 36_500),
+            # EBS usage (should only count when include_ebs=True)
+            _make_group("app", "EBS:VolumeUsage.gp3", 20, 14_600),
+        ],
+        prev_groups=[],
+        yoy_groups=[],
+    )
+
+    # Without flags: only TimedStorage-ByteHrs contributes to volume
+    result_no_flags = process(collected)
+    sm_no_flags = result_no_flags["summary"]["storage_metrics"]
+    expected_s3_bytes = (73_000 * 1_000_000_000) / 730  # 100 GB = 100,000,000,000
+    assert sm_no_flags["total_volume_bytes"] == round(expected_s3_bytes)
+
+    # With include_efs: S3 + EFS contribute
+    result_efs = process(collected, include_efs=True)
+    sm_efs = result_efs["summary"]["storage_metrics"]
+    expected_efs_bytes = ((73_000 + 36_500) * 1_000_000_000) / 730
+    assert sm_efs["total_volume_bytes"] == round(expected_efs_bytes)
+    assert sm_efs["total_volume_bytes"] > sm_no_flags["total_volume_bytes"]
+
+    # With include_ebs: S3 + EBS contribute
+    result_ebs = process(collected, include_ebs=True)
+    sm_ebs = result_ebs["summary"]["storage_metrics"]
+    expected_ebs_bytes = ((73_000 + 14_600) * 1_000_000_000) / 730
+    assert sm_ebs["total_volume_bytes"] == round(expected_ebs_bytes)
+
+    # With both flags: all three contribute
+    result_both = process(collected, include_efs=True, include_ebs=True)
+    sm_both = result_both["summary"]["storage_metrics"]
+    expected_all_bytes = ((73_000 + 36_500 + 14_600) * 1_000_000_000) / 730
+    assert sm_both["total_volume_bytes"] == round(expected_all_bytes)

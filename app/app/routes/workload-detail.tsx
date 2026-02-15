@@ -204,7 +204,7 @@ export default function WorkloadDetail() {
               <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
                 <div className="text-sm text-gray-500">
                   Current
-                  <InfoTooltip text="Total cost for this workload in the selected period." />
+                  <InfoTooltip text="Total cost for this workload in the selected period, including all usage types (compute, storage, data transfer, etc.)." />
                 </div>
                 <div className="text-xl font-semibold mt-1">
                   {formatUsd(workload.current_cost_usd)}
@@ -213,7 +213,7 @@ export default function WorkloadDetail() {
               <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
                 <div className="text-sm text-gray-500">
                   vs Last Month
-                  <InfoTooltip text="Change compared to the previous calendar month." />
+                  <InfoTooltip text="Cost change for this workload from the previous calendar month, shown as absolute and percentage." />
                 </div>
                 <div className="text-lg font-medium mt-1">
                   <CostChange
@@ -225,7 +225,7 @@ export default function WorkloadDetail() {
               <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
                 <div className="text-sm text-gray-500">
                   vs Last Year
-                  <InfoTooltip text="Change compared to the same month one year ago." />
+                  <InfoTooltip text="Cost change for this workload compared to the same month one year ago. Useful for spotting seasonal patterns." />
                 </div>
                 <div className="text-lg font-medium mt-1">
                   {workload.yoy_cost_usd > 0 ? (

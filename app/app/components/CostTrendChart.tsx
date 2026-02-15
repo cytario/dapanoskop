@@ -66,7 +66,7 @@ function CustomTooltip({
         Total: {formatUsd(total)}
       </p>
       {maEntry && maEntry.value != null && (
-        <p className="text-gray-500 text-xs mt-1">
+        <p className="text-xs mt-1" style={{ color: "#be185d" }}>
           3-Month Avg: {formatUsd(maEntry.value)}
         </p>
       )}
@@ -113,7 +113,7 @@ export default function CostTrendChart({
         <Line
           type="monotone"
           dataKey="_movingAvg"
-          stroke="#6b7280"
+          stroke="#be185d"
           strokeWidth={2}
           strokeDasharray="6 3"
           dot={false}

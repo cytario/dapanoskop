@@ -26,7 +26,7 @@ export function GlobalSummary({ summary }: GlobalSummaryProps) {
       <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
         <div className="text-sm text-gray-500">
           Total Spend
-          <InfoTooltip text="Sum of all cost center spend for this period." />
+          <InfoTooltip text="Total AWS spend across all cost centers for this period." />
         </div>
         <div className="text-2xl font-semibold mt-1">
           {formatUsd(totalCurrent)}
@@ -35,7 +35,7 @@ export function GlobalSummary({ summary }: GlobalSummaryProps) {
       <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
         <div className="text-sm text-gray-500">
           vs Last Month
-          <InfoTooltip text="Change compared to the previous calendar month." />
+          <InfoTooltip text="Change in total spend from the previous calendar month. Shows both the absolute dollar difference and the percentage change." />
         </div>
         <div className="text-lg font-medium mt-1">
           <CostChange current={totalCurrent} previous={totalPrev} />
@@ -44,7 +44,7 @@ export function GlobalSummary({ summary }: GlobalSummaryProps) {
       <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
         <div className="text-sm text-gray-500">
           vs Last Year
-          <InfoTooltip text="Change compared to the same month one year ago." />
+          <InfoTooltip text="Change in total spend compared to the same month one year ago. Useful for identifying seasonal trends and long-term cost trajectory." />
         </div>
         <div className="text-lg font-medium mt-1">
           {totalYoy > 0 ? (

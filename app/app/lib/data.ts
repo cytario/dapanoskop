@@ -72,19 +72,26 @@ async function discoverPeriodsLocal(): Promise<string[]> {
     // Fall through to probing
   }
 
-  const periods: string[] = [];
   const now = new Date();
-  for (let i = 0; i < 13; i++) {
+  const candidates: string[] = [];
+  for (let i = 0; i < 36; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    try {
-      const res = await fetch(`${DATA_BASE}/${period}/summary.json`, {
-        method: "HEAD",
-      });
-      if (res.ok) periods.push(period);
-    } catch {
-      // Skip unavailable periods
-    }
+    candidates.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+    );
   }
-  return periods;
+
+  const results = await Promise.allSettled(
+    candidates.map((period) =>
+      fetch(`${DATA_BASE}/${period}/summary.json`, {
+        method: "HEAD",
+        signal: AbortSignal.timeout(3000),
+      }).then((res) => ({ period, ok: res.ok })),
+    ),
+  );
+
+  return candidates.filter((period, i) => {
+    const result = results[i];
+    return result.status === "fulfilled" && result.value.ok;
+  });
 }

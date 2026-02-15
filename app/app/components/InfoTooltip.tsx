@@ -12,7 +12,7 @@ export function InfoTooltip({ text }: InfoTooltipProps) {
         i
       </span>
       <span
-        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block group-focus:block bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-normal w-48 text-center z-10 shadow-lg"
+        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block group-focus:block bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-normal w-64 text-center z-10 shadow-lg"
         role="tooltip"
       >
         {text}

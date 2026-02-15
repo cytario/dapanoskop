@@ -5,7 +5,7 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.8 (Draft)                                |
+| Version             | 0.9 (Draft)                                |
 | Date                | 2026-02-15                                 |
 
 ---
@@ -189,7 +189,7 @@ The Report Renderer renders total storage cost, cost per TB, and hot tier percen
 Refs: SRS-DP-310206, SRS-DP-310207, SRS-DP-310208
 
 **[SDS-DP-010206] Query Parquet via DuckDB-wasm httpfs S3**
-For drill-down views (e.g., usage types within a workload), the Report Renderer initializes DuckDB-wasm and configures it with temporary AWS credentials via `SET s3_region`, `SET s3_access_key_id`, `SET s3_secret_access_key`, and `SET s3_session_token` SQL statements. It then queries the relevant parquet file (e.g., `s3://{bucket}/{year}-{month}/cost-by-usage-type.parquet`) using the S3 protocol. Credential values are escaped (single quotes doubled) for defense-in-depth. In local dev mode (auth bypass), DuckDB uses the HTTP protocol against the local dev server instead.
+For drill-down views (e.g., usage types within a workload), the Report Renderer initializes DuckDB-wasm and configures it with temporary AWS credentials via `SET s3_region`, `SET s3_access_key_id`, `SET s3_secret_access_key`, and `SET s3_session_token` SQL statements. It then queries the relevant parquet file (e.g., `s3://{bucket}/{year}-{month}/cost-by-usage-type.parquet`) using the S3 protocol. Credential values are escaped (single quotes doubled) for defense-in-depth. In local dev mode (auth bypass), DuckDB uses the HTTP protocol against the local dev server instead. The DuckDB WASM bundles (`duckdb-eh.wasm`, `duckdb-browser-eh.worker.js`) are self-hosted in `public/duckdb/` and served as static assets at `/duckdb/*` without Vite content-hashing. A Vite plugin copies them from `node_modules/@duckdb/duckdb-wasm/dist/` at build and dev server start. Workers are created using stable URLs (e.g., `new Worker("/duckdb/duckdb-browser-eh.worker.js")`) to ensure reliable WASM instantiation.
 Refs: SRS-DP-310301, SRS-DP-430102
 
 **[SDS-DP-010207] Fetch Multi-Period Trend Data**
@@ -298,7 +298,7 @@ The Data Processor applies the Cost Category mapping from C-2.1 to assign each w
 Refs: SRS-DP-420103
 
 **[SDS-DP-020203] Compute Storage Volume and Hot Tier Metrics**
-The Data Processor computes total storage volume from S3 `TimedStorage-*` usage quantities (converting byte-hours to bytes) and calculates the hot tier percentage as: `(TimedStorage-ByteHrs + TimedStorage-INT-FA-ByteHrs) / total TimedStorage-*-ByteHrs`. When configured, EFS and EBS storage usage types are included in the totals. The processor uses decimal terabytes (TB = 10^12 bytes) for all volume conversions, consistent with AWS Cost Explorer and billing practices. Note: Prior to v1.5.0, the constant `_BYTES_PER_TB` incorrectly used tebibytes (TiB = 2^40 = 1,099,511,627,776) instead of terabytes, causing a ~10% overstatement in cost per TB values. This was corrected to 1,000,000,000,000 (10^12).
+The Data Processor computes total storage volume from S3 `TimedStorage-*` usage quantities and calculates the hot tier percentage as: `(TimedStorage-ByteHrs + TimedStorage-INT-FA-ByteHrs) / total TimedStorage-*-ByteHrs`. When configured, EFS and EBS storage usage types are included in the totals. **AWS Cost Explorer returns `UsageQuantity` for TimedStorage-* in GB-hours, not byte-hours.** The processor converts GB-hours to average bytes stored by multiplying by 1,000,000,000 (bytes per GB) and then dividing by the number of hours in the reporting month. The processor uses decimal terabytes (TB = 10^12 bytes) for all volume conversions, consistent with AWS Cost Explorer and billing practices. Note: Prior to v1.5.0, the constant `_BYTES_PER_TB` incorrectly used tebibytes (TiB = 2^40 = 1,099,511,627,776) instead of terabytes, causing a ~10% overstatement in cost per TB values. This was corrected to 1,000,000,000,000 (10^12). Prior to v1.6.0, the processor incorrectly treated GB-hours as byte-hours, producing storage volumes ~1 billion times too large and cost-per-TB values ~1 billion times too small.
 Refs: SRS-DP-420104
 
 **[SDS-DP-020204] Write Summary JSON**
@@ -838,9 +838,15 @@ Cost per TB is calculated as:
 cost_per_TB = total_storage_cost_usd / (total_storage_volume_bytes / 1_000_000_000_000)
 ```
 
-Where `total_storage_volume_bytes` is derived from `TimedStorage-*-ByteHrs` usage quantities (and optionally EFS/EBS when configured). Byte-hours are converted to bytes by dividing by the number of hours in the reporting month.
+Where `total_storage_volume_bytes` is derived from S3 `TimedStorage-*` usage quantities (and optionally EFS/EBS when configured). **AWS Cost Explorer returns these usage quantities in GB-hours, not byte-hours.** The conversion to average bytes stored is:
+
+```
+total_bytes = (GB-hours × 1_000_000_000) / hours_in_month
+```
 
 **Unit note**: The divisor is 10^12 (decimal terabytes, TB), not 2^40 (binary tebibytes, TiB). AWS Cost Explorer and billing use decimal units. Prior to v1.5.0, the constant incorrectly used 1,099,511,627,776 (TiB), causing a ~10% overstatement. The frontend `formatBytes` utility also aligns to decimal TB for display consistency.
+
+**Bug fix note**: Prior to v1.6.0, the processor incorrectly treated GB-hours as byte-hours, producing storage volumes ~1 billion times too large and cost-per-TB values ~1 billion times too small. This was corrected by adding the GB→bytes conversion (multiply by 1e9) before dividing by hours.
 
 ### 6.7 Runtime Configuration
 
@@ -1120,3 +1126,4 @@ Which charting library should be used to render the multi-period cost trend stac
 | 0.6     | 2026-02-14 | —      | Add backfill mode (SDS-DP-020103, 020208, §4.4); CSP updated with wasm-unsafe-eval and self-hosted fonts (SDS-DP-030101); CORS updated with amz-sdk-* headers (SDS-DP-030402); cost center prefix stripping (SDS-DP-020102); Cytario design system (§6.8) |
 | 0.7     | 2026-02-15 | —      | Add multi-period cost trend chart: useTrendData hook (SDS-DP-010207), CostTrendChart component (SDS-DP-010208), Recharts library decision (§7.9), update data flow documentation (§6.1) |
 | 0.8     | 2026-02-15 | —      | Add version injection mechanism (SDS-DP-010209, §6.2), shared Header/Footer components (SDS-DP-010210, 010211), InfoTooltip component (SDS-DP-010212), responsive breakpoints (SDS-DP-010213), 3-month moving average trend line (SDS-DP-010208 update); document TB (10^12) vs TiB (2^40) correction in cost per TB calculation (SDS-DP-020203, §6.6) |
+| 0.9     | 2026-02-15 | —      | Bug fix documentation: Clarify AWS Cost Explorer returns GB-hours (not byte-hours) for TimedStorage-* usage quantities; document GB→bytes conversion formula (SDS-DP-020203, §6.6); add self-hosted DuckDB WASM bundle deployment via Vite copy plugin (SDS-DP-010206) |
