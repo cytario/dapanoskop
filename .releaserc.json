@@ -3,11 +3,27 @@
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
-    ["@semantic-release/github", {
-      "assets": [
-        {"path": "lambda.zip", "label": "Lambda deployment package"},
-        {"path": "spa.tar.gz", "label": "SPA static files"}
-      ]
-    }]
+    [
+      "@semantic-release/npm",
+      {
+        "npmPublish": false,
+        "pkgRoot": "app"
+      }
+    ],
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "cd app && npm run build && tar -czf ../spa.tar.gz -C build/client ."
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          { "path": "lambda.zip", "label": "Lambda deployment package" },
+          { "path": "spa.tar.gz", "label": "SPA static files" }
+        ]
+      }
+    ]
   ]
 }

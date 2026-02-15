@@ -28,15 +28,11 @@ jobs:
       - name: Package Lambda
         run: cd lambda/src && zip -r ../../lambda.zip dapanoskop/
 
-      - name: Build SPA
-        run: |
-          cd app
-          npm ci
-          npm run build
-          tar -czf ../spa.tar.gz -C build/client .
+      - name: Install SPA dependencies
+        run: cd app && npm ci
 
-      - name: Install semantic-release
-        run: npm install -g semantic-release
+      - name: Install semantic-release plugins
+        run: npm install -g semantic-release @semantic-release/exec
 
       - name: Release
         env:
