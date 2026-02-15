@@ -5,3 +5,6 @@
 # React Router
 /.react-router/
 /build/
+
+# DuckDB WASM bundles copied by Vite plugin
+/public/duckdb/

@@ -50,11 +50,15 @@ def _compute_storage_metrics(
     include_efs: bool,
     include_ebs: bool,
 ) -> dict[str, Any]:
-    """Compute storage volume and hot tier metrics from usage data."""
+    """Compute storage volume and hot tier metrics from usage data.
+
+    Note: AWS Cost Explorer returns UsageQuantity for TimedStorage-* in GB-hours, not byte-hours.
+    We convert GB-hours to bytes: (GB-hours * 1e9) / hours_in_month = average bytes stored.
+    """
     total_cost = 0.0
     prev_total_cost = 0.0
-    total_byte_hours = 0.0
-    hot_byte_hours = 0.0
+    total_gb_hours = 0.0
+    hot_gb_hours = 0.0
 
     def _is_storage_volume(usage_type: str) -> bool:
         if usage_type.startswith("TimedStorage"):
@@ -72,18 +76,21 @@ def _compute_storage_metrics(
         if row["category"] == "Storage":
             total_cost += row["cost_usd"]
         if _is_storage_volume(row["usage_type"]):
-            total_byte_hours += row["usage_quantity"]
+            total_gb_hours += row["usage_quantity"]
             if _is_hot_tier(row["usage_type"]):
-                hot_byte_hours += row["usage_quantity"]
+                hot_gb_hours += row["usage_quantity"]
 
     for row in prev_rows:
         if row["category"] == "Storage":
             prev_total_cost += row["cost_usd"]
 
-    total_bytes = total_byte_hours / _HOURS_IN_MONTH if total_byte_hours else 0
+    # Convert GB-hours to bytes: (GB-hours × 1e9 bytes/GB) ÷ hours = average bytes stored
+    total_bytes = (
+        (total_gb_hours * 1_000_000_000) / _HOURS_IN_MONTH if total_gb_hours else 0
+    )
     # Cost per TB: total storage cost / (total volume in bytes / bytes per TB)
     cost_per_tb = total_cost / (total_bytes / _BYTES_PER_TB) if total_bytes else 0
-    hot_pct = (hot_byte_hours / total_byte_hours * 100) if total_byte_hours else 0
+    hot_pct = (hot_gb_hours / total_gb_hours * 100) if total_gb_hours else 0
 
     return {
         "total_cost_usd": round(total_cost, 2),

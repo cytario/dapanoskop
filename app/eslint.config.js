@@ -3,7 +3,7 @@ import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
 
 export default tseslint.config(
-  { ignores: ["build/", ".react-router/"] },
+  { ignores: ["build/", ".react-router/", "public/duckdb/"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

@@ -47,26 +47,16 @@ export default function WorkloadDetail() {
         const duckdb = await import("@duckdb/duckdb-wasm");
         if (cancelled) return;
 
+        // Self-hosted DuckDB bundles copied to public/duckdb/ by Vite plugin.
+        // Using stable paths that bypass Vite content-hashing.
         const DUCKDB_BUNDLES = {
           mvp: {
-            mainModule: new URL(
-              "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm",
-              import.meta.url,
-            ).href,
-            mainWorker: new URL(
-              "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js",
-              import.meta.url,
-            ).href,
+            mainModule: `${window.location.origin}/duckdb/duckdb-eh.wasm`,
+            mainWorker: `${window.location.origin}/duckdb/duckdb-browser-eh.worker.js`,
           },
           eh: {
-            mainModule: new URL(
-              "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm",
-              import.meta.url,
-            ).href,
-            mainWorker: new URL(
-              "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js",
-              import.meta.url,
-            ).href,
+            mainModule: `${window.location.origin}/duckdb/duckdb-eh.wasm`,
+            mainWorker: `${window.location.origin}/duckdb/duckdb-browser-eh.worker.js`,
           },
         };
 
@@ -149,8 +139,8 @@ export default function WorkloadDetail() {
       } finally {
         if (db) await db.terminate().catch(() => {});
         if (worker) worker.terminate();
+        if (!cancelled) setLoading(false);
       }
-      if (!cancelled) setLoading(false);
     }
 
     async function init() {
