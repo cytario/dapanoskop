@@ -14,6 +14,7 @@ import { GlobalSummary } from "~/components/GlobalSummary";
 import { TaggingCoverage } from "~/components/TaggingCoverage";
 import { CostCenterCard } from "~/components/CostCenterCard";
 import { StorageOverview } from "~/components/StorageOverview";
+import { CostTrendSection } from "~/components/CostTrendSection";
 
 export function meta() {
   return [
@@ -159,6 +160,9 @@ export default function Home() {
           <>
             {/* Global Summary */}
             <GlobalSummary summary={summary} />
+
+            {/* Cost Trend Chart */}
+            <CostTrendSection />
 
             {/* Storage Overview */}
             <StorageOverview metrics={summary.storage_metrics} />

@@ -1,4 +1,5 @@
 build/
 .react-router/
+.claude/
 node_modules/
 package-lock.json

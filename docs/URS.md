@@ -5,8 +5,8 @@
 | Document ID         | URS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.5 (Draft)                                |
-| Date                | 2026-02-14                                 |
+| Version             | 0.6 (Draft)                                |
+| Date                | 2026-02-15                                 |
 
 ---
 
@@ -97,6 +97,7 @@ The name comes from Greek δαπάνη (dapáni, "cost") + σκοπέω (skopéo
 - "I want a single page that shows me my cloud costs"
 - "I need to see which workloads cost the most"
 - "I want to compare this month to last month and to the same month last year"
+- "I want to see how costs have trended over the past year at a glance"
 - "I need to see both absolute dollar amounts and percentage changes"
 - "Show me storage costs separately because that is our biggest cost driver"
 - "I want to see cost per TB stored"
@@ -190,6 +191,9 @@ A Budget Owner reviews what percentage of data is stored in hot storage tiers (S
 **[URS-DP-10308] Access Report Without AWS Knowledge**
 A Budget Owner accesses and understands the cost report without requiring any knowledge of AWS services, infrastructure, or cloud terminology.
 
+**[URS-DP-10309] View Cost Trends Across Multiple Months**
+A Budget Owner views a visual summary of cost trends across all available reporting months (up to 12), broken down by cost center, to identify spending patterns, seasonal variations, and anomalies over time.
+
 #### 3.1.4 Investigate Cost Anomalies (Macro-Step 4)
 
 **[URS-DP-10401] Drill Into Workload Cost**
@@ -259,3 +263,4 @@ A Budget Owner understands the cost report without separate documentation. The r
 | 0.3     | 2026-02-13 | —      | Review for Cognito Identity Pool data access; no user-facing task changes (authentication remains transparent to users) |
 | 0.4     | 2026-02-13 | —      | Review for artifacts S3 bucket deployment mechanism; no user-facing task changes (deployment workflow remains identical) |
 | 0.5     | 2026-02-14 | —      | Add backfill historical cost data requirement (URS-DP-10105) |
+| 0.6     | 2026-02-15 | —      | Add multi-month cost trend visualization requirement (URS-DP-10309) |

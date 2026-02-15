@@ -5,8 +5,8 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.5 (Draft)                                |
-| Date                | 2026-02-14                                 |
+| Version             | 0.6 (Draft)                                |
+| Date                | 2026-02-15                                 |
 
 ---
 
@@ -135,6 +135,20 @@ Refs: URS-DP-10301, URS-DP-10302
 | 2  | MoM change | Currency + Percentage | Any | Combined display: "+$1,300 (+5.9%)" |
 | 3  | YoY change | Currency + Percentage | Any | Shows "N/A" if prior year data unavailable |
 
+##### Cost Trend Chart
+
+**[SRS-DP-310214] Display Multi-Period Cost Trend Chart**
+The system displays a stacked bar chart showing cost totals for all available reporting periods (up to 12 months), broken down by cost center. The chart loads independently of the selected reporting period — it always shows all available periods. Periods are displayed chronologically (oldest on the left). Cost centers are stacked within each bar, with the largest cost center at the bottom. A tooltip displays the per-cost-center cost and computed total for the hovered period. The chart loads asynchronously after the initial report render and displays a loading skeleton while data is being fetched.
+Refs: URS-DP-10309, URS-DP-10302
+
+| No | Element | Data type | Value range | Other relevant information |
+|----|---------|-----------|-------------|---------------------------|
+| 1  | Stacked bar chart | Chart | — | One bar per available period, stacked by cost center |
+| 2  | X-axis | Month labels | All available periods | Formatted as abbreviated month + 2-digit year (e.g., "Dec '25") |
+| 3  | Y-axis | Currency (USD) | ≥ 0 | Compact format (e.g., "$15K") |
+| 4  | Tooltip | Currency (USD) per cost center + total | ≥ 0 | Shows on hover; includes all cost centers and a total |
+| 5  | Legend | Cost center names | — | One entry per cost center with color indicator |
+
 ##### Cost Center Cards
 
 **[SRS-DP-310201] Display Cost Center Summary Cards**
@@ -247,7 +261,7 @@ Refs: URS-DP-10201, URS-DP-10202
 #### 3.1.5 Report Period Selection
 
 **[SRS-DP-310501] Select Reporting Month**
-The system displays a horizontal month strip showing all available reporting periods. The user selects a month by clicking it. The current (incomplete) month is labeled "MTD" (Month-to-date). The default selection is the most recently completed month.
+The system displays a horizontal month strip showing all available reporting periods. The user selects a month by clicking it. The current (incomplete) month is labeled "MTD" (Month-to-date). The default selection is the most recently completed month. Note: The cost trend chart (SRS-DP-310214) operates independently of this selector and always displays all available periods.
 Refs: URS-DP-10301
 
 | No | Element | Data type | Value range | Other relevant information |
@@ -517,3 +531,4 @@ Refs: URS-DP-10101
 | 0.3     | 2026-02-13 | —      | Add Cognito Identity Pool (SI-5) for temporary AWS credentials; SPA accesses S3 directly (not via CloudFront); add index.json period discovery; IAM-enforced data access; S3 CORS; expanded runtime config; S3 lifecycle policies for storage cost optimization |
 | 0.4     | 2026-02-13 | —      | Release artifacts staged in dedicated S3 artifacts bucket; Lambda deployed from S3; SPA synced from artifacts bucket; S3 version-based change detection; artifacts bucket lifecycle policy |
 | 0.5     | 2026-02-14 | —      | Add backfill historical data capability (SRS-DP-420106); update S3 CORS to include `amz-sdk-*` headers for AWS SDK v3 compatibility |
+| 0.6     | 2026-02-15 | —      | Add multi-period cost trend chart (SRS-DP-310214); note trend chart independence from period selector (SRS-DP-310501) |

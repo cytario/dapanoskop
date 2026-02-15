@@ -5,8 +5,8 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.6 (Draft)                                |
-| Date                | 2026-02-14                                 |
+| Version             | 0.7 (Draft)                                |
+| Date                | 2026-02-15                                 |
 
 ---
 
@@ -191,6 +191,14 @@ Refs: SRS-DP-310206, SRS-DP-310207, SRS-DP-310208
 **[SDS-DP-010206] Query Parquet via DuckDB-wasm httpfs S3**
 For drill-down views (e.g., usage types within a workload), the Report Renderer initializes DuckDB-wasm and configures it with temporary AWS credentials via `SET s3_region`, `SET s3_access_key_id`, `SET s3_secret_access_key`, and `SET s3_session_token` SQL statements. It then queries the relevant parquet file (e.g., `s3://{bucket}/{year}-{month}/cost-by-usage-type.parquet`) using the S3 protocol. Credential values are escaped (single quotes doubled) for defense-in-depth. In local dev mode (auth bypass), DuckDB uses the HTTP protocol against the local dev server instead.
 Refs: SRS-DP-310301, SRS-DP-430102
+
+**[SDS-DP-010207] Fetch Multi-Period Trend Data**
+The Report Renderer includes a `useTrendData` hook that fetches all available periods' summary.json files in parallel via `Promise.allSettled`. For each successfully fetched summary, the hook extracts `current_cost_usd` per cost center and pivots it into a chart-ready data point `{ period, [costCenterName]: costUsd }`. Points are sorted chronologically (oldest first). Cost center names are collected and sorted by total cost descending (largest first, appearing at the bottom of the stacked chart). Failed period fetches are silently excluded — partial data is displayed rather than failing entirely. The hook exposes `{ points, costCenterNames, loading, error }`.
+Refs: SRS-DP-310214
+
+**[SDS-DP-010208] Render Cost Trend Chart**
+The Report Renderer includes a `CostTrendChart` component that renders a Recharts stacked bar chart. Each cost center is a separate `Bar` element with `stackId="cost"`. The chart uses a deterministic color palette (blue, violet, cyan, emerald, amber, red) assigned by cost center index. The X-axis formats periods using `formatPeriodLabel()` (e.g., "Dec '25"). The Y-axis uses compact USD formatting (e.g., "$15K"). A custom tooltip shows per-cost-center costs and a computed total. The chart component is loaded via `React.lazy` with a `Suspense` boundary showing a pulse skeleton, so the Recharts bundle (~105 KB gzipped) is code-split and does not block initial page paint. The trend section is positioned between the Global Summary and Storage Overview on the cost report page.
+Refs: SRS-DP-310214
 
 **[SDS-DP-010205] Apply Business-Friendly Labels**
 The Report Renderer maps internal identifiers to business-friendly labels (e.g., App tag values displayed as "Workload", usage categories displayed without AWS terminology).
@@ -746,7 +754,11 @@ Dapanoskop follows a **two-tier data pattern**:
 1. **summary.json** — Pre-computed aggregates for the 1-page report. Small, fast to fetch, renders instantly.
 2. **Parquet files** — Detailed cost data queryable via DuckDB-wasm for drill-down. Parquet's columnar format and DuckDB's HTTP range request support mean only the needed byte ranges are fetched, not the full file.
 
-All data is collected and processed by the Lambda function (server-side, scheduled). The SPA never calls the Cost Explorer API. The SPA accesses pre-computed data from S3 using temporary, narrowly-scoped AWS credentials obtained via the Cognito Identity Pool. This design:
+All data is collected and processed by the Lambda function (server-side, scheduled). The SPA never calls the Cost Explorer API. The SPA accesses pre-computed data from S3 using temporary, narrowly-scoped AWS credentials obtained via the Cognito Identity Pool.
+
+The cost trend chart introduces a third access pattern: it fetches all available periods' summary.json files in parallel (up to 12 requests) to build a multi-month view. This is heavier than the single-period fetch but uses the same small summary.json files. The chart loads asynchronously after the initial report render (via `React.lazy`), so it does not block the primary report display.
+
+This design:
 
 - Enforces data access at the IAM level (server-side, not client-side token checks)
 - Scopes browser credentials to `s3:GetObject` on the data bucket only
@@ -1043,6 +1055,33 @@ Where should release artifacts (Lambda zip, SPA tarball) be stored during and af
 #### 7.8.5 Decision
 **Option C: Dedicated artifacts S3 bucket**. This avoids the plan-time/apply-time mismatch entirely by using S3 data sources (deferred on first apply, resolved at plan time thereafter). The dedicated bucket prevents CloudFront exposure of raw deployment artifacts and avoids collision with `s3 sync --delete` during SPA deployment. S3 object versions provide reliable change detection for both Lambda code updates and SPA redeployment.
 
+### 7.9 Chart Library for Cost Trend Visualization
+
+#### 7.9.1 Issue
+Which charting library should be used to render the multi-period cost trend stacked bar chart?
+
+#### 7.9.2 Boundary Conditions
+- Must support stacked bar charts with tooltips and legends
+- Must work in a React SPA (component-based API)
+- Should be code-splittable (lazy-loadable) to avoid bloating the initial bundle
+- The chart is read-only — no interactive editing or animation requirements
+
+#### 7.9.3 Assumptions
+- Only one chart type (stacked bar) is needed initially
+- The dataset is small (up to 12 data points with 3-5 series)
+
+#### 7.9.4 Considered Alternatives
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **A: Recharts** | React-native; declarative component API; good defaults for bar/stacked charts; responsive container; ~105 KB gzipped | Built on D3 internals; slightly larger than minimal options |
+| B: Victory | React-native; flexible theming | Larger bundle; more complex API for simple use cases |
+| C: Nivo | Beautiful defaults; React-native | Heavier; more dependencies; overkill for one chart |
+| D: D3 (direct) | Maximum flexibility; smallest core size | Imperative API; requires manual React integration; much more code |
+
+#### 7.9.5 Decision
+**Option A: Recharts**. Its declarative React component API (`BarChart`, `Bar`, `XAxis`, etc.) aligns with the existing component architecture and requires minimal code for a stacked bar chart. The ~105 KB gzipped bundle is mitigated by code-splitting via `React.lazy`. D3 was rejected because the imperative API would require significantly more code for a single chart type.
+
 ---
 
 ## 8. Change History
@@ -1055,3 +1094,4 @@ Where should release artifacts (Lambda zip, SPA tarball) be stored during and af
 | 0.4     | 2026-02-13 | —      | Replace CloudFront data path with Cognito Identity Pool + direct S3 access; add C-1.3 Credentials Module; DuckDB httpfs S3 protocol; index.json manifest; S3 CORS; IAM-enforced data access (§6.4, §7.7); S3 lifecycle policies (§3.3.1, §3.3.4) |
 | 0.5     | 2026-02-13 | —      | Replace local artifact download with dedicated S3 artifacts bucket; C-3.5 now creates bucket and uploads artifacts; C-3.3 Lambda deployed from S3; C-3.1 SPA synced from artifacts bucket; S3 version-based change detection; new design decision §7.8 |
 | 0.6     | 2026-02-14 | —      | Add backfill mode (SDS-DP-020103, 020208, §4.4); CSP updated with wasm-unsafe-eval and self-hosted fonts (SDS-DP-030101); CORS updated with amz-sdk-* headers (SDS-DP-030402); cost center prefix stripping (SDS-DP-020102); Cytario design system (§6.8) |
+| 0.7     | 2026-02-15 | —      | Add multi-period cost trend chart: useTrendData hook (SDS-DP-010207), CostTrendChart component (SDS-DP-010208), Recharts library decision (§7.9), update data flow documentation (§6.1) |

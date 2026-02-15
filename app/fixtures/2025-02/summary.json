@@ -1,0 +1,111 @@
+{
+  "collected_at": "2025-03-01T06:00:00Z",
+  "period": "2025-02",
+  "periods": {
+    "current": "2025-02",
+    "prev_month": "2025-01",
+    "yoy": "2024-02"
+  },
+  "storage_config": {
+    "include_efs": false,
+    "include_ebs": false
+  },
+  "storage_metrics": {
+    "total_cost_usd": 3109.06,
+    "prev_month_cost_usd": 3070.67,
+    "total_volume_bytes": 4056000000000,
+    "hot_tier_percentage": 59.4,
+    "cost_per_tb_usd": 22.7
+  },
+  "cost_centers": [
+    {
+      "name": "Engineering",
+      "current_cost_usd": 11076,
+      "prev_month_cost_usd": 10926.46,
+      "yoy_cost_usd": 8455.66,
+      "workloads": [
+        {
+          "name": "data-pipeline",
+          "current_cost_usd": 3743.69,
+          "prev_month_cost_usd": 3693.14,
+          "yoy_cost_usd": 2858.01
+        },
+        {
+          "name": "ml-training",
+          "current_cost_usd": 3200.96,
+          "prev_month_cost_usd": 3157.75,
+          "yoy_cost_usd": 2443.69
+        },
+        {
+          "name": "web-platform",
+          "current_cost_usd": 2337.04,
+          "prev_month_cost_usd": 2305.48,
+          "yoy_cost_usd": 1784.14
+        },
+        {
+          "name": "monitoring",
+          "current_cost_usd": 1174.06,
+          "prev_month_cost_usd": 1158.2,
+          "yoy_cost_usd": 896.3
+        },
+        {
+          "name": "Untagged",
+          "current_cost_usd": 620.26,
+          "prev_month_cost_usd": 611.88,
+          "yoy_cost_usd": 473.52
+        }
+      ]
+    },
+    {
+      "name": "Data Science",
+      "current_cost_usd": 5232.21,
+      "prev_month_cost_usd": 5043.82,
+      "yoy_cost_usd": 3949.63,
+      "workloads": [
+        {
+          "name": "analytics-platform",
+          "current_cost_usd": 2616.11,
+          "prev_month_cost_usd": 2521.91,
+          "yoy_cost_usd": 1974.82
+        },
+        {
+          "name": "data-lake",
+          "current_cost_usd": 1846.97,
+          "prev_month_cost_usd": 1780.47,
+          "yoy_cost_usd": 1394.22
+        },
+        {
+          "name": "batch-jobs",
+          "current_cost_usd": 769.13,
+          "prev_month_cost_usd": 741.44,
+          "yoy_cost_usd": 580.6
+        }
+      ]
+    },
+    {
+      "name": "Platform",
+      "current_cost_usd": 954.65,
+      "prev_month_cost_usd": 918.74,
+      "yoy_cost_usd": 696.81,
+      "workloads": [
+        {
+          "name": "shared-services",
+          "current_cost_usd": 596.66,
+          "prev_month_cost_usd": 574.21,
+          "yoy_cost_usd": 435.51
+        },
+        {
+          "name": "ci-cd",
+          "current_cost_usd": 357.99,
+          "prev_month_cost_usd": 344.53,
+          "yoy_cost_usd": 261.3
+        }
+      ]
+    }
+  ],
+  "tagging_coverage": {
+    "tagged_cost_usd": 16641.4,
+    "untagged_cost_usd": 621.46,
+    "tagged_percentage": 96.4
+  }
+}
