@@ -75,25 +75,27 @@ export default function WorkloadDetail() {
         await db.instantiate(bundle.mainModule);
         if (cancelled) return;
 
+        // Set up connection — for S3, configure httpfs on the same connection
+        // that will run the query (matches cytario-web's working pattern)
         let parquetSource: string;
+        const conn = await db.connect();
 
         if (cfg.authBypass) {
           const dataBase = import.meta.env.VITE_DATA_BASE_URL ?? "/data";
           const parquetUrl = `${dataBase}/${period}/cost-by-usage-type.parquet`;
-          await db.registerFileURL(
-            "usage.parquet",
-            parquetUrl,
-            duckdb.DuckDBDataProtocol.HTTP,
-            false,
-          );
+          const response = await fetch(parquetUrl);
+          if (!response.ok)
+            throw new Error(`Failed to fetch parquet: ${response.status}`);
+          const buffer = new Uint8Array(await response.arrayBuffer());
+          await db.registerFileBuffer("usage.parquet", buffer);
           parquetSource = "'usage.parquet'";
         } else {
           // Load experimental httpfs for S3 protocol support (see duckdb/duckdb-wasm#2107)
-          const creds = await getAwsCredentials();
-          const conn = await db.connect();
           await conn.query("SET builtin_httpfs = false");
           await conn.query("LOAD httpfs");
           await conn.query("SET enable_object_cache = true");
+          await conn.query("SET http_keep_alive = true");
+          const creds = await getAwsCredentials();
           const stmts = buildS3ConfigStatements({
             region: cfg.awsRegion,
             accessKeyId: creds.accessKeyId,
@@ -103,11 +105,9 @@ export default function WorkloadDetail() {
           for (const stmt of stmts) {
             await conn.query(stmt);
           }
-          await conn.close();
           parquetSource = `'s3://${cfg.dataBucketName}/${period}/cost-by-usage-type.parquet'`;
         }
 
-        const conn = await db.connect();
         try {
           const stmt = await conn.prepare(`
             SELECT workload, usage_type, category, period, cost_usd, usage_quantity
