@@ -5,7 +5,7 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.6 (Draft)                                |
+| Version             | 0.7 (Draft)                                |
 | Date                | 2026-02-15                                 |
 
 ---
@@ -109,13 +109,25 @@ The web application is a SPA. Users authenticate via a Cognito User Pool (existi
 The system redirects unauthenticated users to the Cognito hosted UI for login. The hosted UI is provided by the Cognito User Pool (existing or module-managed). When federation is configured, the Cognito hosted UI redirects the user to the external identity provider. Upon successful authentication, the user is redirected back to the application with a valid session.
 Refs: URS-DP-10103, URS-DP-10104, URS-DP-20301
 
-**[SRS-DP-310102] Session Persistence**
+**[SRS-DP-310102] Application Logo Display**
+The system displays a logo (Greek letter δ) in the application header on all screens, visually reinforcing the product identity.
+Refs: URS-DP-30103
+
+**[SRS-DP-310103] Browser Favicon**
+The system displays a favicon (Greek letter δ) in the browser tab, improving tab identification when multiple applications are open.
+Refs: URS-DP-30103
+
+**[SRS-DP-310104] Clickable Header Navigation**
+The application header (logo + title) is clickable and navigates to the cost report home, preserving the current period selection if one was active.
+Refs: URS-DP-30103
+
+**[SRS-DP-310105] Session Persistence**
 The system maintains the user's authenticated session using Cognito tokens stored in the browser. The session remains valid until the token expires.
 Refs: URS-DP-20301
 
 Session duration: 1 hour for ID and access tokens, 12 hours for refresh tokens.
 
-**[SRS-DP-310103] Runtime Configuration**
+**[SRS-DP-310106] Runtime Configuration**
 The system loads deployment-specific configuration at runtime from a configuration file served alongside the SPA, rather than at build time. The configuration includes: Cognito domain, client ID, User Pool ID, Identity Pool ID, AWS region, and data bucket name. This allows the same SPA build artifact to be deployed to different environments.
 Refs: URS-DP-10101, URS-DP-10103
 
@@ -126,8 +138,8 @@ This is the primary screen of the application. It presents a single-page cost re
 ##### Global Summary
 
 **[SRS-DP-310211] Display Global Cost Summary**
-The system displays a summary bar at the top of the report showing three metrics: total spend across all cost centers for the current period, the MoM change (absolute and percentage combined), and the YoY change (absolute and percentage combined).
-Refs: URS-DP-10301, URS-DP-10302
+The system displays a summary bar at the top of the report showing three metrics: total spend across all cost centers for the current period, the MoM change (absolute and percentage combined), and the YoY change (absolute and percentage combined). On viewports narrower than 640px (Tailwind `sm` breakpoint), the three metrics stack vertically in a single column.
+Refs: URS-DP-10301, URS-DP-10302, URS-DP-30104
 
 | No | Element | Data type | Value range | Other relevant information |
 |----|---------|-----------|-------------|---------------------------|
@@ -138,8 +150,8 @@ Refs: URS-DP-10301, URS-DP-10302
 ##### Cost Trend Chart
 
 **[SRS-DP-310214] Display Multi-Period Cost Trend Chart**
-The system displays a stacked bar chart showing cost totals for all available reporting periods (up to 12 months), broken down by cost center. The chart loads independently of the selected reporting period — it always shows all available periods. Periods are displayed chronologically (oldest on the left). Cost centers are stacked within each bar, with the largest cost center at the bottom. A tooltip displays the per-cost-center cost and computed total for the hovered period. The chart loads asynchronously after the initial report render and displays a loading skeleton while data is being fetched.
-Refs: URS-DP-10309, URS-DP-10302
+The system displays a stacked bar chart showing cost totals for all available reporting periods (up to 12 months), broken down by cost center. The chart loads independently of the selected reporting period — it always shows all available periods. Periods are displayed chronologically (oldest on the left). Cost centers are stacked within each bar, with the largest cost center at the bottom. A tooltip displays the per-cost-center cost and computed total for the hovered period. The chart loads asynchronously after the initial report render and displays a loading skeleton while data is being fetched. On narrow viewports, the legend is positioned below the chart to prevent overlap.
+Refs: URS-DP-10309, URS-DP-10302, URS-DP-30104
 
 | No | Element | Data type | Value range | Other relevant information |
 |----|---------|-----------|-------------|---------------------------|
@@ -147,7 +159,15 @@ Refs: URS-DP-10309, URS-DP-10302
 | 2  | X-axis | Month labels | All available periods | Formatted as abbreviated month + 2-digit year (e.g., "Dec '25") |
 | 3  | Y-axis | Currency (USD) | ≥ 0 | Compact format (e.g., "$15K") |
 | 4  | Tooltip | Currency (USD) per cost center + total | ≥ 0 | Shows on hover; includes all cost centers and a total |
-| 5  | Legend | Cost center names | — | One entry per cost center with color indicator |
+| 5  | Legend | Cost center names | — | One entry per cost center with color indicator; positioned below chart on mobile |
+
+**[SRS-DP-310215] Display Cost Trend Line**
+The system overlays a dashed line on the cost trend chart showing the 3-month simple moving average of aggregate total cost (sum of all cost centers), enabling users to distinguish short-term volatility from sustained cost trajectory changes. The first two data points have no trend line value (insufficient window). The trend line is not configurable.
+Refs: URS-DP-10310
+
+| No | Element | Data type | Value range | Other relevant information |
+|----|---------|-----------|-------------|---------------------------|
+| 1  | Trend line | Line chart overlay | ≥ 0 | 3-month moving average; dashed gray line; labeled "3-Month Avg" |
 
 ##### Cost Center Cards
 
@@ -198,29 +218,33 @@ Refs: URS-DP-10202
 The storage overview is displayed as three distinct metric cards at the bottom of the report.
 
 **[SRS-DP-310206] Display Total Storage Cost**
-The system displays the total storage cost as an aggregate across all cost centers, with MoM change (absolute and percentage combined). S3 storage is always included. EFS and EBS storage inclusion is configurable at deployment time.
-Refs: URS-DP-10305, URS-DP-10302
+The system displays the total storage cost as an aggregate across all cost centers, with MoM change (absolute and percentage combined). S3 storage is always included. EFS and EBS storage inclusion is configurable at deployment time. A tooltip explains which storage services are included based on the deployment configuration.
+Refs: URS-DP-10305, URS-DP-10302, URS-DP-30102
 
 **[SRS-DP-310207] Display Cost per TB Stored**
-The system displays the cost per terabyte stored, calculated from total storage cost divided by total storage volume.
-Refs: URS-DP-10306
+The system displays the cost per terabyte stored, calculated from total storage cost divided by total storage volume (in decimal terabytes, 10^12 bytes). A tooltip explains the calculation formula.
+Refs: URS-DP-10306, URS-DP-30102
 
 **[SRS-DP-310208] Display Hot Tier Percentage**
-The system displays the percentage of total data volume (in bytes) stored in hot storage tiers (S3 Standard, S3 Intelligent-Tiering Frequent Access, and optionally EFS/EBS depending on configuration).
-Refs: URS-DP-10307
+The system displays the percentage of total data volume (in bytes) stored in hot storage tiers (S3 Standard, S3 Intelligent-Tiering Frequent Access, and optionally EFS/EBS depending on configuration). A tooltip explains which tiers are considered "hot".
+Refs: URS-DP-10307, URS-DP-30102
 
 | No | Element | Data type | Value range | Other relevant information |
 |----|---------|-----------|-------------|---------------------------|
-| 1  | Total storage cost | Currency (USD) | ≥ 0 | Aggregated across configured storage services |
-| 2  | Storage cost MoM change | Currency + Percentage | Any | Combined: "+$150 (+3.7%)" |
-| 3  | Cost per TB stored | Currency (USD/TB) | ≥ 0 | |
-| 4  | Hot tier percentage | Percentage | 0–100% | Based on storage volume (bytes), not cost |
+| 1  | Total storage cost | Currency (USD) | ≥ 0 | Aggregated across configured storage services; tooltip present |
+| 2  | Storage cost MoM change | Currency + Percentage | Any | Combined: "+$150 (+3.7%)"; tooltip present |
+| 3  | Cost per TB stored | Currency (USD/TB) | ≥ 0 | Tooltip explains calculation |
+| 4  | Hot tier percentage | Percentage | 0–100% | Based on storage volume (bytes), not cost; tooltip explains tier definitions |
 
 ##### Report Presentation
 
 **[SRS-DP-310209] Business-Friendly Terminology**
-The system uses business-friendly labels throughout the report (e.g., "Workload" instead of "App tag", "Storage" instead of listing AWS service names). No AWS-specific terminology is exposed in the default report view.
-Refs: URS-DP-10308
+The system uses business-friendly labels throughout the report (e.g., "Workload" instead of "App tag", "Storage" instead of listing AWS service names). No AWS-specific terminology is exposed in the default report view. Contextual tooltips provide concise explanations for calculated metrics and comparisons.
+Refs: URS-DP-10308, URS-DP-30102
+
+**[SRS-DP-310216] Application Version Display**
+The system displays the application version in the footer after sign-in, following semantic versioning. The version string is injected at build time from package.json and displayed in the format "Dapanoskop vX.Y.Z".
+Refs: URS-DP-30102
 
 **[SRS-DP-310210] Visual Indicators for Cost Direction**
 The system visually indicates whether cost changes are increases or decreases using color coding (green for decreases, red for increases), direction arrows, and sign prefixes (+/-).
@@ -511,10 +535,8 @@ The system runs entirely on AWS. Required AWS services:
 Refs: URS-DP-10101
 
 **[SRS-DP-600002] Browser Compatibility**
-The web application runs in modern web browsers (latest versions of Chrome, Firefox, Safari, Edge).
-Refs: URS-DP-10308
-
-No mobile optimization is provided initially. Desktop browsers only.
+The web application runs in modern web browsers (latest versions of Chrome, Firefox, Safari, Edge) on both desktop and mobile devices. Layouts use responsive design patterns to adapt to narrow viewports (stacking columns, repositioning legends). Desktop browsers remain the primary design target; mobile support ensures content is accessible and readable but may not be fully optimized for touch interaction.
+Refs: URS-DP-10308, URS-DP-30104
 
 **[SRS-DP-600003] Terraform Version**
 The Terraform module targets OpenTofu and is compatible with Terraform >= 1.5. It requires the AWS provider >= 5.0.
@@ -532,3 +554,4 @@ Refs: URS-DP-10101
 | 0.4     | 2026-02-13 | —      | Release artifacts staged in dedicated S3 artifacts bucket; Lambda deployed from S3; SPA synced from artifacts bucket; S3 version-based change detection; artifacts bucket lifecycle policy |
 | 0.5     | 2026-02-14 | —      | Add backfill historical data capability (SRS-DP-420106); update S3 CORS to include `amz-sdk-*` headers for AWS SDK v3 compatibility |
 | 0.6     | 2026-02-15 | —      | Add multi-period cost trend chart (SRS-DP-310214); note trend chart independence from period selector (SRS-DP-310501) |
+| 0.7     | 2026-02-15 | —      | Add logo/favicon/header navigation (SRS-DP-310102-104), cost trend line (SRS-DP-310215), contextual tooltips (SRS-DP-310206-209 updates), version display (SRS-DP-310216), mobile responsiveness (SRS-DP-310211, 310214, 600002 updates); note decimal TB in cost per TB (SRS-DP-310207) |

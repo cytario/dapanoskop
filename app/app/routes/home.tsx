@@ -15,6 +15,9 @@ import { TaggingCoverage } from "~/components/TaggingCoverage";
 import { CostCenterCard } from "~/components/CostCenterCard";
 import { StorageOverview } from "~/components/StorageOverview";
 import { CostTrendSection } from "~/components/CostTrendSection";
+import { Header } from "~/components/Header";
+import { Footer } from "~/components/Footer";
+import { DeltaLogo } from "~/components/DeltaLogo";
 
 export function meta() {
   return [
@@ -103,7 +106,10 @@ export default function Home() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Dapanoskop</h1>
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <DeltaLogo className="w-8 h-8" />
+            <h1 className="text-2xl font-bold">Dapanoskop</h1>
+          </div>
           <p className="text-gray-600 mb-6">
             Sign in to view your cost report.
           </p>
@@ -121,15 +127,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-cytario-gradient px-6 py-3 flex items-center justify-between shadow-sm">
-        <h1 className="text-lg font-bold text-white">Dapanoskop</h1>
-        <button
-          onClick={logout}
-          className="text-sm text-white/90 hover:text-white cursor-pointer hover:underline"
-        >
-          Logout
-        </button>
-      </header>
+      <Header period={selectedPeriod} onLogout={logout} />
 
       <main className="max-w-5xl mx-auto px-6 py-6 space-y-6">
         {/* Period Selector */}
@@ -185,9 +183,7 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="text-center py-4 text-xs text-gray-400">
-        Dapanoskop v0.1.0
-      </footer>
+      <Footer />
     </div>
   );
 }

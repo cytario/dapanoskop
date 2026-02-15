@@ -15,7 +15,7 @@ from dapanoskop.categories import categorize
 
 _DEFAULT_CC = "Uncategorized"
 _HOURS_IN_MONTH = 730  # Average hours in a month
-_BYTES_PER_TB = 1_099_511_627_776
+_BYTES_PER_TB = 1_000_000_000_000  # 10^12 bytes per terabyte (decimal, not binary)
 
 
 def _parse_groups(
@@ -81,6 +81,7 @@ def _compute_storage_metrics(
             prev_total_cost += row["cost_usd"]
 
     total_bytes = total_byte_hours / _HOURS_IN_MONTH if total_byte_hours else 0
+    # Cost per TB: total storage cost / (total volume in bytes / bytes per TB)
     cost_per_tb = total_cost / (total_bytes / _BYTES_PER_TB) if total_bytes else 0
     hot_pct = (hot_byte_hours / total_byte_hours * 100) if total_byte_hours else 0
 

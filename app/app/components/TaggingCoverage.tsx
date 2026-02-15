@@ -1,5 +1,6 @@
 import type { TaggingCoverage as TaggingCoverageData } from "~/types/cost-data";
 import { formatUsd } from "~/lib/format";
+import { InfoTooltip } from "./InfoTooltip";
 
 interface TaggingCoverageProps {
   data: TaggingCoverageData;
@@ -11,6 +12,7 @@ export function TaggingCoverage({ data }: TaggingCoverageProps) {
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium text-gray-700">
           Tagging Coverage
+          <InfoTooltip text="Proportion of spend attributed to tagged resources." />
         </span>
         <span className="text-sm text-gray-500">
           {data.tagged_percentage.toFixed(1)}% tagged (

@@ -132,6 +132,11 @@ def test_storage_metrics() -> None:
         * 100
     )
     assert abs(sm["hot_tier_percentage"] - round(expected_hot, 1)) < 0.2
+    # Verify cost_per_tb_usd calculation is applied correctly
+    expected_volume_bytes = (730_000_000_000 + 365_000_000_000 + 730_000_000_000) / 730
+    expected_volume_tb = expected_volume_bytes / 1_000_000_000_000
+    expected_cost_per_tb = 750.0 / expected_volume_tb
+    assert abs(sm["cost_per_tb_usd"] - round(expected_cost_per_tb, 2)) < 0.1
 
 
 def test_multiple_cost_centers() -> None:
@@ -472,6 +477,34 @@ def test_parse_groups_missing_keys_field() -> None:
 
     # Missing Keys should be handled gracefully
     assert result == []
+
+
+def test_storage_metrics_realistic_scale() -> None:
+    """Test storage metrics with realistic AWS byte-hour magnitudes."""
+    # Scenario: 5 TB stored for entire month (730 hours)
+    # 5 TB = 5,000,000,000,000 bytes
+    # 5 TB * 730 hours = 3,650,000,000,000,000 byte-hours
+    # AWS S3 Standard pricing: ~$0.023/GB = ~$23/TB/month
+    # Expected cost: 5 TB * $23 = $115
+
+    collected = _make_collected(
+        current_groups=[
+            _make_group("app", "TimedStorage-ByteHrs", 115.0, 3_650_000_000_000_000),
+        ],
+        prev_groups=[
+            _make_group("app", "TimedStorage-ByteHrs", 110.0, 3_500_000_000_000_000),
+        ],
+        yoy_groups=[],
+    )
+
+    result = process(collected)
+    sm = result["summary"]["storage_metrics"]
+
+    # Verify volume: 3.65e15 byte-hours / 730 hours = 5,000,000,000,000 bytes = 5 TB
+    assert sm["total_volume_bytes"] == 5_000_000_000_000
+
+    # Verify cost per TB: $115 / 5 TB = $23/TB (realistic S3 Standard pricing)
+    assert sm["cost_per_tb_usd"] == 23.0
 
 
 def test_storage_metrics_zero_volume() -> None:

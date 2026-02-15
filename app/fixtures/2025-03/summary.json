@@ -13,7 +13,7 @@
   "storage_metrics": {
     "total_cost_usd": 3246.81,
     "prev_month_cost_usd": 3215.93,
-    "total_volume_bytes": 4160000000000,
+    "total_volume_bytes": 143000000000000,
     "hot_tier_percentage": 59.5,
     "cost_per_tb_usd": 22.71
   },

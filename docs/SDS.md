@@ -5,7 +5,7 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.7 (Draft)                                |
+| Version             | 0.8 (Draft)                                |
 | Date                | 2026-02-15                                 |
 
 ---
@@ -196,13 +196,33 @@ Refs: SRS-DP-310301, SRS-DP-430102
 The Report Renderer includes a `useTrendData` hook that fetches all available periods' summary.json files in parallel via `Promise.allSettled`. For each successfully fetched summary, the hook extracts `current_cost_usd` per cost center and pivots it into a chart-ready data point `{ period, [costCenterName]: costUsd }`. Points are sorted chronologically (oldest first). Cost center names are collected and sorted by total cost descending (largest first, appearing at the bottom of the stacked chart). Failed period fetches are silently excluded — partial data is displayed rather than failing entirely. The hook exposes `{ points, costCenterNames, loading, error }`.
 Refs: SRS-DP-310214
 
-**[SDS-DP-010208] Render Cost Trend Chart**
-The Report Renderer includes a `CostTrendChart` component that renders a Recharts stacked bar chart. Each cost center is a separate `Bar` element with `stackId="cost"`. The chart uses a deterministic color palette (blue, violet, cyan, emerald, amber, red) assigned by cost center index. The X-axis formats periods using `formatPeriodLabel()` (e.g., "Dec '25"). The Y-axis uses compact USD formatting (e.g., "$15K"). A custom tooltip shows per-cost-center costs and a computed total. The chart component is loaded via `React.lazy` with a `Suspense` boundary showing a pulse skeleton, so the Recharts bundle (~105 KB gzipped) is code-split and does not block initial page paint. The trend section is positioned between the Global Summary and Storage Overview on the cost report page.
-Refs: SRS-DP-310214
+**[SDS-DP-010208] Render Cost Trend Chart with Moving Average**
+The Report Renderer includes a `CostTrendChart` component that renders a Recharts `ComposedChart` combining stacked bars and a trend line. Each cost center is a separate `Bar` element with `stackId="cost"`. A 3-month simple moving average of the aggregate total cost (sum of all cost centers) is computed using a pure utility function (`computeMovingAverage` in `~/lib/moving-average.ts`) and overlaid as a `Line` element with dashed gray styling (`strokeDasharray="6 3"`, labeled "3-Month Avg"). The first two data points have `null` moving average values (insufficient window). The chart uses a deterministic color palette (blue, violet, cyan, emerald, amber, red) assigned by cost center index. The X-axis formats periods using `formatPeriodLabel()` (e.g., "Dec '25"). The Y-axis uses compact USD formatting (e.g., "$15K"). A custom tooltip shows per-cost-center costs and a computed total. The legend is positioned below the chart (`verticalAlign="bottom"`) to prevent overlap on narrow viewports. The chart component is loaded via `React.lazy` with a `Suspense` boundary showing a pulse skeleton, so the Recharts bundle (~105 KB gzipped) is code-split and does not block initial page paint. The trend section is positioned between the Global Summary and Storage Overview on the cost report page.
+Refs: SRS-DP-310214, SRS-DP-310215
 
 **[SDS-DP-010205] Apply Business-Friendly Labels**
 The Report Renderer maps internal identifiers to business-friendly labels (e.g., App tag values displayed as "Workload", usage categories displayed without AWS terminology).
 Refs: SRS-DP-310209
+
+**[SDS-DP-010209] Inject Version from package.json**
+The application version is injected at build time via Vite's `define` config, reading the `version` field from `package.json` and exposing it as `__APP_VERSION__` global constant. A shared `<Footer>` component renders the version string in the format "Dapanoskop vX.Y.Z".
+Refs: SRS-DP-310216
+
+**[SDS-DP-010210] Render Shared Header Component with Logo**
+A shared `<Header>` component renders the application logo (inline SVG Greek delta on gradient background), title as a clickable `<Link>` preserving the current period query parameter, and an optional logout button. The header is used by both the cost report and workload detail routes. A matching `favicon.svg` is served from the `/public/` directory.
+Refs: SRS-DP-310102, SRS-DP-310103, SRS-DP-310104
+
+**[SDS-DP-010211] Render Shared Footer Component with Version**
+A shared `<Footer>` component renders the application version using the `__APP_VERSION__` constant injected at build time. The footer is used by both the cost report and workload detail routes.
+Refs: SRS-DP-310216
+
+**[SDS-DP-010212] Render InfoTooltip Components**
+A reusable `<InfoTooltip>` component renders a small circled "i" icon adjacent to metric labels. On hover or keyboard focus, it displays a concise explanatory tooltip using CSS-only positioning (no external library). The component is keyboard-accessible (`tabIndex={0}`) and includes `aria-label` and `role="tooltip"` for screen readers. Tooltips are applied to all metric cards across the cost report (GlobalSummary, StorageOverview, TaggingCoverage, CostCenterCard) and workload detail screens.
+Refs: SRS-DP-310209, SRS-DP-310206, SRS-DP-310207, SRS-DP-310208
+
+**[SDS-DP-010213] Apply Responsive Layout Breakpoints**
+All 3-column metric card grids (GlobalSummary, StorageOverview, workload detail summary cards) use Tailwind responsive breakpoints: `grid-cols-1 sm:grid-cols-3` (1 column below 640px, 3 columns above). The cost trend chart legend is positioned below the chart to prevent overlap on narrow viewports. Desktop remains the primary design target; mobile support ensures readability without full touch optimization.
+Refs: SRS-DP-600002, SRS-DP-310211, SRS-DP-310214
 
 Wireframes: See `docs/wireframes/cost-report.puml` and `docs/wireframes/workload-detail.puml`.
 Cost direction indicators (color coding, direction arrows, +/- prefixes) and anomaly highlighting are implemented with Tailwind CSS utility classes.
@@ -278,7 +298,7 @@ The Data Processor applies the Cost Category mapping from C-2.1 to assign each w
 Refs: SRS-DP-420103
 
 **[SDS-DP-020203] Compute Storage Volume and Hot Tier Metrics**
-The Data Processor computes total storage volume from S3 `TimedStorage-*` usage quantities (converting byte-hours to bytes) and calculates the hot tier percentage as: `(TimedStorage-ByteHrs + TimedStorage-INT-FA-ByteHrs) / total TimedStorage-*-ByteHrs`. When configured, EFS and EBS storage usage types are included in the totals.
+The Data Processor computes total storage volume from S3 `TimedStorage-*` usage quantities (converting byte-hours to bytes) and calculates the hot tier percentage as: `(TimedStorage-ByteHrs + TimedStorage-INT-FA-ByteHrs) / total TimedStorage-*-ByteHrs`. When configured, EFS and EBS storage usage types are included in the totals. The processor uses decimal terabytes (TB = 10^12 bytes) for all volume conversions, consistent with AWS Cost Explorer and billing practices. Note: Prior to v1.5.0, the constant `_BYTES_PER_TB` incorrectly used tebibytes (TiB = 2^40 = 1,099,511,627,776) instead of terabytes, causing a ~10% overstatement in cost per TB values. This was corrected to 1,000,000,000,000 (10^12).
 Refs: SRS-DP-420104
 
 **[SDS-DP-020204] Write Summary JSON**
@@ -766,9 +786,11 @@ This design:
 - Enables powerful drill-down via DuckDB-wasm + parquet without a backend API
 - Reduces Cost Explorer API costs (queries happen once daily, not per user visit)
 
-### 6.2 Labeling
+### 6.2 Labeling and Version Injection
 
 The software version follows semantic versioning (SemVer) and is displayed in the footer of the web application after sign-in. Versioning is automated via conventional commits and semantic-release.
+
+**Version injection mechanism**: The version is stored in the `version` field of the SPA's `package.json` and injected at build time via Vite's `define` config. The build process exposes `__APP_VERSION__` as a global constant that can be referenced in any component. A shared `<Footer>` component renders the version string. This approach ensures the displayed version always matches the release artifact without requiring runtime configuration or manual updates.
 
 ### 6.3 Usage Type Categorization
 
@@ -813,10 +835,12 @@ hot_tier_% = (hot_tier_byte_hours / total_byte_hours) × 100
 Cost per TB is calculated as:
 
 ```
-cost_per_TB = total_storage_cost_usd / (total_storage_volume_bytes / 1,099,511,627,776)
+cost_per_TB = total_storage_cost_usd / (total_storage_volume_bytes / 1_000_000_000_000)
 ```
 
 Where `total_storage_volume_bytes` is derived from `TimedStorage-*-ByteHrs` usage quantities (and optionally EFS/EBS when configured). Byte-hours are converted to bytes by dividing by the number of hours in the reporting month.
+
+**Unit note**: The divisor is 10^12 (decimal terabytes, TB), not 2^40 (binary tebibytes, TiB). AWS Cost Explorer and billing use decimal units. Prior to v1.5.0, the constant incorrectly used 1,099,511,627,776 (TiB), causing a ~10% overstatement. The frontend `formatBytes` utility also aligns to decimal TB for display consistency.
 
 ### 6.7 Runtime Configuration
 
@@ -1095,3 +1119,4 @@ Which charting library should be used to render the multi-period cost trend stac
 | 0.5     | 2026-02-13 | —      | Replace local artifact download with dedicated S3 artifacts bucket; C-3.5 now creates bucket and uploads artifacts; C-3.3 Lambda deployed from S3; C-3.1 SPA synced from artifacts bucket; S3 version-based change detection; new design decision §7.8 |
 | 0.6     | 2026-02-14 | —      | Add backfill mode (SDS-DP-020103, 020208, §4.4); CSP updated with wasm-unsafe-eval and self-hosted fonts (SDS-DP-030101); CORS updated with amz-sdk-* headers (SDS-DP-030402); cost center prefix stripping (SDS-DP-020102); Cytario design system (§6.8) |
 | 0.7     | 2026-02-15 | —      | Add multi-period cost trend chart: useTrendData hook (SDS-DP-010207), CostTrendChart component (SDS-DP-010208), Recharts library decision (§7.9), update data flow documentation (§6.1) |
+| 0.8     | 2026-02-15 | —      | Add version injection mechanism (SDS-DP-010209, §6.2), shared Header/Footer components (SDS-DP-010210, 010211), InfoTooltip component (SDS-DP-010212), responsive breakpoints (SDS-DP-010213), 3-month moving average trend line (SDS-DP-010208 update); document TB (10^12) vs TiB (2^40) correction in cost per TB calculation (SDS-DP-020203, §6.6) |
