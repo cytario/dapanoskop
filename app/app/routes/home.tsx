@@ -160,6 +160,9 @@ export default function Home() {
             {/* Global Summary */}
             <GlobalSummary summary={summary} />
 
+            {/* Storage Overview */}
+            <StorageOverview metrics={summary.storage_metrics} />
+
             {/* Tagging Coverage */}
             <TaggingCoverage data={summary.tagging_coverage} />
 
@@ -172,12 +175,6 @@ export default function Home() {
                   period={selectedPeriod}
                 />
               ))}
-            </div>
-
-            {/* Storage Overview */}
-            <div>
-              <h2 className="text-lg font-semibold mb-3">Storage</h2>
-              <StorageOverview metrics={summary.storage_metrics} />
             </div>
           </>
         )}
