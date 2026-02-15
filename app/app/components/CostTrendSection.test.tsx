@@ -218,6 +218,50 @@ describe("CostTrendSection", () => {
         container.querySelector('[data-testid="chart"]')?.textContent,
       ).toContain("12pts");
     });
+
+    it("shows toggle and filters to 12 points when data has exactly 13 points", async () => {
+      const points = makePoints(13);
+      mockUseTrendData.mockReturnValue({
+        points,
+        costCenterNames: ["Eng"],
+        loading: false,
+        error: null,
+      });
+
+      const { container } = render(<CostTrendSection />);
+      await waitFor(() => {
+        expect(container.querySelector('[data-testid="chart"]')).not.toBeNull();
+      });
+
+      // Toggle should be visible (13 > 12)
+      expect(container.querySelector('[role="radiogroup"]')).not.toBeNull();
+
+      // Default "1 Year" should show 12 points
+      const chart = container.querySelector('[data-testid="chart"]');
+      expect(chart?.textContent).toContain("12pts");
+
+      // "All Time" should show all 13 points
+      const allTimeBtn = container.querySelector(
+        '[role="radio"][aria-checked="false"]',
+      );
+      fireEvent.click(allTimeBtn!);
+      expect(chart?.textContent).toContain("13pts");
+    });
+
+    it("handles empty data gracefully", async () => {
+      mockUseTrendData.mockReturnValue({
+        points: [],
+        costCenterNames: [],
+        loading: false,
+        error: null,
+      });
+
+      const { container } = render(<CostTrendSection />);
+      // Should render heading and no chart
+      expect(container.textContent).toContain("Cost Trend");
+      expect(container.querySelector('[data-testid="chart"]')).toBeNull();
+      expect(container.querySelector('[role="radiogroup"]')).toBeNull();
+    });
   });
 
   describe("external data props", () => {

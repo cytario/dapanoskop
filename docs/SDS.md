@@ -5,7 +5,7 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.10 (Draft)                               |
+| Version             | 0.11 (Draft)                               |
 | Date                | 2026-02-15                                 |
 
 ---
@@ -177,7 +177,7 @@ The Report Renderer fetches `{year}-{month}/summary.json` for the selected repor
 Refs: SRS-DP-310201, SRS-DP-310211, SRS-DP-430102
 
 **[SDS-DP-010202] Render Cost Center Cards**
-The Report Renderer renders each cost center as an expandable card with summary (total, MoM, YoY, workload count, top mover) from summary.json. The workload breakdown table is rendered within the expanded card.
+The Report Renderer renders each cost center as an expandable card with summary (total, MoM, YoY, workload count, top mover) from summary.json. The cost center name is rendered as a `<Link to={/cost-center/${encodeURIComponent(name)}?period=${period}}>` component, navigating to the cost center detail page while preserving the current reporting period. The workload breakdown table is rendered within the expanded card.
 Refs: SRS-DP-310201, SRS-DP-310202, SRS-DP-310203, SRS-DP-310212
 
 **[SDS-DP-010203] Render Workload Table**
@@ -196,8 +196,8 @@ Refs: SRS-DP-310301, SRS-DP-430102
 The Report Renderer includes a `useTrendData` hook that fetches all available periods' summary.json files in parallel via `Promise.allSettled`. For each successfully fetched summary, the hook extracts `current_cost_usd` per cost center and pivots it into a chart-ready data point `{ period, [costCenterName]: costUsd }`. Points are sorted chronologically (oldest first). Cost center names are collected and sorted by total cost descending (largest first, appearing at the bottom of the stacked chart). Failed period fetches are silently excluded — partial data is displayed rather than failing entirely. The hook exposes `{ points, costCenterNames, loading, error }`.
 Refs: SRS-DP-310214
 
-**[SDS-DP-010208] Render Cost Trend Chart with Moving Average**
-The Report Renderer includes a `CostTrendChart` component that renders a Recharts `ComposedChart` combining stacked bars and a trend line. Each cost center is a separate `Bar` element with `stackId="cost"`. A 3-month simple moving average of the aggregate total cost (sum of all cost centers) is computed using a pure utility function (`computeMovingAverage` in `~/lib/moving-average.ts`) and overlaid as a `Line` element with dashed pink-700 styling (`stroke="#be185d"`, `strokeDasharray="6 3"`, labeled "3-Month Avg"). The first two data points have `null` moving average values (insufficient window). The chart uses a deterministic color palette (blue, violet, cyan, emerald, amber, red) assigned by cost center index. The X-axis formats periods using `formatPeriodLabel()` (e.g., "Dec '25"). The Y-axis uses compact USD formatting (e.g., "$15K"). A custom tooltip shows per-cost-center costs and a computed total; the moving average value is displayed in pink-700 text for visual consistency. The legend is positioned below the chart (`verticalAlign="bottom"`) to prevent overlap on narrow viewports. The chart component is loaded via `React.lazy` with a `Suspense` boundary showing a pulse skeleton, so the Recharts bundle (~105 KB gzipped) is code-split and does not block initial page paint. The trend section is positioned between the Global Summary and Storage Overview on the cost report page.
+**[SDS-DP-010208] Render Cost Trend Chart with Moving Average and Time Range Toggle**
+The Report Renderer includes a `CostTrendSection` component wrapping a lazy-loaded `CostTrendChart`. When more than 12 data points exist, a `TimeRangeToggle` component displays radio buttons for "1 Year" (last 12 months) and "All Time" (all available periods). The toggle state is managed via `useState<"1y" | "all">` with a default of "1y". A `filterPointsByRange` helper slices the last 12 points when range is "1y" and all points when range is "all" or when ≤12 points exist. The chart renders a Recharts `ComposedChart` combining stacked bars and a trend line. Each cost center is a separate `Bar` element with `stackId="cost"`. A 3-month simple moving average of the aggregate total cost (sum of all cost centers) is computed using a pure utility function (`computeMovingAverage` in `~/lib/moving-average.ts`) and overlaid as a `Line` element with dashed pink-700 styling (`stroke="#be185d"`, `strokeDasharray="6 3"`, labeled "3-Month Avg"). The first two data points have `null` moving average values (insufficient window). The chart uses a deterministic color palette (blue, violet, cyan, emerald, amber, red) assigned by cost center index. The X-axis formats periods using `formatPeriodLabel()` (e.g., "Dec '25"). The Y-axis uses compact USD formatting (e.g., "$15K"). A custom tooltip shows per-cost-center costs and a computed total; the moving average value is displayed in pink-700 text for visual consistency. The legend is positioned below the chart (`verticalAlign="bottom"`) to prevent overlap on narrow viewports. The chart component is loaded via `React.lazy` with a `Suspense` boundary showing a pulse skeleton, so the Recharts bundle (~105 KB gzipped) is code-split and does not block initial page paint. The trend section is positioned between the Global Summary and Storage Overview on the cost report page.
 Refs: SRS-DP-310214, SRS-DP-310215
 
 **[SDS-DP-010205] Apply Business-Friendly Labels**
@@ -221,8 +221,20 @@ A reusable `<InfoTooltip>` component renders a small circled "i" icon adjacent t
 Refs: SRS-DP-310209, SRS-DP-310206, SRS-DP-310207, SRS-DP-310208
 
 **[SDS-DP-010213] Apply Responsive Layout Breakpoints**
-All 3-column metric card grids (GlobalSummary, StorageOverview, workload detail summary cards) use Tailwind responsive breakpoints: `grid-cols-1 sm:grid-cols-3` (1 column below 640px, 3 columns above). The cost trend chart legend is positioned below the chart to prevent overlap on narrow viewports. Desktop remains the primary design target; mobile support ensures readability without full touch optimization.
+All 3-column metric card grids (GlobalSummary, StorageOverview, workload detail summary cards, cost center detail summary cards) use Tailwind responsive breakpoints: `grid-cols-1 sm:grid-cols-3` (1 column below 640px, 3 columns above). The cost trend chart legend is positioned below the chart to prevent overlap on narrow viewports. Desktop remains the primary design target; mobile support ensures readability without full touch optimization.
 Refs: SRS-DP-600002, SRS-DP-310211, SRS-DP-310214
+
+**[SDS-DP-010214] Render Cost Center Detail Route**
+The Report Renderer includes a dedicated route component at `/cost-center/:name` (route file: `routes/cost-center-detail.tsx`) for displaying a single cost center's detailed view. The route extracts the cost center name from the URL parameter via `useParams()`, decodes it using `decodeURIComponent()`, and reads the period from the query string via `useSearchParams()`. The route follows the same authentication, period discovery, and summary data fetching patterns as the main report route. The component renders the shared `<Header>` and `<Footer>` components, a back link to the main report, cost center summary cards, a cost center-specific trend chart, and the workload breakdown table.
+Refs: SRS-DP-310302, SRS-DP-310306
+
+**[SDS-DP-010215] Fetch Cost Center-Specific Trend Data**
+The cost center detail route component fetches trend data for a single cost center using a `useEffect` hook that calls `Promise.allSettled(periods.map(p => fetchSummary(p)))` to load all periods' summary.json files in parallel. For each successfully fetched summary, the component finds the matching cost center by name and extracts its `current_cost_usd`, building an array of `TrendPoint[]` with shape `{ period, [costCenterName]: costUsd }`. Points are sorted chronologically. The trend data is passed as props to the reusable `CostTrendSection` component, which renders the cost center-specific trend chart with the same toggle and moving average features as the main report chart.
+Refs: SRS-DP-310304
+
+**[SDS-DP-010216] Render Cost Center Detail Page Layout**
+The cost center detail page layout includes: (1) a back link (`<Link to={/?period=${selectedPeriod}}>`) to return to the main report while preserving the period selection; (2) the cost center name as a page heading; (3) three summary cards in a responsive grid showing total spend, MoM change, and YoY change for the selected period, sourced from the fetched summary.json and filtered to the specific cost center; (4) the `CostTrendSection` component with cost center-filtered trend data; (5) the reusable `WorkloadTable` component displaying the cost center's workload breakdown in an always-visible (non-expandable) format. The route is registered in `routes.ts` as `route("cost-center/:name", "routes/cost-center-detail.tsx")`.
+Refs: SRS-DP-310302, SRS-DP-310303, SRS-DP-310304, SRS-DP-310305, SRS-DP-310306
 
 Wireframes: See `docs/wireframes/cost-report.puml` and `docs/wireframes/workload-detail.puml`.
 Cost direction indicators (color coding, direction arrows, +/- prefixes) and anomaly highlighting are implemented with Tailwind CSS utility classes.
@@ -1128,3 +1140,4 @@ Which charting library should be used to render the multi-period cost trend stac
 | 0.8     | 2026-02-15 | —      | Add version injection mechanism (SDS-DP-010209, §6.2), shared Header/Footer components (SDS-DP-010210, 010211), InfoTooltip component (SDS-DP-010212), responsive breakpoints (SDS-DP-010213), 3-month moving average trend line (SDS-DP-010208 update); document TB (10^12) vs TiB (2^40) correction in cost per TB calculation (SDS-DP-020203, §6.6) |
 | 0.9     | 2026-02-15 | —      | Bug fix documentation: Clarify AWS Cost Explorer returns GB-hours (not byte-hours) for TimedStorage-* usage quantities; document GB→bytes conversion formula (SDS-DP-020203, §6.6); add self-hosted DuckDB WASM bundle deployment via Vite copy plugin (SDS-DP-010206) |
 | 0.10    | 2026-02-15 | —      | Phase 2 enhancements: Change trendline color from gray to pink-700 for improved contrast (SDS-DP-010208); enrich InfoTooltip content with formulas, interpretation guidance, and optimization suggestions (SDS-DP-010212); add dynamic storage service tooltip generation in StorageOverview (SDS-DP-010204); extend local dev period discovery from 13 to 36 months with parallel probing (SDS-DP-010201) |
+| 0.11    | 2026-02-15 | —      | Phase 3 enhancements: Add time range toggle to cost trend chart (SDS-DP-010208 update); add clickable cost center name navigation (SDS-DP-010202 update); add cost center detail route, trend data fetching, and page layout (SDS-DP-010214, 010215, 010216); update responsive breakpoints documentation (SDS-DP-010213) |

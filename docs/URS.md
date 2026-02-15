@@ -5,7 +5,7 @@
 | Document ID         | URS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.8 (Draft)                                |
+| Version             | 0.9 (Draft)                                |
 | Date                | 2026-02-15                                 |
 
 ---
@@ -192,10 +192,13 @@ A Budget Owner reviews what percentage of data is stored in hot storage tiers (S
 A Budget Owner accesses and understands the cost report without requiring any knowledge of AWS services, infrastructure, or cloud terminology.
 
 **[URS-DP-10309] View Cost Trends Across Multiple Months**
-A Budget Owner views a visual summary of cost trends across all available reporting months (up to 12), broken down by cost center, to identify spending patterns, seasonal variations, and anomalies over time.
+A Budget Owner views a visual summary of cost trends across all available reporting months, broken down by cost center, to identify spending patterns, seasonal variations, and anomalies over time. When more than 12 months of data are available, the user can toggle between viewing the most recent 12 months or all available periods.
 
 **[URS-DP-10310] Identify Long-Term Cost Trajectory**
 A Budget Owner identifies the underlying cost trajectory by viewing a smoothed trend line (3-month moving average) overlaid on the historical cost chart, to distinguish short-term volatility from sustained increases or decreases.
+
+**[URS-DP-10311] View Cost Center Detail Page**
+A Budget Owner views a dedicated page for a single cost center showing its historical cost trend, period-over-period comparisons (MoM, YoY), and workload breakdown, enabling focused analysis of a specific cost center without the context of other cost centers.
 
 #### 3.1.4 Investigate Cost Anomalies (Macro-Step 4)
 
@@ -275,3 +278,4 @@ A Budget Owner accesses and reviews the cost report on a mobile device (phone or
 | 0.6     | 2026-02-15 | —      | Add multi-month cost trend visualization requirement (URS-DP-10309) |
 | 0.7     | 2026-02-15 | —      | Add cost trajectory trend line (URS-DP-10310), contextual tooltips (URS-DP-30102 update), header navigation (URS-DP-30103), and mobile device access (URS-DP-30104) |
 | 0.8     | 2026-02-15 | —      | Consolidate v0.7 changes (trend line, tooltips, navigation, mobile) into single version entry |
+| 0.9     | 2026-02-15 | —      | Add cost trend time range toggle (URS-DP-10309 update) and cost center detail page navigation (URS-DP-10311) |

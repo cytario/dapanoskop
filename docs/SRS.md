@@ -5,7 +5,7 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.8 (Draft)                                |
+| Version             | 0.9 (Draft)                                |
 | Date                | 2026-02-15                                 |
 
 ---
@@ -150,7 +150,7 @@ Refs: URS-DP-10301, URS-DP-10302, URS-DP-30104
 ##### Cost Trend Chart
 
 **[SRS-DP-310214] Display Multi-Period Cost Trend Chart**
-The system displays a stacked bar chart showing cost totals for all available reporting periods (up to 12 months), broken down by cost center. The chart loads independently of the selected reporting period — it always shows all available periods. Periods are displayed chronologically (oldest on the left). Cost centers are stacked within each bar, with the largest cost center at the bottom. A tooltip displays the per-cost-center cost and computed total for the hovered period. The chart loads asynchronously after the initial report render and displays a loading skeleton while data is being fetched. On narrow viewports, the legend is positioned below the chart to prevent overlap.
+The system displays a stacked bar chart showing cost totals for all available reporting periods, broken down by cost center. When more than 12 periods are available, the system displays a time range toggle with options "1 Year" (most recent 12 months) and "All Time" (all available periods); the toggle is hidden when 12 or fewer periods exist. The chart loads independently of the selected reporting period. Periods are displayed chronologically (oldest on the left). Cost centers are stacked within each bar, with the largest cost center at the bottom. A tooltip displays the per-cost-center cost and computed total for the hovered period. The chart loads asynchronously after the initial report render and displays a loading skeleton while data is being fetched. On narrow viewports, the legend is positioned below the chart to prevent overlap.
 Refs: URS-DP-10309, URS-DP-10302, URS-DP-30104
 
 | No | Element | Data type | Value range | Other relevant information |
@@ -172,8 +172,8 @@ Refs: URS-DP-10310
 ##### Cost Center Cards
 
 **[SRS-DP-310201] Display Cost Center Summary Cards**
-The system displays each cost center as a card showing the cost center name, current period total, workload count, and the top mover (the workload with the highest absolute MoM change).
-Refs: URS-DP-10301
+The system displays each cost center as a card showing the cost center name, current period total, workload count, and the top mover (the workload with the highest absolute MoM change). The cost center name is a clickable link that navigates to the cost center detail page, preserving the current reporting period as a query parameter.
+Refs: URS-DP-10301, URS-DP-10311
 
 **[SRS-DP-310202] Display MoM Cost Comparison**
 Each cost center card displays the MoM change as a single combined element showing absolute difference and percentage change (e.g., "+$800 (+5.6%)").
@@ -270,7 +270,35 @@ Refs: URS-DP-10401
 | 4  | MoM change | Currency + Percentage | Any | Combined: "+$50 (+2.9%)" |
 | 5  | YoY change | Currency + Percentage | Any | "N/A" if unavailable |
 
-#### 3.1.4 Tagging Coverage Section
+#### 3.1.4 Cost Center Detail Screen
+
+**[SRS-DP-310302] Display Cost Center Detail View**
+When a user navigates to a cost center detail page (via clickable cost center name from the main report), the system displays a dedicated view for that single cost center at route `/cost-center/:name` with the reporting period preserved as a query parameter. The page includes a back link to the main report, cost center summary metrics, a cost center-specific trend chart, and the workload breakdown table.
+Refs: URS-DP-10311
+
+**[SRS-DP-310303] Display Cost Center Summary Metrics**
+The cost center detail page displays three summary cards showing the cost center's total spend for the selected period, MoM change (absolute and percentage combined), and YoY change (absolute and percentage combined).
+Refs: URS-DP-10311
+
+| No | Element | Data type | Value range | Other relevant information |
+|----|---------|-----------|-------------|---------------------------|
+| 1  | Total spend | Currency (USD) | ≥ 0 | Cost center total for selected period |
+| 2  | MoM change | Currency + Percentage | Any | Combined: "+$800 (+5.6%)" |
+| 3  | YoY change | Currency + Percentage | Any | Shows "N/A" if unavailable |
+
+**[SRS-DP-310304] Display Cost Center Trend Chart**
+The cost center detail page displays a cost trend chart filtered to show only the selected cost center's monthly totals across all available periods. The chart supports the same time range toggle as the main report (1 Year / All Time) when more than 12 periods are available.
+Refs: URS-DP-10311, URS-DP-10309
+
+**[SRS-DP-310305] Display Cost Center Workload Breakdown**
+The cost center detail page displays the workload breakdown table for the cost center in an always-visible (non-expandable) format, showing the same data as the expandable card view on the main report: workload names (clickable links to workload detail), current period cost, MoM change, and YoY change.
+Refs: URS-DP-10311, URS-DP-10303
+
+**[SRS-DP-310306] Navigate Back to Main Report**
+The cost center detail page includes a back link that returns the user to the main cost report, preserving the currently selected reporting period.
+Refs: URS-DP-30103
+
+#### 3.1.5 Tagging Coverage Section
 
 **[SRS-DP-310401] Display Tagging Coverage Summary**
 The system displays the percentage of total cost attributed to tagged workloads versus untagged resources as a visual progress bar on the 1-page cost report. The bar shows tagged versus untagged proportion, with the percentage value and absolute cost amounts.
@@ -282,7 +310,7 @@ Refs: URS-DP-10201, URS-DP-10202
 | 2  | Tagged cost | Currency (USD) | ≥ 0 | |
 | 3  | Untagged cost | Currency (USD) | ≥ 0 | |
 
-#### 3.1.5 Report Period Selection
+#### 3.1.6 Report Period Selection
 
 **[SRS-DP-310501] Select Reporting Month**
 The system displays a horizontal month strip showing all available reporting periods. The user selects a month by clicking it. The current (incomplete) month is labeled "MTD" (Month-to-date). The default selection is the most recently completed month. Note: The cost trend chart (SRS-DP-310214) operates independently of this selector and always displays all available periods.
@@ -556,3 +584,4 @@ Refs: URS-DP-10101
 | 0.6     | 2026-02-15 | —      | Add multi-period cost trend chart (SRS-DP-310214); note trend chart independence from period selector (SRS-DP-310501) |
 | 0.7     | 2026-02-15 | —      | Add logo/favicon/header navigation (SRS-DP-310102-104), cost trend line (SRS-DP-310215), contextual tooltips (SRS-DP-310206-209 updates), version display (SRS-DP-310216), mobile responsiveness (SRS-DP-310211, 310214, 600002 updates); note decimal TB in cost per TB (SRS-DP-310207) |
 | 0.8     | 2026-02-15 | —      | Enhance trendline visibility (SRS-DP-310215: gray→pink-700); enrich tooltip explanations with formulas, interpretation guidance, and optimization suggestions (SRS-DP-310206-209); add dynamic storage service inclusion text in storage cost tooltip |
+| 0.9     | 2026-02-15 | —      | Add cost trend time range toggle (SRS-DP-310214 update); add clickable cost center names (SRS-DP-310201 update); add Cost Center Detail Screen (§3.1.4, SRS-DP-310302-310306); renumber Tagging Coverage (§3.1.4→§3.1.5) and Report Period Selection (§3.1.5→§3.1.6) |
