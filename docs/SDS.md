@@ -5,7 +5,7 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.9 (Draft)                                |
+| Version             | 0.10 (Draft)                               |
 | Date                | 2026-02-15                                 |
 
 ---
@@ -173,7 +173,7 @@ Refs: SRS-DP-450102
 **Variability**: Data bucket name and AWS region are loaded from runtime config (C-1.1).
 
 **[SDS-DP-010201] Fetch Summary Data via S3 SDK**
-The Report Renderer fetches `{year}-{month}/summary.json` for the selected reporting period using the AWS S3 SDK `GetObjectCommand` with temporary credentials from C-1.3. In local dev mode (auth bypass), it falls back to a plain HTTP fetch from the local dev server. It renders the 1-page cost report (global summary bar, cost center cards, storage metric cards).
+The Report Renderer fetches `{year}-{month}/summary.json` for the selected reporting period using the AWS S3 SDK `GetObjectCommand` with temporary credentials from C-1.3. In local dev mode (auth bypass), it falls back to a plain HTTP fetch from the local dev server. It renders the 1-page cost report (global summary bar, cost center cards, storage metric cards). Period discovery in production reads `index.json` from S3; in local dev mode, it probes up to 36 months of candidate periods in parallel via `Promise.allSettled` to identify available summary.json files without requiring an index file.
 Refs: SRS-DP-310201, SRS-DP-310211, SRS-DP-430102
 
 **[SDS-DP-010202] Render Cost Center Cards**
@@ -184,8 +184,8 @@ Refs: SRS-DP-310201, SRS-DP-310202, SRS-DP-310203, SRS-DP-310212
 The Report Renderer renders the workload breakdown table from summary.json, with workloads sorted by current month cost descending and MoM/YoY deltas included.
 Refs: SRS-DP-310204, SRS-DP-310205
 
-**[SDS-DP-010204] Render Storage Metrics**
-The Report Renderer renders total storage cost, cost per TB, and hot tier percentage from the pre-computed summary.json.
+**[SDS-DP-010204] Render Storage Metrics with Dynamic Tooltips**
+The Report Renderer renders total storage cost, cost per TB, and hot tier percentage from the pre-computed summary.json. The `StorageOverview` component accepts a `storageConfig` prop (from `summary.json`) and dynamically generates tooltip text reflecting which storage services are included (e.g., "S3 only" or "S3, EFS, and EBS"). Tooltips include calculation formulas, interpretation guidance, and optimization suggestions.
 Refs: SRS-DP-310206, SRS-DP-310207, SRS-DP-310208
 
 **[SDS-DP-010206] Query Parquet via DuckDB-wasm httpfs S3**
@@ -197,7 +197,7 @@ The Report Renderer includes a `useTrendData` hook that fetches all available pe
 Refs: SRS-DP-310214
 
 **[SDS-DP-010208] Render Cost Trend Chart with Moving Average**
-The Report Renderer includes a `CostTrendChart` component that renders a Recharts `ComposedChart` combining stacked bars and a trend line. Each cost center is a separate `Bar` element with `stackId="cost"`. A 3-month simple moving average of the aggregate total cost (sum of all cost centers) is computed using a pure utility function (`computeMovingAverage` in `~/lib/moving-average.ts`) and overlaid as a `Line` element with dashed gray styling (`strokeDasharray="6 3"`, labeled "3-Month Avg"). The first two data points have `null` moving average values (insufficient window). The chart uses a deterministic color palette (blue, violet, cyan, emerald, amber, red) assigned by cost center index. The X-axis formats periods using `formatPeriodLabel()` (e.g., "Dec '25"). The Y-axis uses compact USD formatting (e.g., "$15K"). A custom tooltip shows per-cost-center costs and a computed total. The legend is positioned below the chart (`verticalAlign="bottom"`) to prevent overlap on narrow viewports. The chart component is loaded via `React.lazy` with a `Suspense` boundary showing a pulse skeleton, so the Recharts bundle (~105 KB gzipped) is code-split and does not block initial page paint. The trend section is positioned between the Global Summary and Storage Overview on the cost report page.
+The Report Renderer includes a `CostTrendChart` component that renders a Recharts `ComposedChart` combining stacked bars and a trend line. Each cost center is a separate `Bar` element with `stackId="cost"`. A 3-month simple moving average of the aggregate total cost (sum of all cost centers) is computed using a pure utility function (`computeMovingAverage` in `~/lib/moving-average.ts`) and overlaid as a `Line` element with dashed pink-700 styling (`stroke="#be185d"`, `strokeDasharray="6 3"`, labeled "3-Month Avg"). The first two data points have `null` moving average values (insufficient window). The chart uses a deterministic color palette (blue, violet, cyan, emerald, amber, red) assigned by cost center index. The X-axis formats periods using `formatPeriodLabel()` (e.g., "Dec '25"). The Y-axis uses compact USD formatting (e.g., "$15K"). A custom tooltip shows per-cost-center costs and a computed total; the moving average value is displayed in pink-700 text for visual consistency. The legend is positioned below the chart (`verticalAlign="bottom"`) to prevent overlap on narrow viewports. The chart component is loaded via `React.lazy` with a `Suspense` boundary showing a pulse skeleton, so the Recharts bundle (~105 KB gzipped) is code-split and does not block initial page paint. The trend section is positioned between the Global Summary and Storage Overview on the cost report page.
 Refs: SRS-DP-310214, SRS-DP-310215
 
 **[SDS-DP-010205] Apply Business-Friendly Labels**
@@ -216,8 +216,8 @@ Refs: SRS-DP-310102, SRS-DP-310103, SRS-DP-310104
 A shared `<Footer>` component renders the application version using the `__APP_VERSION__` constant injected at build time. The footer is used by both the cost report and workload detail routes.
 Refs: SRS-DP-310216
 
-**[SDS-DP-010212] Render InfoTooltip Components**
-A reusable `<InfoTooltip>` component renders a small circled "i" icon adjacent to metric labels. On hover or keyboard focus, it displays a concise explanatory tooltip using CSS-only positioning (no external library). The component is keyboard-accessible (`tabIndex={0}`) and includes `aria-label` and `role="tooltip"` for screen readers. Tooltips are applied to all metric cards across the cost report (GlobalSummary, StorageOverview, TaggingCoverage, CostCenterCard) and workload detail screens.
+**[SDS-DP-010212] Render InfoTooltip Components with Enriched Explanations**
+A reusable `<InfoTooltip>` component renders a small circled "i" icon adjacent to metric labels. On hover or keyboard focus, it displays a concise explanatory tooltip using CSS-only positioning (no external library). The component is keyboard-accessible (`tabIndex={0}`) and includes `aria-label` and `role="tooltip"` for screen readers. Tooltips are applied to all metric cards across the cost report (GlobalSummary, StorageOverview, TaggingCoverage, CostCenterCard) and workload detail screens. Tooltip content includes specific calculation formulas, interpretation guidance (e.g., "Lower values indicate better storage cost efficiency"), and optimization suggestions where applicable (e.g., "High values may indicate optimization opportunities via lifecycle policies"). The StorageOverview component dynamically generates tooltip text based on the `storage_config` from summary.json (e.g., "S3 only" vs. "S3, EFS, and EBS").
 Refs: SRS-DP-310209, SRS-DP-310206, SRS-DP-310207, SRS-DP-310208
 
 **[SDS-DP-010213] Apply Responsive Layout Breakpoints**
@@ -1127,3 +1127,4 @@ Which charting library should be used to render the multi-period cost trend stac
 | 0.7     | 2026-02-15 | —      | Add multi-period cost trend chart: useTrendData hook (SDS-DP-010207), CostTrendChart component (SDS-DP-010208), Recharts library decision (§7.9), update data flow documentation (§6.1) |
 | 0.8     | 2026-02-15 | —      | Add version injection mechanism (SDS-DP-010209, §6.2), shared Header/Footer components (SDS-DP-010210, 010211), InfoTooltip component (SDS-DP-010212), responsive breakpoints (SDS-DP-010213), 3-month moving average trend line (SDS-DP-010208 update); document TB (10^12) vs TiB (2^40) correction in cost per TB calculation (SDS-DP-020203, §6.6) |
 | 0.9     | 2026-02-15 | —      | Bug fix documentation: Clarify AWS Cost Explorer returns GB-hours (not byte-hours) for TimedStorage-* usage quantities; document GB→bytes conversion formula (SDS-DP-020203, §6.6); add self-hosted DuckDB WASM bundle deployment via Vite copy plugin (SDS-DP-010206) |
+| 0.10    | 2026-02-15 | —      | Phase 2 enhancements: Change trendline color from gray to pink-700 for improved contrast (SDS-DP-010208); enrich InfoTooltip content with formulas, interpretation guidance, and optimization suggestions (SDS-DP-010212); add dynamic storage service tooltip generation in StorageOverview (SDS-DP-010204); extend local dev period discovery from 13 to 36 months with parallel probing (SDS-DP-010201) |

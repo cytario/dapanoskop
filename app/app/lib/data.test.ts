@@ -135,4 +135,98 @@ describe("discoverPeriods", () => {
 
     vi.unstubAllGlobals();
   });
+
+  it("probes 36 months using HEAD requests with timeout", async () => {
+    const headCalls: { url: string; method: string; hasSignal: boolean }[] = [];
+    const mockFetch = vi
+      .fn()
+      .mockImplementation((url: string, opts?: RequestInit) => {
+        if (url.endsWith("index.json")) {
+          return Promise.resolve({ ok: false, status: 404 });
+        }
+        if (opts?.method === "HEAD") {
+          headCalls.push({
+            url,
+            method: opts.method,
+            hasSignal: opts.signal !== undefined,
+          });
+          return Promise.resolve({ ok: false, status: 404 });
+        }
+        return Promise.resolve({ ok: false, status: 404 });
+      });
+    vi.stubGlobal("fetch", mockFetch);
+
+    await discoverPeriods();
+
+    // Should probe exactly 36 months
+    expect(headCalls).toHaveLength(36);
+    // All probes should use HEAD method with an AbortSignal (timeout)
+    for (const call of headCalls) {
+      expect(call.method).toBe("HEAD");
+      expect(call.hasSignal).toBe(true);
+    }
+
+    vi.unstubAllGlobals();
+  });
+
+  it("returns empty array when all probes fail", async () => {
+    const mockFetch = vi.fn().mockImplementation(() => {
+      return Promise.resolve({ ok: false, status: 404 });
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await discoverPeriods();
+    expect(result).toEqual([]);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("preserves chronological order of discovered periods", async () => {
+    // Only respond OK for a few non-adjacent months
+    const okPeriods = ["2025-06", "2026-01", "2025-10"];
+    const mockFetch = vi
+      .fn()
+      .mockImplementation((url: string, opts?: RequestInit) => {
+        if (url.endsWith("index.json")) {
+          return Promise.resolve({ ok: false, status: 404 });
+        }
+        if (opts?.method === "HEAD") {
+          const isOk = okPeriods.some((p) => url.includes(p));
+          return Promise.resolve({ ok: isOk });
+        }
+        return Promise.resolve({ ok: false, status: 404 });
+      });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await discoverPeriods();
+    // Results should preserve the candidates order (newest first)
+    expect(result).toEqual(["2026-01", "2025-10", "2025-06"]);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("handles rejected probes gracefully (network errors)", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockImplementation((url: string, opts?: RequestInit) => {
+        if (url.endsWith("index.json")) {
+          return Promise.resolve({ ok: false, status: 404 });
+        }
+        if (opts?.method === "HEAD") {
+          // Some succeed, some reject with network error
+          if (url.includes("2026-01")) {
+            return Promise.resolve({ ok: true });
+          }
+          return Promise.reject(new Error("Network error"));
+        }
+        return Promise.resolve({ ok: false, status: 404 });
+      });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await discoverPeriods();
+    // Only the successful probe should be included
+    expect(result).toEqual(["2026-01"]);
+
+    vi.unstubAllGlobals();
+  });
 });
