@@ -59,6 +59,34 @@ describe("StorageOverview", () => {
     );
   });
 
+  it("renders dynamic tooltip when storageConfig includes only EFS", () => {
+    const { container } = render(
+      <StorageOverview
+        metrics={metrics}
+        storageConfig={{ include_efs: true, include_ebs: false }}
+      />,
+    );
+    const tooltips = container.querySelectorAll('[role="tooltip"]');
+    const tooltipTexts = Array.from(tooltips).map((t) => t.textContent);
+    expect(tooltipTexts).toContain(
+      "Total cost of S3, EFS storage for this period.",
+    );
+  });
+
+  it("renders dynamic tooltip when storageConfig includes only EBS", () => {
+    const { container } = render(
+      <StorageOverview
+        metrics={metrics}
+        storageConfig={{ include_efs: false, include_ebs: true }}
+      />,
+    );
+    const tooltips = container.querySelectorAll('[role="tooltip"]');
+    const tooltipTexts = Array.from(tooltips).map((t) => t.textContent);
+    expect(tooltipTexts).toContain(
+      "Total cost of S3, EBS storage for this period.",
+    );
+  });
+
   it("renders CostChange for storage cost month-over-month", () => {
     const { container } = render(<StorageOverview metrics={metrics} />);
     // The CostChange component should show a delta between current and prev month

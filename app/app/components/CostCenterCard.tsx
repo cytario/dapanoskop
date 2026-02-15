@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import type { CostCenter } from "~/types/cost-data";
 import { formatUsd } from "~/lib/format";
 import { CostChange } from "./CostChange";
@@ -36,20 +37,31 @@ export function CostCenterCard({ costCenter, period }: CostCenterCardProps) {
         ).toFixed(1)
       : "0.0";
 
+  const detailUrl = `/cost-center/${encodeURIComponent(costCenter.name)}?period=${period}`;
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden transition-shadow hover:shadow-md">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full p-4 text-left hover:bg-gray-50 transition-colors"
-      >
+      <div className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span
-              className={`transform transition-transform ${expanded ? "rotate-90" : ""}`}
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="hover:bg-gray-100 rounded p-0.5 transition-colors"
+              aria-label={expanded ? "Collapse" : "Expand"}
+              aria-expanded={expanded}
             >
-              ▶
-            </span>
-            <span className="font-semibold text-lg">{costCenter.name}</span>
+              <span
+                className={`transform transition-transform inline-block ${expanded ? "rotate-90" : ""}`}
+              >
+                ▶
+              </span>
+            </button>
+            <Link
+              to={detailUrl}
+              className="font-semibold text-lg text-primary-600 hover:underline"
+            >
+              {costCenter.name}
+            </Link>
           </div>
           <span className="text-xl font-semibold">
             {formatUsd(costCenter.current_cost_usd)}
@@ -87,7 +99,7 @@ export function CostCenterCard({ costCenter, period }: CostCenterCardProps) {
             </>
           )}
         </div>
-      </button>
+      </div>
       {expanded && (
         <div className="px-4 pb-4">
           <WorkloadTable workloads={costCenter.workloads} period={period} />

@@ -11,8 +11,23 @@ vi.mock("recharts", () => ({
     <svg data-testid="composed-chart">{children}</svg>
   ),
   Bar: ({ name }: { name: string }) => <g data-name={name} />,
-  Line: ({ name, dataKey }: { name: string; dataKey: string }) => (
-    <g data-name={name} data-datakey={dataKey} />
+  Line: ({
+    name,
+    dataKey,
+    stroke,
+    strokeDasharray,
+  }: {
+    name: string;
+    dataKey: string;
+    stroke?: string;
+    strokeDasharray?: string;
+  }) => (
+    <g
+      data-name={name}
+      data-datakey={dataKey}
+      data-stroke={stroke}
+      data-strokedasharray={strokeDasharray}
+    />
   ),
   XAxis: () => <g />,
   YAxis: () => <g />,
@@ -75,6 +90,15 @@ describe("CostTrendChart", () => {
     );
     const legend = container.querySelector('[data-vertical-align="bottom"]');
     expect(legend).not.toBeNull();
+  });
+
+  it("renders moving average line in pink-700 with dashed style", () => {
+    const { container } = render(
+      <CostTrendChart points={points} costCenterNames={costCenterNames} />,
+    );
+    const line = container.querySelector('g[data-datakey="_movingAvg"]');
+    expect(line?.getAttribute("data-stroke")).toBe("#be185d");
+    expect(line?.getAttribute("data-strokedasharray")).toBe("6 3");
   });
 
   it("renders moving average line even with fewer than 3 points", () => {

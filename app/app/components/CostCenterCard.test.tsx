@@ -40,17 +40,41 @@ describe("CostCenterCard", () => {
     expect(screen.getByText("$15,000.00")).toBeInTheDocument();
   });
 
+  it("renders cost center name as a link to detail page", () => {
+    renderCard(costCenter);
+    const links = screen.getAllByRole("link", { name: "Engineering" });
+    expect(links.length).toBeGreaterThanOrEqual(1);
+    expect(links[0].getAttribute("href")).toBe(
+      "/cost-center/Engineering?period=2026-01",
+    );
+  });
+
+  it("URL-encodes cost center names with special characters", () => {
+    const specialCC: CostCenter = {
+      name: "R&D / Labs",
+      current_cost_usd: 5000,
+      prev_month_cost_usd: 4000,
+      yoy_cost_usd: 3000,
+      workloads: [],
+    };
+    renderCard(specialCC);
+    const link = screen.getByRole("link", { name: "R&D / Labs" });
+    expect(link.getAttribute("href")).toBe(
+      "/cost-center/R%26D%20%2F%20Labs?period=2026-01",
+    );
+  });
+
   it("shows workload count", () => {
     renderCard(costCenter);
     const matches = screen.getAllByText(/2 workloads/);
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("expands to show workload table on click", () => {
+  it("expands to show workload table on chevron click", () => {
     renderCard(costCenter);
     expect(screen.queryByRole("table")).toBeNull();
-    const buttons = screen.getAllByRole("button");
-    fireEvent.click(buttons[0]);
+    const expandBtns = screen.getAllByLabelText("Expand");
+    fireEvent.click(expandBtns[0]);
     expect(screen.getAllByRole("table").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("data-pipeline").length).toBeGreaterThanOrEqual(
       1,

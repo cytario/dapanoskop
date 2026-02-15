@@ -5,7 +5,7 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.7 (Draft)                                |
+| Version             | 0.8 (Draft)                                |
 | Date                | 2026-02-15                                 |
 
 ---
@@ -167,7 +167,7 @@ Refs: URS-DP-10310
 
 | No | Element | Data type | Value range | Other relevant information |
 |----|---------|-----------|-------------|---------------------------|
-| 1  | Trend line | Line chart overlay | ≥ 0 | 3-month moving average; dashed gray line; labeled "3-Month Avg" |
+| 1  | Trend line | Line chart overlay | ≥ 0 | 3-month moving average; dashed pink line (pink-700, #be185d); labeled "3-Month Avg" |
 
 ##### Cost Center Cards
 
@@ -218,15 +218,15 @@ Refs: URS-DP-10202
 The storage overview is displayed as three distinct metric cards at the bottom of the report.
 
 **[SRS-DP-310206] Display Total Storage Cost**
-The system displays the total storage cost as an aggregate across all cost centers, with MoM change (absolute and percentage combined). S3 storage is always included. EFS and EBS storage inclusion is configurable at deployment time. A tooltip explains which storage services are included based on the deployment configuration.
+The system displays the total storage cost as an aggregate across all cost centers, with MoM change (absolute and percentage combined). S3 storage is always included. EFS and EBS storage inclusion is configurable at deployment time. A tooltip dynamically explains which storage services are included based on the deployment configuration (e.g., "S3 only" or "S3, EFS, and EBS").
 Refs: URS-DP-10305, URS-DP-10302, URS-DP-30102
 
 **[SRS-DP-310207] Display Cost per TB Stored**
-The system displays the cost per terabyte stored, calculated from total storage cost divided by total storage volume (in decimal terabytes, 10^12 bytes). A tooltip explains the calculation formula.
+The system displays the cost per terabyte stored, calculated from total storage cost divided by total storage volume (in decimal terabytes, 10^12 bytes). A tooltip explains the calculation formula: "Total storage cost divided by the total volume of data stored, measured in terabytes (TB). Lower values indicate better storage cost efficiency."
 Refs: URS-DP-10306, URS-DP-30102
 
 **[SRS-DP-310208] Display Hot Tier Percentage**
-The system displays the percentage of total data volume (in bytes) stored in hot storage tiers (S3 Standard, S3 Intelligent-Tiering Frequent Access, and optionally EFS/EBS depending on configuration). A tooltip explains which tiers are considered "hot".
+The system displays the percentage of total data volume (in bytes) stored in hot storage tiers (S3 Standard, S3 Intelligent-Tiering Frequent Access, and optionally EFS/EBS depending on configuration). A tooltip explains which tiers are considered "hot" and suggests optimization: "Percentage of stored data in frequently accessed tiers (e.g., S3 Standard, EFS Standard). High values may indicate optimization opportunities via lifecycle policies."
 Refs: URS-DP-10307, URS-DP-30102
 
 | No | Element | Data type | Value range | Other relevant information |
@@ -239,7 +239,7 @@ Refs: URS-DP-10307, URS-DP-30102
 ##### Report Presentation
 
 **[SRS-DP-310209] Business-Friendly Terminology**
-The system uses business-friendly labels throughout the report (e.g., "Workload" instead of "App tag", "Storage" instead of listing AWS service names). No AWS-specific terminology is exposed in the default report view. Contextual tooltips provide concise explanations for calculated metrics and comparisons.
+The system uses business-friendly labels throughout the report (e.g., "Workload" instead of "App tag", "Storage" instead of listing AWS service names). No AWS-specific terminology is exposed in the default report view. Contextual tooltips provide concise, specific explanations for calculated metrics and comparisons, including formulas, interpretation guidance, and optimization suggestions where applicable.
 Refs: URS-DP-10308, URS-DP-30102
 
 **[SRS-DP-310216] Application Version Display**
@@ -555,3 +555,4 @@ Refs: URS-DP-10101
 | 0.5     | 2026-02-14 | —      | Add backfill historical data capability (SRS-DP-420106); update S3 CORS to include `amz-sdk-*` headers for AWS SDK v3 compatibility |
 | 0.6     | 2026-02-15 | —      | Add multi-period cost trend chart (SRS-DP-310214); note trend chart independence from period selector (SRS-DP-310501) |
 | 0.7     | 2026-02-15 | —      | Add logo/favicon/header navigation (SRS-DP-310102-104), cost trend line (SRS-DP-310215), contextual tooltips (SRS-DP-310206-209 updates), version display (SRS-DP-310216), mobile responsiveness (SRS-DP-310211, 310214, 600002 updates); note decimal TB in cost per TB (SRS-DP-310207) |
+| 0.8     | 2026-02-15 | —      | Enhance trendline visibility (SRS-DP-310215: gray→pink-700); enrich tooltip explanations with formulas, interpretation guidance, and optimization suggestions (SRS-DP-310206-209); add dynamic storage service inclusion text in storage cost tooltip |
