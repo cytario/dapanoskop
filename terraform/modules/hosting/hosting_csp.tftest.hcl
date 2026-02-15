@@ -28,6 +28,11 @@ run "csp_all_connect_src_populated" {
   }
 
   assert {
+    condition     = strcontains(output.content_security_policy, "https://extensions.duckdb.org")
+    error_message = "CSP must include DuckDB extensions CDN in connect-src"
+  }
+
+  assert {
     condition     = strcontains(output.content_security_policy, "https://auth.example.com")
     error_message = "CSP must include cognito_domain in connect-src"
   }
@@ -53,8 +58,8 @@ run "csp_empty_connect_src_self_only" {
   }
 
   assert {
-    condition     = strcontains(output.content_security_policy, "connect-src 'self';")
-    error_message = "CSP connect-src must be 'self' only when all endpoints are empty"
+    condition     = strcontains(output.content_security_policy, "connect-src 'self' https://extensions.duckdb.org;")
+    error_message = "CSP connect-src must include 'self' and DuckDB extensions when all endpoints are empty"
   }
 }
 

@@ -10,13 +10,14 @@ describe("buildS3ConfigStatements", () => {
       sessionToken: "FwoGZXIvYXdzEBY",
     });
 
-    expect(stmts).toHaveLength(4);
+    expect(stmts).toHaveLength(5);
     expect(stmts[0]).toBe("SET s3_region='us-east-1'");
-    expect(stmts[1]).toBe("SET s3_access_key_id='AKIAIOSFODNN7EXAMPLE'");
-    expect(stmts[2]).toBe(
+    expect(stmts[1]).toBe("SET s3_url_style='vhost'");
+    expect(stmts[2]).toBe("SET s3_access_key_id='AKIAIOSFODNN7EXAMPLE'");
+    expect(stmts[3]).toBe(
       "SET s3_secret_access_key='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'",
     );
-    expect(stmts[3]).toBe("SET s3_session_token='FwoGZXIvYXdzEBY'");
+    expect(stmts[4]).toBe("SET s3_session_token='FwoGZXIvYXdzEBY'");
   });
 
   test("escapes single quotes in all fields", () => {
@@ -28,9 +29,10 @@ describe("buildS3ConfigStatements", () => {
     });
 
     expect(stmts[0]).toBe("SET s3_region='eu-west-1''injected'");
-    expect(stmts[1]).toBe("SET s3_access_key_id='key''with''quotes'");
-    expect(stmts[2]).toBe("SET s3_secret_access_key='secret''key'");
-    expect(stmts[3]).toBe("SET s3_session_token='token''value'");
+    expect(stmts[1]).toBe("SET s3_url_style='vhost'");
+    expect(stmts[2]).toBe("SET s3_access_key_id='key''with''quotes'");
+    expect(stmts[3]).toBe("SET s3_secret_access_key='secret''key'");
+    expect(stmts[4]).toBe("SET s3_session_token='token''value'");
   });
 
   test("handles empty string values", () => {
@@ -41,10 +43,11 @@ describe("buildS3ConfigStatements", () => {
       sessionToken: "",
     });
 
-    expect(stmts).toHaveLength(4);
+    expect(stmts).toHaveLength(5);
     expect(stmts[0]).toBe("SET s3_region=''");
-    expect(stmts[1]).toBe("SET s3_access_key_id=''");
-    expect(stmts[2]).toBe("SET s3_secret_access_key=''");
-    expect(stmts[3]).toBe("SET s3_session_token=''");
+    expect(stmts[1]).toBe("SET s3_url_style='vhost'");
+    expect(stmts[2]).toBe("SET s3_access_key_id=''");
+    expect(stmts[3]).toBe("SET s3_secret_access_key=''");
+    expect(stmts[4]).toBe("SET s3_session_token=''");
   });
 });

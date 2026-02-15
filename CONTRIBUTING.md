@@ -27,14 +27,66 @@ cd lambda && uv sync && uv pip install -e . && cd ..
 uv run python scripts/generate-fixtures.py
 ```
 
+### Environment Variables
+
+Copy the template and adjust as needed:
+
+```bash
+cp app/.env.template app/.env
+```
+
+See `app/.env.template` for all available variables with descriptions.
+
 ### Running Locally
+
+There are two modes for local development:
+
+#### Option A: Fixture Data (default)
+
+Uses generated fixture data. No AWS access required.
 
 ```bash
 cd app
-VITE_AUTH_BYPASS=true npm run dev
+npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). The dev server serves fixture data at `/data/` automatically.
+The dev server serves fixture data from `fixtures/` at `/data/` automatically. Make sure `VITE_AUTH_BYPASS=true` is set in your `.env` file (it is by default in the template).
+
+#### Option B: Real S3 Data
+
+Uses actual cost data from your deployed S3 bucket. Requires AWS credentials with `s3:GetObject` permission on the data bucket.
+
+1. **Configure AWS credentials** using any method supported by the [AWS SDK credential provider chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html):
+
+   ```bash
+   # Option 1: AWS SSO (recommended)
+   aws sso login --profile your-profile
+   export AWS_PROFILE=your-profile
+
+   # Option 2: Environment variables
+   export AWS_ACCESS_KEY_ID=...
+   export AWS_SECRET_ACCESS_KEY=...
+   export AWS_SESSION_TOKEN=...
+   ```
+
+2. **Set the bucket name** in your `.env` file:
+
+   ```bash
+   VITE_AUTH_BYPASS=true
+   VITE_DATA_S3_BUCKET=dapanoskop-data-abc123
+   VITE_DATA_S3_REGION=eu-north-1
+   ```
+
+3. **Start the dev server**:
+
+   ```bash
+   cd app
+   npm run dev
+   ```
+
+The Vite dev server proxies `/data/*` requests to S3 server-side, so there are no CORS issues. The S3 bucket's CORS configuration is not involved. Authentication is handled entirely by the dev server using your local AWS credentials.
+
+Open [http://localhost:5173](http://localhost:5173).
 
 ## Code Style
 
