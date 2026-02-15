@@ -181,7 +181,7 @@ resource "aws_cloudfront_response_headers_policy" "security" {
         "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval';",
         "style-src 'self' 'unsafe-inline';",
         "worker-src 'self' blob:;",
-        "connect-src 'self'${var.cognito_domain != "" ? " ${var.cognito_domain}" : ""}${var.data_bucket_s3_endpoint != "" ? " ${var.data_bucket_s3_endpoint}" : ""}${var.cognito_identity_endpoint != "" ? " ${var.cognito_identity_endpoint}" : ""};",
+        "connect-src 'self' https://extensions.duckdb.org${var.cognito_domain != "" ? " ${var.cognito_domain}" : ""}${var.data_bucket_s3_endpoint != "" ? " ${var.data_bucket_s3_endpoint}" : ""}${var.cognito_identity_endpoint != "" ? " ${var.cognito_identity_endpoint}" : ""};",
         "img-src 'self' data:;",
         "font-src 'self';",
         "object-src 'none';",
