@@ -94,4 +94,52 @@ describe("CostCenterCard", () => {
     const matches = screen.getAllByText(/0 workloads/);
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
+
+  it("handles top mover when all workloads have zero MoM change", () => {
+    const flatCC: CostCenter = {
+      name: "Stable Center",
+      current_cost_usd: 10000,
+      prev_month_cost_usd: 10000,
+      yoy_cost_usd: 8000,
+      workloads: [
+        {
+          name: "workload-a",
+          current_cost_usd: 5000,
+          prev_month_cost_usd: 5000,
+          yoy_cost_usd: 4000,
+        },
+        {
+          name: "workload-b",
+          current_cost_usd: 5000,
+          prev_month_cost_usd: 5000,
+          yoy_cost_usd: 4000,
+        },
+      ],
+    };
+    const { container } = renderCard(flatCC);
+    // Should still render top mover with 0.0% change
+    expect(container.textContent).toContain("Top mover:");
+    expect(container.textContent).toContain("0.0% MoM");
+  });
+
+  it("handles top mover when prev_month_cost_usd is zero", () => {
+    const newWorkloadCC: CostCenter = {
+      name: "New Workload Center",
+      current_cost_usd: 5000,
+      prev_month_cost_usd: 0,
+      yoy_cost_usd: 0,
+      workloads: [
+        {
+          name: "brand-new-workload",
+          current_cost_usd: 5000,
+          prev_month_cost_usd: 0,
+          yoy_cost_usd: 0,
+        },
+      ],
+    };
+    const { container } = renderCard(newWorkloadCC);
+    // Should show top mover with 0.0% (division by zero case)
+    expect(container.textContent).toContain("Top mover:");
+    expect(container.textContent).toContain("0.0% MoM");
+  });
 });
