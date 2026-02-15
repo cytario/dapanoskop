@@ -5,7 +5,7 @@
 | Document ID         | URS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.6 (Draft)                                |
+| Version             | 0.8 (Draft)                                |
 | Date                | 2026-02-15                                 |
 
 ---
@@ -194,6 +194,9 @@ A Budget Owner accesses and understands the cost report without requiring any kn
 **[URS-DP-10309] View Cost Trends Across Multiple Months**
 A Budget Owner views a visual summary of cost trends across all available reporting months (up to 12), broken down by cost center, to identify spending patterns, seasonal variations, and anomalies over time.
 
+**[URS-DP-10310] Identify Long-Term Cost Trajectory**
+A Budget Owner identifies the underlying cost trajectory by viewing a smoothed trend line (3-month moving average) overlaid on the historical cost chart, to distinguish short-term volatility from sustained increases or decreases.
+
 #### 3.1.4 Investigate Cost Anomalies (Macro-Step 4)
 
 **[URS-DP-10401] Drill Into Workload Cost**
@@ -250,7 +253,13 @@ Not applicable — non-regulated software.
 A DevOps engineer accesses deployment and configuration documentation to set up and maintain Dapanoskop.
 
 **[URS-DP-30102] Understand Report Content**
-A Budget Owner understands the cost report without separate documentation. The report is self-explanatory through clear labels, section headings, and contextual information.
+A Budget Owner understands the cost report without separate documentation. The report is self-explanatory through clear labels, section headings, and contextual information such as tooltips explaining calculated metrics.
+
+**[URS-DP-30103] Navigate Back to Report Home**
+A user returns to the current cost report from any screen within the application by clicking the application header, without losing their selected reporting period.
+
+**[URS-DP-30104] Access Report on Mobile Device**
+A Budget Owner accesses and reviews the cost report on a mobile device (phone or tablet) without layout breakage or overlapping content, though the primary design target remains desktop browsers.
 
 ---
 
@@ -264,3 +273,5 @@ A Budget Owner understands the cost report without separate documentation. The r
 | 0.4     | 2026-02-13 | —      | Review for artifacts S3 bucket deployment mechanism; no user-facing task changes (deployment workflow remains identical) |
 | 0.5     | 2026-02-14 | —      | Add backfill historical cost data requirement (URS-DP-10105) |
 | 0.6     | 2026-02-15 | —      | Add multi-month cost trend visualization requirement (URS-DP-10309) |
+| 0.7     | 2026-02-15 | —      | Add cost trajectory trend line (URS-DP-10310), contextual tooltips (URS-DP-30102 update), header navigation (URS-DP-30103), and mobile device access (URS-DP-30104) |
+| 0.8     | 2026-02-15 | —      | Consolidate v0.7 changes (trend line, tooltips, navigation, mobile) into single version entry |

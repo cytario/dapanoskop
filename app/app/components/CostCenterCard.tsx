@@ -3,6 +3,7 @@ import type { CostCenter } from "~/types/cost-data";
 import { formatUsd } from "~/lib/format";
 import { CostChange } from "./CostChange";
 import { WorkloadTable } from "./WorkloadTable";
+import { InfoTooltip } from "./InfoTooltip";
 
 interface CostCenterCardProps {
   costCenter: CostCenter;
@@ -55,17 +56,23 @@ export function CostCenterCard({ costCenter, period }: CostCenterCardProps) {
           </span>
         </div>
         <div className="flex items-center gap-6 mt-2 ml-7 text-sm">
-          <CostChange
-            current={costCenter.current_cost_usd}
-            previous={costCenter.prev_month_cost_usd}
-            label="MoM"
-          />
-          {costCenter.yoy_cost_usd > 0 ? (
+          <span className="inline-flex items-center">
             <CostChange
               current={costCenter.current_cost_usd}
-              previous={costCenter.yoy_cost_usd}
-              label="YoY"
+              previous={costCenter.prev_month_cost_usd}
+              label="MoM"
             />
+            <InfoTooltip text="Month-over-month cost change." />
+          </span>
+          {costCenter.yoy_cost_usd > 0 ? (
+            <span className="inline-flex items-center">
+              <CostChange
+                current={costCenter.current_cost_usd}
+                previous={costCenter.yoy_cost_usd}
+                label="YoY"
+              />
+              <InfoTooltip text="Year-over-year cost change." />
+            </span>
           ) : (
             <span className="text-gray-400 text-sm">YoY N/A</span>
           )}
@@ -76,6 +83,7 @@ export function CostCenterCard({ costCenter, period }: CostCenterCardProps) {
             <>
               {" "}
               · Top mover: {topMover.name} ({topMoverPct}% MoM)
+              <InfoTooltip text="Workload with the largest absolute cost change vs last month." />
             </>
           )}
         </div>

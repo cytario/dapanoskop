@@ -7,15 +7,24 @@ vi.mock("recharts", () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactElement }) => (
     <div>{children}</div>
   ),
-  BarChart: ({ children }: { children: React.ReactNode }) => (
-    <svg data-testid="bar-chart">{children}</svg>
+  ComposedChart: ({ children }: { children: React.ReactNode }) => (
+    <svg data-testid="composed-chart">{children}</svg>
   ),
   Bar: ({ name }: { name: string }) => <g data-name={name} />,
+  Line: ({ name, dataKey }: { name: string; dataKey: string }) => (
+    <g data-name={name} data-datakey={dataKey} />
+  ),
   XAxis: () => <g />,
   YAxis: () => <g />,
   Tooltip: () => <g />,
-  Legend: ({ payload }: { payload?: { value: string }[] }) => (
-    <div>
+  Legend: ({
+    payload,
+    verticalAlign,
+  }: {
+    payload?: { value: string }[];
+    verticalAlign?: string;
+  }) => (
+    <div data-vertical-align={verticalAlign}>
       {payload?.map((p) => (
         <span key={p.value}>{p.value}</span>
       ))}
@@ -26,6 +35,7 @@ vi.mock("recharts", () => ({
 import CostTrendChart from "./CostTrendChart";
 
 const points: TrendPoint[] = [
+  { period: "2025-10", Engineering: 13000, "Data Science": 6200 },
   { period: "2025-11", Engineering: 13800, "Data Science": 6500 },
   { period: "2025-12", Engineering: 14200, "Data Science": 6800 },
 ];
@@ -33,7 +43,7 @@ const points: TrendPoint[] = [
 const costCenterNames = ["Engineering", "Data Science"];
 
 describe("CostTrendChart", () => {
-  it("renders an SVG chart", () => {
+  it("renders a ComposedChart", () => {
     const { container } = render(
       <CostTrendChart points={points} costCenterNames={costCenterNames} />,
     );
@@ -45,8 +55,38 @@ describe("CostTrendChart", () => {
       <CostTrendChart points={points} costCenterNames={costCenterNames} />,
     );
     const bars = container.querySelectorAll("g[data-name]");
-    expect(bars).toHaveLength(2);
-    expect(bars[0].getAttribute("data-name")).toBe("Engineering");
-    expect(bars[1].getAttribute("data-name")).toBe("Data Science");
+    const barNames = Array.from(bars).map((b) => b.getAttribute("data-name"));
+    expect(barNames).toContain("Engineering");
+    expect(barNames).toContain("Data Science");
+  });
+
+  it("renders a Line for the moving average", () => {
+    const { container } = render(
+      <CostTrendChart points={points} costCenterNames={costCenterNames} />,
+    );
+    const line = container.querySelector('g[data-datakey="_movingAvg"]');
+    expect(line).not.toBeNull();
+    expect(line?.getAttribute("data-name")).toBe("3-Month Avg");
+  });
+
+  it("renders Legend with verticalAlign bottom", () => {
+    const { container } = render(
+      <CostTrendChart points={points} costCenterNames={costCenterNames} />,
+    );
+    const legend = container.querySelector('[data-vertical-align="bottom"]');
+    expect(legend).not.toBeNull();
+  });
+
+  it("renders moving average line even with fewer than 3 points", () => {
+    const twoPoints: TrendPoint[] = [
+      { period: "2025-11", Engineering: 13800 },
+      { period: "2025-12", Engineering: 14200 },
+    ];
+    const { container } = render(
+      <CostTrendChart points={twoPoints} costCenterNames={["Engineering"]} />,
+    );
+    // The Line element should still be in the DOM
+    const line = container.querySelector('g[data-datakey="_movingAvg"]');
+    expect(line).not.toBeNull();
   });
 });

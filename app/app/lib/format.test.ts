@@ -80,17 +80,17 @@ describe("formatPeriodLabel", () => {
 
 describe("formatBytes", () => {
   test("TB range", () => {
-    // 5 TB
-    expect(formatBytes(5 * 1_099_511_627_776)).toBe("5.0 TB");
+    // 5 TB (decimal)
+    expect(formatBytes(5 * 1_000_000_000_000)).toBe("5.0 TB");
   });
 
   test("GB range", () => {
-    // 512 GB
-    expect(formatBytes(512 * 1_073_741_824)).toBe("512.0 GB");
+    // 512 GB (decimal)
+    expect(formatBytes(512 * 1_000_000_000)).toBe("512.0 GB");
   });
 
   test("exact boundary at 1 TB", () => {
-    expect(formatBytes(1_099_511_627_776)).toBe("1.0 TB");
+    expect(formatBytes(1_000_000_000_000)).toBe("1.0 TB");
   });
 
   test("0 bytes", () => {

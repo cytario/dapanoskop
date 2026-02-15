@@ -1,6 +1,7 @@
 import {
-  BarChart,
+  ComposedChart,
   Bar,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -8,6 +9,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { formatPeriodLabel, formatUsd } from "~/lib/format";
+import { computeMovingAverage } from "~/lib/moving-average";
 import type { TrendPoint } from "~/lib/useTrendData";
 
 const COLORS = [
@@ -32,6 +34,7 @@ interface TooltipPayloadEntry {
   name: string;
   value: number;
   color: string;
+  dataKey: string;
 }
 
 function CustomTooltip({
@@ -45,12 +48,16 @@ function CustomTooltip({
 }) {
   if (!active || !payload?.length || !label) return null;
 
-  const total = payload.reduce((sum, entry) => sum + entry.value, 0);
+  // Separate bar entries from the moving average line
+  const barEntries = payload.filter((e) => e.dataKey !== "_movingAvg");
+  const maEntry = payload.find((e) => e.dataKey === "_movingAvg");
+
+  const total = barEntries.reduce((sum, entry) => sum + entry.value, 0);
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
       <p className="font-medium mb-1">{formatPeriodLabel(label)}</p>
-      {payload.map((entry) => (
+      {barEntries.map((entry) => (
         <p key={entry.name} style={{ color: entry.color }}>
           {entry.name}: {formatUsd(entry.value)}
         </p>
@@ -58,6 +65,11 @@ function CustomTooltip({
       <p className="font-medium border-t border-gray-100 mt-1 pt-1">
         Total: {formatUsd(total)}
       </p>
+      {maEntry && maEntry.value != null && (
+        <p className="text-gray-500 text-xs mt-1">
+          3-Month Avg: {formatUsd(maEntry.value)}
+        </p>
+      )}
     </div>
   );
 }
@@ -71,9 +83,16 @@ export default function CostTrendChart({
   points,
   costCenterNames,
 }: CostTrendChartProps) {
+  // Compute moving average and enrich data points
+  const maValues = computeMovingAverage(points, costCenterNames);
+  const enrichedPoints = points.map((pt, i) => ({
+    ...pt,
+    _movingAvg: maValues[i],
+  }));
+
   return (
-    <ResponsiveContainer width="100%" height={320}>
-      <BarChart data={points}>
+    <ResponsiveContainer width="100%" height={360}>
+      <ComposedChart data={enrichedPoints}>
         <XAxis
           dataKey="period"
           tickFormatter={formatPeriodLabel}
@@ -81,7 +100,7 @@ export default function CostTrendChart({
         />
         <YAxis tickFormatter={formatCompactUsd} tick={{ fontSize: 12 }} />
         <Tooltip content={<CustomTooltip />} />
-        <Legend />
+        <Legend verticalAlign="bottom" wrapperStyle={{ paddingTop: 12 }} />
         {costCenterNames.map((name, i) => (
           <Bar
             key={name}
@@ -91,7 +110,17 @@ export default function CostTrendChart({
             name={name}
           />
         ))}
-      </BarChart>
+        <Line
+          type="monotone"
+          dataKey="_movingAvg"
+          stroke="#6b7280"
+          strokeWidth={2}
+          strokeDasharray="6 3"
+          dot={false}
+          name="3-Month Avg"
+          connectNulls={false}
+        />
+      </ComposedChart>
     </ResponsiveContainer>
   );
 }

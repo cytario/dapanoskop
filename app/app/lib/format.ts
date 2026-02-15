@@ -51,8 +51,8 @@ export function formatPeriodLabel(period: string): string {
 }
 
 export function formatBytes(bytes: number): string {
-  const tb = bytes / 1_099_511_627_776;
+  const tb = bytes / 1_000_000_000_000;
   if (tb >= 1) return `${tb.toFixed(1)} TB`;
-  const gb = bytes / 1_073_741_824;
+  const gb = bytes / 1_000_000_000;
   return `${gb.toFixed(1)} GB`;
 }
