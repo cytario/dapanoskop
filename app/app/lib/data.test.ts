@@ -24,9 +24,9 @@ const fakeSummary: CostSummary = {
   storage_metrics: {
     total_cost_usd: 1234.56,
     prev_month_cost_usd: 1084.56,
-    total_volume_bytes: 5497558138880,
+    total_volume_bytes: 5000000000000,
     hot_tier_percentage: 62.3,
-    cost_per_tb_usd: 23.45,
+    cost_per_tb_usd: 23.0,
   },
   cost_centers: [],
   tagging_coverage: {

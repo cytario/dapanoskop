@@ -36,14 +36,26 @@ describe("StorageOverview", () => {
     expect(tooltips.length).toBe(3);
 
     const tooltipTexts = Array.from(tooltips).map((t) => t.textContent);
+    expect(tooltipTexts).toContain("Total cost of S3 storage for this period.");
     expect(tooltipTexts).toContain(
-      "Total cost of all storage services (S3, optionally EFS/EBS).",
+      "Total storage cost divided by the total volume of data stored, measured in terabytes (TB). Lower values indicate better storage cost efficiency.",
     );
     expect(tooltipTexts).toContain(
-      "Total storage cost divided by data volume in terabytes.",
+      "Percentage of stored data in frequently accessed tiers (e.g., S3 Standard, EFS Standard). High values may indicate optimization opportunities via lifecycle policies.",
     );
+  });
+
+  it("renders dynamic tooltip when storageConfig includes EFS and EBS", () => {
+    const { container } = render(
+      <StorageOverview
+        metrics={metrics}
+        storageConfig={{ include_efs: true, include_ebs: true }}
+      />,
+    );
+    const tooltips = container.querySelectorAll('[role="tooltip"]');
+    const tooltipTexts = Array.from(tooltips).map((t) => t.textContent);
     expect(tooltipTexts).toContain(
-      "Percentage of volume in frequently accessed storage tiers.",
+      "Total cost of S3, EFS, EBS storage for this period.",
     );
   });
 

@@ -163,7 +163,10 @@ export default function Home() {
             <CostTrendSection />
 
             {/* Storage Overview */}
-            <StorageOverview metrics={summary.storage_metrics} />
+            <StorageOverview
+              metrics={summary.storage_metrics}
+              storageConfig={summary.storage_config}
+            />
 
             {/* Tagging Coverage */}
             <TaggingCoverage data={summary.tagging_coverage} />

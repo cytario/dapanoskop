@@ -12,7 +12,7 @@ export function TaggingCoverage({ data }: TaggingCoverageProps) {
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium text-gray-700">
           Tagging Coverage
-          <InfoTooltip text="Proportion of spend attributed to tagged resources." />
+          <InfoTooltip text="Percentage of total spend attributed to resources with cost allocation tags. Higher coverage enables more accurate cost breakdowns by workload." />
         </span>
         <span className="text-sm text-gray-500">
           {data.tagged_percentage.toFixed(1)}% tagged (
