@@ -239,20 +239,31 @@ describe("logout", () => {
     vi.restoreAllMocks();
   });
 
-  test("logout clears id_token, access_token, and refresh_token from sessionStorage", async () => {
+  test("logout revokes refresh token, clears storage, and redirects to Cognito", async () => {
     sessionStorage.setItem("id_token", "some-id-token");
     sessionStorage.setItem("access_token", "some-access-token");
     sessionStorage.setItem("refresh_token", "some-refresh-token");
+
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", mockFetch);
 
     const { initAuth, logout } = await import("./auth");
     await initAuth();
 
     // logout() will set window.location.href for Cognito logout redirect.
     // In jsdom this is a no-op (doesn't actually navigate), so it's safe.
-    logout();
+    await logout();
+
+    expect(mockFetch).toHaveBeenCalledOnce();
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://auth.example.com/oauth2/revoke",
+      expect.objectContaining({ method: "POST" }),
+    );
 
     expect(sessionStorage.getItem("id_token")).toBeNull();
     expect(sessionStorage.getItem("access_token")).toBeNull();
     expect(sessionStorage.getItem("refresh_token")).toBeNull();
+
+    vi.unstubAllGlobals();
   });
 });
