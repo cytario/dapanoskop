@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.0"
+      version = ">= 5.95"
     }
   }
 }
@@ -74,8 +74,9 @@ resource "aws_cognito_user_pool" "managed" {
 resource "aws_cognito_user_pool_domain" "managed" {
   count = local.create_user_pool ? 1 : 0
 
-  domain       = var.cognito_domain_prefix
-  user_pool_id = aws_cognito_user_pool.managed[0].id
+  domain                = var.cognito_domain_prefix
+  managed_login_version = 2
+  user_pool_id          = aws_cognito_user_pool.managed[0].id
 
   lifecycle {
     precondition {
@@ -83,6 +84,16 @@ resource "aws_cognito_user_pool_domain" "managed" {
       error_message = "cognito_domain_prefix is required when creating a managed Cognito User Pool."
     }
   }
+}
+
+resource "aws_cognito_managed_login_branding" "app" {
+  count = local.create_user_pool ? 1 : 0
+
+  client_id                   = aws_cognito_user_pool_client.app.id
+  user_pool_id                = aws_cognito_user_pool.managed[0].id
+  use_cognito_provided_values = true
+
+  depends_on = [aws_cognito_user_pool_domain.managed]
 }
 
 resource "aws_cognito_identity_provider" "saml" {

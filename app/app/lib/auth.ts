@@ -112,15 +112,25 @@ export async function handleCallback(): Promise<boolean> {
   return true;
 }
 
-export function logout(): void {
+export async function logout(): Promise<void> {
+  const token = sessionStorage.getItem("refresh_token");
+
   clearAwsCredentials();
   sessionStorage.removeItem("id_token");
   sessionStorage.removeItem("access_token");
   sessionStorage.removeItem("refresh_token");
+
   if (!authBypass && cognitoDomain) {
+    if (token) {
+      await fetch(`${cognitoDomain}/oauth2/revoke`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token, client_id: clientId }),
+      }).catch(() => {});
+    }
     const params = new URLSearchParams({
       client_id: clientId,
-      redirect_uri: redirectUri,
+      logout_uri: redirectUri,
     });
     window.location.href = `${cognitoDomain}/logout?${params}`;
   } else {
