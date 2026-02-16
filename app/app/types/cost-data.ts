@@ -22,6 +22,7 @@ export interface StorageMetrics {
   total_volume_bytes: number;
   hot_tier_percentage: number;
   cost_per_tb_usd: number;
+  inventory_total_bytes?: number;
 }
 
 export interface CostCenter {

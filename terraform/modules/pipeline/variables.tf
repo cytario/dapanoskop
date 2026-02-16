@@ -32,6 +32,18 @@ variable "include_ebs" {
   default     = false
 }
 
+variable "inventory_bucket" {
+  description = "S3 bucket containing S3 Inventory delivery. Leave empty to disable inventory integration."
+  type        = string
+  default     = ""
+}
+
+variable "inventory_prefix" {
+  description = "S3 prefix to the inventory config (e.g., inventory/source-bucket/AllObjects)"
+  type        = string
+  default     = ""
+}
+
 variable "lambda_s3_bucket" {
   description = "S3 bucket containing a pre-built Lambda zip. If empty, archive_file builds from source."
   type        = string

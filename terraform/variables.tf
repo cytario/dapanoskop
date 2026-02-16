@@ -135,3 +135,15 @@ variable "enable_advanced_security" {
   type        = bool
   default     = true
 }
+
+variable "inventory_bucket" {
+  description = "S3 bucket containing S3 Inventory delivery. Leave empty to disable inventory integration."
+  type        = string
+  default     = ""
+}
+
+variable "inventory_prefix" {
+  description = "S3 prefix to the inventory config (e.g., inventory/source-bucket/AllObjects)"
+  type        = string
+  default     = ""
+}

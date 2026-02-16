@@ -11,6 +11,7 @@ from typing import Any
 import boto3
 
 from dapanoskop.collector import collect
+from dapanoskop.inventory import get_inventory_total_bytes
 from dapanoskop.processor import process, update_index, write_to_s3
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,8 @@ def _handle_backfill(
     include_ebs: bool,
     months: int,
     force: bool,
+    inventory_bucket: str = "",
+    inventory_prefix: str = "",
 ) -> dict[str, Any]:
     """Handle backfill mode: process multiple historical months."""
     logger.info("Starting backfill for %d months (force=%s)", months, force)
@@ -98,6 +101,23 @@ def _handle_backfill(
             processed = process(
                 collected, include_efs=include_efs, include_ebs=include_ebs
             )
+
+            # Enrich with S3 Inventory data if configured
+            if inventory_bucket and inventory_prefix:
+                try:
+                    inv_bytes = get_inventory_total_bytes(
+                        inventory_bucket, inventory_prefix
+                    )
+                    if inv_bytes is not None:
+                        processed["summary"]["storage_metrics"][
+                            "inventory_total_bytes"
+                        ] = inv_bytes
+                except Exception:
+                    logger.warning(
+                        "Failed to read S3 Inventory for %s, skipping",
+                        period_label,
+                        exc_info=True,
+                    )
 
             logger.info("Writing to S3 for %s", period_label)
             write_to_s3(processed, bucket, update_index_file=False)
@@ -152,6 +172,8 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     cost_category_name = os.environ.get("COST_CATEGORY_NAME", "")
     include_efs = os.environ.get("INCLUDE_EFS", "false").lower() == "true"
     include_ebs = os.environ.get("INCLUDE_EBS", "false").lower() == "true"
+    inventory_bucket = os.environ.get("INVENTORY_BUCKET", "")
+    inventory_prefix = os.environ.get("INVENTORY_PREFIX", "")
 
     # Check for backfill mode
     backfill = event.get("backfill", False)
@@ -159,7 +181,14 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         months = event.get("months", 13)
         force = event.get("force", False)
         return _handle_backfill(
-            bucket, cost_category_name, include_efs, include_ebs, months, force
+            bucket,
+            cost_category_name,
+            include_efs,
+            include_ebs,
+            months,
+            force,
+            inventory_bucket,
+            inventory_prefix,
         )
 
     # Normal mode: process current month
@@ -169,6 +198,25 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         logger.info("Processing collected data")
         processed = process(collected, include_efs=include_efs, include_ebs=include_ebs)
+
+        # Enrich with S3 Inventory data if configured
+        if inventory_bucket and inventory_prefix:
+            logger.info(
+                "Reading S3 Inventory from s3://%s/%s",
+                inventory_bucket,
+                inventory_prefix,
+            )
+            try:
+                inv_bytes = get_inventory_total_bytes(
+                    inventory_bucket, inventory_prefix
+                )
+                if inv_bytes is not None:
+                    processed["summary"]["storage_metrics"]["inventory_total_bytes"] = (
+                        inv_bytes
+                    )
+                    logger.info("Inventory total bytes: %d", inv_bytes)
+            except Exception:
+                logger.warning("Failed to read S3 Inventory, skipping", exc_info=True)
 
         logger.info("Writing to S3")
         write_to_s3(processed, bucket)
