@@ -14,6 +14,7 @@ resource "aws_s3_bucket" "app" {
   #checkov:skip=CKV_AWS_144:Cross-region replication not justified for internal tool
   #checkov:skip=CKV_AWS_145:SSE-S3 (AES256) sufficient; no compliance requirement for KMS
   bucket_prefix = "dapanoskop-app-"
+  tags          = var.tags
 }
 
 resource "aws_s3_bucket_versioning" "app" {
@@ -74,6 +75,7 @@ resource "aws_s3_bucket" "logs" {
   #checkov:skip=CKV_AWS_21:Versioning unnecessary for ephemeral access logs with 90-day expiry
   count         = var.enable_access_logging ? 1 : 0
   bucket_prefix = "dapanoskop-logs-"
+  tags          = var.tags
 }
 
 resource "aws_s3_bucket_public_access_block" "logs" {
@@ -211,6 +213,7 @@ resource "aws_cloudfront_distribution" "main" {
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
+  tags                = var.tags
 
   aliases = var.domain_name != "" ? [var.domain_name] : []
 

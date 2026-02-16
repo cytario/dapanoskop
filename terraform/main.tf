@@ -1,9 +1,3 @@
-provider "aws" {
-  default_tags {
-    tags = var.tags
-  }
-}
-
 data "aws_region" "current" {}
 
 module "artifacts" {
@@ -11,6 +5,7 @@ module "artifacts" {
 
   release_version = var.release_version
   github_repo     = var.github_repo
+  tags            = var.tags
 }
 
 module "data_store" {
@@ -20,6 +15,7 @@ module "data_store" {
     "https://${module.hosting.cloudfront_domain_name}",
     var.domain_name != "" ? "https://${var.domain_name}" : "",
   ])
+  tags = var.tags
 }
 
 module "hosting" {
@@ -38,6 +34,7 @@ module "hosting" {
   data_bucket_name          = module.data_store.bucket_name
   data_bucket_s3_endpoint   = "https://${module.data_store.bucket_regional_domain_name}"
   cognito_identity_endpoint = "https://cognito-identity.${data.aws_region.current.id}.amazonaws.com"
+  tags                      = var.tags
 }
 
 module "auth" {
@@ -59,6 +56,7 @@ module "auth" {
   enable_advanced_security  = var.enable_advanced_security
   data_bucket_arn           = module.data_store.bucket_arn
   permissions_boundary      = var.permissions_boundary
+  tags                      = var.tags
 }
 
 module "pipeline" {
@@ -76,4 +74,5 @@ module "pipeline" {
   lambda_s3_key            = module.artifacts.lambda_s3_key
   lambda_s3_object_version = module.artifacts.lambda_s3_object_version
   permissions_boundary     = var.permissions_boundary
+  tags                     = var.tags
 }

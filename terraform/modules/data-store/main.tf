@@ -15,6 +15,7 @@ resource "aws_s3_bucket" "data" {
   #checkov:skip=CKV_AWS_18:Access logging available via enable_access_logging variable at root module level
   #checkov:skip=CKV_AWS_145:SSE-S3 (AES256) sufficient; no compliance requirement for KMS
   bucket_prefix = "dapanoskop-data-"
+  tags          = var.tags
 }
 
 resource "aws_s3_bucket_versioning" "data" {

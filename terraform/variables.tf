@@ -149,7 +149,7 @@ variable "inventory_prefix" {
 }
 
 variable "tags" {
-  description = "Map of tags to apply to all resources via the AWS provider default_tags"
+  description = "Map of tags to apply to all taggable resources"
   type        = map(string)
   default     = {}
 }

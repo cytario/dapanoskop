@@ -35,6 +35,7 @@ resource "aws_cognito_user_pool" "managed" {
   auto_verified_attributes = ["email"]
   deletion_protection      = "ACTIVE"
   mfa_configuration        = var.cognito_mfa_configuration
+  tags                     = var.tags
 
   dynamic "software_token_mfa_configuration" {
     for_each = var.cognito_mfa_configuration != "OFF" ? [1] : []
@@ -154,6 +155,7 @@ resource "aws_cognito_identity_pool" "main" {
   identity_pool_name               = "dapanoskop"
   allow_unauthenticated_identities = false
   allow_classic_flow               = false
+  tags                             = var.tags
 
   cognito_identity_providers {
     client_id               = aws_cognito_user_pool_client.app.id
@@ -165,6 +167,7 @@ resource "aws_cognito_identity_pool" "main" {
 resource "aws_iam_role" "identity_pool_authenticated" {
   name_prefix          = "dapanoskop-cognito-auth-"
   permissions_boundary = var.permissions_boundary != "" ? var.permissions_boundary : null
+  tags                 = var.tags
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
