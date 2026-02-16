@@ -229,7 +229,10 @@ def test_collect_integration() -> None:
     # Mock the entire boto3.client call to return a mock CE client
     mock_ce_client = MagicMock()
 
-    # Mock get_cost_and_usage responses for three periods
+    # Mock get_cost_and_usage responses:
+    # 1-3: three periods (current, prev_month, yoy) with App tag + USAGE_TYPE
+    # 4: cost category mapping with App tag + COST_CATEGORY
+    # 5-7: allocated costs by category (current, prev_month, yoy) with COST_CATEGORY only
     mock_ce_client.get_cost_and_usage.side_effect = [
         # Current month
         {
@@ -289,7 +292,7 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # Cost category mapping query
+        # Cost category mapping query (App tag + COST_CATEGORY)
         {
             "ResultsByTime": [
                 {
@@ -310,6 +313,51 @@ def test_collect_integration() -> None:
                 }
             ],
         },
+        # Allocated costs: current period (COST_CATEGORY only)
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["CostCenter$Engineering"],
+                            "Metrics": {
+                                "UnblendedCost": {"Amount": "1100.0", "Unit": "USD"}
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # Allocated costs: prev_month period (COST_CATEGORY only)
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["CostCenter$Engineering"],
+                            "Metrics": {
+                                "UnblendedCost": {"Amount": "900.0", "Unit": "USD"}
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # Allocated costs: yoy period (COST_CATEGORY only)
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["CostCenter$Engineering"],
+                            "Metrics": {
+                                "UnblendedCost": {"Amount": "800.0", "Unit": "USD"}
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
     ]
 
     # Mock get_cost_categories response
@@ -317,6 +365,24 @@ def test_collect_integration() -> None:
         {"CostCategoryNames": ["CostCenter"]},
         {},
     ]
+
+    # Mock list_cost_category_definitions for split charge detection
+    mock_ce_client.list_cost_category_definitions.return_value = {
+        "CostCategoryReferences": [
+            {
+                "Name": "CostCenter",
+                "CostCategoryArn": "arn:aws:ce::123456789012:costcategory/abc-123",
+            }
+        ]
+    }
+
+    # Mock describe_cost_category_definition for split charge rules
+    mock_ce_client.describe_cost_category_definition.return_value = {
+        "CostCategory": {
+            "Name": "CostCenter",
+            "SplitChargeRules": [],
+        }
+    }
 
     with patch("boto3.client", return_value=mock_ce_client):
         result = collect(cost_category_name="CostCenter")
@@ -326,6 +392,8 @@ def test_collect_integration() -> None:
     assert "period_labels" in result
     assert "raw_data" in result
     assert "cc_mapping" in result
+    assert "split_charge_categories" in result
+    assert "allocated_costs" in result
 
     # Verify period labels
     assert "current" in result["period_labels"]
@@ -345,8 +413,18 @@ def test_collect_integration() -> None:
     # Verify cost category mapping
     assert result["cc_mapping"] == {"web-app": "Engineering", "api": "Engineering"}
 
-    # Verify get_cost_and_usage was called 4 times (3 periods + 1 for cost categories)
-    assert mock_ce_client.get_cost_and_usage.call_count == 4
+    # Verify split charge categories (should be empty in this test)
+    assert result["split_charge_categories"] == []
+
+    # Verify allocated costs for all periods
+    assert "current" in result["allocated_costs"]
+    assert "prev_month" in result["allocated_costs"]
+    assert "yoy" in result["allocated_costs"]
+    assert result["allocated_costs"]["current"] == {"Engineering": 1100.0}
+
+    # Verify get_cost_and_usage was called 7 times:
+    # 3 periods + 1 for cost category mapping + 3 for allocated costs
+    assert mock_ce_client.get_cost_and_usage.call_count == 7
 
 
 def test_collect_with_target_month() -> None:
@@ -355,9 +433,16 @@ def test_collect_with_target_month() -> None:
 
     mock_ce_client = MagicMock()
 
-    # Mock empty responses
+    # Mock empty responses for get_cost_and_usage (3 periods only, no allocated costs since no category)
     mock_ce_client.get_cost_and_usage.return_value = {"ResultsByTime": [{"Groups": []}]}
     mock_ce_client.get_cost_categories.return_value = {"CostCategoryNames": []}
+    # Mock split charge detection calls (won't be called since category_name is empty, but safe to mock)
+    mock_ce_client.list_cost_category_definitions.return_value = {
+        "CostCategoryReferences": []
+    }
+    mock_ce_client.describe_cost_category_definition.return_value = {
+        "CostCategory": {"SplitChargeRules": []}
+    }
 
     with patch("boto3.client", return_value=mock_ce_client):
         result = collect(
