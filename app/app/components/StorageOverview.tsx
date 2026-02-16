@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import type { StorageMetrics, CostSummary } from "~/types/cost-data";
 import { formatUsd, formatBytes } from "~/lib/format";
 import { CostChange } from "./CostChange";
@@ -6,6 +7,7 @@ import { InfoTooltip } from "./InfoTooltip";
 interface StorageOverviewProps {
   metrics: StorageMetrics;
   storageConfig?: CostSummary["storage_config"];
+  period?: string;
 }
 
 function buildStorageCostTooltip(
@@ -20,6 +22,7 @@ function buildStorageCostTooltip(
 export function StorageOverview({
   metrics,
   storageConfig,
+  period,
 }: StorageOverviewProps) {
   const hasInventory = metrics.inventory_total_bytes != null;
   const gridCols = hasInventory ? "sm:grid-cols-4" : "sm:grid-cols-3";
@@ -70,6 +73,16 @@ export function StorageOverview({
           {metrics.hot_tier_percentage.toFixed(1)}%
         </div>
       </div>
+      {hasInventory && (
+        <div className="col-span-full text-right">
+          <Link
+            to={`/storage${period ? `?period=${period}` : ""}`}
+            className="text-sm text-primary-600 hover:underline"
+          >
+            View storage details &rarr;
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
