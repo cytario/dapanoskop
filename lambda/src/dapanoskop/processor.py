@@ -14,8 +14,8 @@ import pyarrow.parquet as pq
 from dapanoskop.categories import categorize
 
 _DEFAULT_CC = "Uncategorized"
-_HOURS_IN_MONTH = 730  # Average hours in a month
-_BYTES_PER_TB = 1_000_000_000_000  # 10^12 bytes per terabyte (decimal, not binary)
+_BYTES_PER_GB = 1_000_000_000  # 10^9 bytes per gigabyte (decimal)
+_BYTES_PER_TB = 1_000_000_000_000  # 10^12 bytes per terabyte (decimal)
 
 
 def _parse_groups(
@@ -52,13 +52,14 @@ def _compute_storage_metrics(
 ) -> dict[str, Any]:
     """Compute storage volume and hot tier metrics from usage data.
 
-    Note: AWS Cost Explorer returns UsageQuantity for TimedStorage-* in GB-hours, not byte-hours.
-    We convert GB-hours to bytes: (GB-hours * 1e9) / hours_in_month = average bytes stored.
+    Note: AWS Cost Explorer returns UsageQuantity for TimedStorage-* in GB-Months,
+    which represents the average GB stored during the billing period.
+    We convert GB-Months to bytes: GB-Months * 1e9 = average bytes stored.
     """
     total_cost = 0.0
     prev_total_cost = 0.0
-    total_gb_hours = 0.0
-    hot_gb_hours = 0.0
+    total_gb_months = 0.0
+    hot_gb_months = 0.0
 
     def _is_storage_volume(usage_type: str) -> bool:
         if usage_type.startswith("TimedStorage"):
@@ -76,21 +77,18 @@ def _compute_storage_metrics(
         if row["category"] == "Storage":
             total_cost += row["cost_usd"]
         if _is_storage_volume(row["usage_type"]):
-            total_gb_hours += row["usage_quantity"]
+            total_gb_months += row["usage_quantity"]
             if _is_hot_tier(row["usage_type"]):
-                hot_gb_hours += row["usage_quantity"]
+                hot_gb_months += row["usage_quantity"]
 
     for row in prev_rows:
         if row["category"] == "Storage":
             prev_total_cost += row["cost_usd"]
 
-    # Convert GB-hours to bytes: (GB-hours × 1e9 bytes/GB) ÷ hours = average bytes stored
-    total_bytes = (
-        (total_gb_hours * 1_000_000_000) / _HOURS_IN_MONTH if total_gb_hours else 0
-    )
-    # Cost per TB: total storage cost / (total volume in bytes / bytes per TB)
+    # Convert GB-Months to bytes: GB-Months × 1e9 bytes/GB = average bytes stored
+    total_bytes = total_gb_months * _BYTES_PER_GB if total_gb_months else 0
     cost_per_tb = total_cost / (total_bytes / _BYTES_PER_TB) if total_bytes else 0
-    hot_pct = (hot_gb_hours / total_gb_hours * 100) if total_gb_hours else 0
+    hot_pct = (hot_gb_months / total_gb_months * 100) if total_gb_months else 0
 
     return {
         "total_cost_usd": round(total_cost, 2),

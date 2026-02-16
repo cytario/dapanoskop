@@ -44,22 +44,22 @@ def _make_collected(
 
 def test_process_basic() -> None:
     """Test basic processing with simple data."""
-    # Note: CE returns GB-hours for TimedStorage-ByteHrs
-    # 100 GB stored × 730 hours = 73,000 GB-hours
+    # Note: CE returns GB-Months for TimedStorage-ByteHrs (average GB stored)
+    # 100 GB stored for one month = 100 GB-Months
     collected = _make_collected(
         current_groups=[
             _make_group("web-app", "BoxUsage:m5.xlarge", 1000, 744),
-            _make_group("web-app", "TimedStorage-ByteHrs", 200, 73_000),
+            _make_group("web-app", "TimedStorage-ByteHrs", 200, 100),
             _make_group("api", "BoxUsage:t3.medium", 500, 1488),
         ],
         prev_groups=[
             _make_group("web-app", "BoxUsage:m5.xlarge", 900, 720),
-            _make_group("web-app", "TimedStorage-ByteHrs", 180, 65_700),
+            _make_group("web-app", "TimedStorage-ByteHrs", 180, 90),
             _make_group("api", "BoxUsage:t3.medium", 480, 1440),
         ],
         yoy_groups=[
             _make_group("web-app", "BoxUsage:m5.xlarge", 700, 744),
-            _make_group("web-app", "TimedStorage-ByteHrs", 150, 58_400),
+            _make_group("web-app", "TimedStorage-ByteHrs", 150, 80),
             _make_group("api", "BoxUsage:t3.medium", 300, 744),
         ],
         cc_mapping={"web-app": "Engineering", "api": "Engineering"},
@@ -110,18 +110,18 @@ def test_untagged_workloads() -> None:
 def test_storage_metrics() -> None:
     """Test storage metric calculations.
 
-    AWS CE returns GB-hours for TimedStorage-*. Example:
-    - 1000 GB stored × 730 hours = 730,000 GB-hours
-    - 500 GB stored × 730 hours = 365,000 GB-hours
+    AWS CE returns GB-Months for TimedStorage-*. Example:
+    - 1000 GB stored for one month = 1,000 GB-Months
+    - 500 GB stored for one month = 500 GB-Months
     """
     collected = _make_collected(
         current_groups=[
-            _make_group("app", "TimedStorage-ByteHrs", 500, 730_000),
-            _make_group("app", "TimedStorage-INT-FA-ByteHrs", 200, 365_000),
-            _make_group("app", "TimedStorage-GlacierStaging", 50, 730_000),
+            _make_group("app", "TimedStorage-ByteHrs", 500, 1_000),
+            _make_group("app", "TimedStorage-INT-FA-ByteHrs", 200, 500),
+            _make_group("app", "TimedStorage-GlacierStaging", 50, 1_000),
         ],
         prev_groups=[
-            _make_group("app", "TimedStorage-ByteHrs", 450, 700_000),
+            _make_group("app", "TimedStorage-ByteHrs", 450, 960),
         ],
         yoy_groups=[],
     )
@@ -131,17 +131,14 @@ def test_storage_metrics() -> None:
 
     assert sm["total_cost_usd"] == 750.0
     assert sm["prev_month_cost_usd"] == 450.0
-    assert sm["total_volume_bytes"] > 0
-    # Hot tier = (ByteHrs + INT-FA) / total = (730K + 365K) / (730K + 365K + 730K)
-    expected_hot = (730_000 + 365_000) / (730_000 + 365_000 + 730_000) * 100
+    # Total GB-Months: 1,000 + 500 + 1,000 = 2,500
+    # Total bytes: 2,500 × 1e9 = 2,500,000,000,000 = 2.5 TB
+    assert sm["total_volume_bytes"] == 2_500_000_000_000
+    # Hot tier = (ByteHrs + INT-FA) / total = (1000 + 500) / (1000 + 500 + 1000)
+    expected_hot = (1_000 + 500) / (1_000 + 500 + 1_000) * 100
     assert abs(sm["hot_tier_percentage"] - round(expected_hot, 1)) < 0.2
-    # Verify cost_per_tb_usd calculation is applied correctly
-    # Total GB-hours: 730,000 + 365,000 + 730,000 = 1,825,000
-    # Total bytes: (1,825,000 GB-hours × 1e9) / 730 = 2,500,000,000,000 = 2.5 TB
-    expected_volume_bytes = (1_825_000 * 1_000_000_000) / 730
-    expected_volume_tb = expected_volume_bytes / 1_000_000_000_000
-    expected_cost_per_tb = 750.0 / expected_volume_tb
-    assert abs(sm["cost_per_tb_usd"] - round(expected_cost_per_tb, 2)) < 0.1
+    # Cost per TB: $750 / 2.5 TB = $300/TB
+    assert sm["cost_per_tb_usd"] == 300.0
 
 
 def test_multiple_cost_centers() -> None:
@@ -254,12 +251,12 @@ def test_write_to_s3_creates_all_files() -> None:
     bucket = "test-bucket"
     s3.create_bucket(Bucket=bucket)
 
-    # Create processed data (CE returns GB-hours for TimedStorage-*)
-    # 100 GB × 730 hours = 73,000 GB-hours
+    # Create processed data (CE returns GB-Months for TimedStorage-*)
+    # 100 GB stored = 100 GB-Months
     collected = _make_collected(
         current_groups=[
             _make_group("web-app", "BoxUsage:m5.xlarge", 1000, 744),
-            _make_group("api", "TimedStorage-ByteHrs", 200, 73_000),
+            _make_group("api", "TimedStorage-ByteHrs", 200, 100),
         ],
         prev_groups=[
             _make_group("web-app", "BoxUsage:m5.xlarge", 900, 720),
@@ -380,12 +377,12 @@ def test_write_to_s3_parquet_schema() -> None:
     bucket = "test-bucket"
     s3.create_bucket(Bucket=bucket)
 
-    # Create processed data (CE returns GB-hours for TimedStorage-*)
-    # 100 GB × 730 hours = 73,000 GB-hours
+    # Create processed data (CE returns GB-Months for TimedStorage-*)
+    # 100 GB stored = 100 GB-Months
     collected = _make_collected(
         current_groups=[
             _make_group("web-app", "BoxUsage:m5.xlarge", 1000, 744),
-            _make_group("api", "TimedStorage-ByteHrs", 200, 73_000),
+            _make_group("api", "TimedStorage-ByteHrs", 200, 100),
         ],
         prev_groups=[],
         yoy_groups=[],
@@ -487,19 +484,18 @@ def test_parse_groups_missing_keys_field() -> None:
 
 
 def test_storage_metrics_realistic_scale() -> None:
-    """Test storage metrics with realistic AWS GB-hour magnitudes."""
-    # Scenario: 5 TB stored for entire month (730 hours)
-    # 5 TB = 5,000 GB
-    # 5,000 GB × 730 hours = 3,650,000 GB-hours (AWS CE returns this)
+    """Test storage metrics with realistic AWS GB-Month magnitudes."""
+    # Scenario: 5 TB stored for entire month
+    # 5 TB = 5,000 GB → CE returns 5,000 GB-Months
     # AWS S3 Standard pricing: ~$0.023/GB = ~$23/TB/month
     # Expected cost: 5 TB * $23 = $115
 
     collected = _make_collected(
         current_groups=[
-            _make_group("app", "TimedStorage-ByteHrs", 115.0, 3_650_000),
+            _make_group("app", "TimedStorage-ByteHrs", 115.0, 5_000),
         ],
         prev_groups=[
-            _make_group("app", "TimedStorage-ByteHrs", 110.0, 3_500_000),
+            _make_group("app", "TimedStorage-ByteHrs", 110.0, 4_800),
         ],
         yoy_groups=[],
     )
@@ -507,7 +503,7 @@ def test_storage_metrics_realistic_scale() -> None:
     result = process(collected)
     sm = result["summary"]["storage_metrics"]
 
-    # Verify volume: (3,650,000 GB-hours × 1e9) / 730 hours = 5,000,000,000,000 bytes = 5 TB
+    # Verify volume: 5,000 GB-Months × 1e9 = 5,000,000,000,000 bytes = 5 TB
     assert sm["total_volume_bytes"] == 5_000_000_000_000
 
     # Verify cost per TB: $115 / 5 TB = $23/TB (realistic S3 Standard pricing)
@@ -547,12 +543,12 @@ def test_storage_metrics_with_efs_and_ebs() -> None:
     """
     collected = _make_collected(
         current_groups=[
-            # S3 standard: 100 GB * 730 hours = 73,000 GB-hours
-            _make_group("app", "TimedStorage-ByteHrs", 50, 73_000),
+            # S3 standard: 100 GB-Months
+            _make_group("app", "TimedStorage-ByteHrs", 50, 100),
             # EFS usage (should only count when include_efs=True)
-            _make_group("app", "EFS:TimedStorage-ByteHrs", 30, 36_500),
+            _make_group("app", "EFS:TimedStorage-ByteHrs", 30, 50),
             # EBS usage (should only count when include_ebs=True)
-            _make_group("app", "EBS:VolumeUsage.gp3", 20, 14_600),
+            _make_group("app", "EBS:VolumeUsage.gp3", 20, 20),
         ],
         prev_groups=[],
         yoy_groups=[],
@@ -561,24 +557,20 @@ def test_storage_metrics_with_efs_and_ebs() -> None:
     # Without flags: only TimedStorage-ByteHrs contributes to volume
     result_no_flags = process(collected)
     sm_no_flags = result_no_flags["summary"]["storage_metrics"]
-    expected_s3_bytes = (73_000 * 1_000_000_000) / 730  # 100 GB = 100,000,000,000
-    assert sm_no_flags["total_volume_bytes"] == round(expected_s3_bytes)
+    assert sm_no_flags["total_volume_bytes"] == 100_000_000_000  # 100 GB
 
     # With include_efs: S3 + EFS contribute
     result_efs = process(collected, include_efs=True)
     sm_efs = result_efs["summary"]["storage_metrics"]
-    expected_efs_bytes = ((73_000 + 36_500) * 1_000_000_000) / 730
-    assert sm_efs["total_volume_bytes"] == round(expected_efs_bytes)
+    assert sm_efs["total_volume_bytes"] == 150_000_000_000  # 150 GB
     assert sm_efs["total_volume_bytes"] > sm_no_flags["total_volume_bytes"]
 
     # With include_ebs: S3 + EBS contribute
     result_ebs = process(collected, include_ebs=True)
     sm_ebs = result_ebs["summary"]["storage_metrics"]
-    expected_ebs_bytes = ((73_000 + 14_600) * 1_000_000_000) / 730
-    assert sm_ebs["total_volume_bytes"] == round(expected_ebs_bytes)
+    assert sm_ebs["total_volume_bytes"] == 120_000_000_000  # 120 GB
 
     # With both flags: all three contribute
     result_both = process(collected, include_efs=True, include_ebs=True)
     sm_both = result_both["summary"]["storage_metrics"]
-    expected_all_bytes = ((73_000 + 36_500 + 14_600) * 1_000_000_000) / 730
-    assert sm_both["total_volume_bytes"] == round(expected_all_bytes)
+    assert sm_both["total_volume_bytes"] == 170_000_000_000  # 170 GB
