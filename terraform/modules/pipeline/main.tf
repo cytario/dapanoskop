@@ -27,7 +27,8 @@ data "archive_file" "lambda" {
 }
 
 resource "aws_iam_role" "lambda" {
-  name_prefix = "dapanoskop-pipeline-"
+  name_prefix          = "dapanoskop-pipeline-"
+  permissions_boundary = var.permissions_boundary != "" ? var.permissions_boundary : null
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

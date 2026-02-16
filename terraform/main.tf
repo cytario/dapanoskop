@@ -1,3 +1,9 @@
+provider "aws" {
+  default_tags {
+    tags = var.tags
+  }
+}
+
 data "aws_region" "current" {}
 
 module "artifacts" {
@@ -52,6 +58,7 @@ module "auth" {
   oidc_attribute_mapping    = var.oidc_attribute_mapping
   enable_advanced_security  = var.enable_advanced_security
   data_bucket_arn           = module.data_store.bucket_arn
+  permissions_boundary      = var.permissions_boundary
 }
 
 module "pipeline" {
@@ -68,4 +75,5 @@ module "pipeline" {
   lambda_s3_bucket         = module.artifacts.lambda_s3_bucket
   lambda_s3_key            = module.artifacts.lambda_s3_key
   lambda_s3_object_version = module.artifacts.lambda_s3_object_version
+  permissions_boundary     = var.permissions_boundary
 }
