@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import type { StorageMetrics, CostSummary } from "~/types/cost-data";
 import { formatUsd, formatBytes } from "~/lib/format";
 import { CostChange } from "./CostChange";
@@ -7,7 +6,6 @@ import { InfoTooltip } from "./InfoTooltip";
 interface StorageOverviewProps {
   metrics: StorageMetrics;
   storageConfig?: CostSummary["storage_config"];
-  period?: string;
 }
 
 function buildStorageCostTooltip(
@@ -22,10 +20,9 @@ function buildStorageCostTooltip(
 export function StorageOverview({
   metrics,
   storageConfig,
-  period,
 }: StorageOverviewProps) {
-  const hasInventory = metrics.inventory_total_bytes != null;
-  const gridCols = hasInventory ? "sm:grid-cols-4" : "sm:grid-cols-3";
+  const hasStorageLens = metrics.storage_lens_total_bytes != null;
+  const gridCols = hasStorageLens ? "sm:grid-cols-4" : "sm:grid-cols-3";
 
   return (
     <div className={`grid grid-cols-1 ${gridCols} gap-4`}>
@@ -44,14 +41,14 @@ export function StorageOverview({
           />
         </div>
       </div>
-      {hasInventory && (
+      {hasStorageLens && (
         <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
           <div className="text-sm text-gray-500">
             Total Stored
-            <InfoTooltip text="Actual total storage volume from S3 Inventory. This is the precise amount of data stored, measured at the time of the latest inventory snapshot." />
+            <InfoTooltip text="Actual total storage volume from S3 Storage Lens. This is the precise amount of data stored, measured at the time of the latest metrics snapshot." />
           </div>
           <div className="text-xl font-semibold mt-1">
-            {formatBytes(metrics.inventory_total_bytes!)}
+            {formatBytes(metrics.storage_lens_total_bytes!)}
           </div>
         </div>
       )}
@@ -73,16 +70,6 @@ export function StorageOverview({
           {metrics.hot_tier_percentage.toFixed(1)}%
         </div>
       </div>
-      {hasInventory && (
-        <div className="col-span-full text-right">
-          <Link
-            to={`/storage${period ? `?period=${period}` : ""}`}
-            className="text-sm text-primary-600 hover:underline"
-          >
-            View storage details &rarr;
-          </Link>
-        </div>
-      )}
     </div>
   );
 }

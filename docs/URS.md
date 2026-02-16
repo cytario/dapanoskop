@@ -5,7 +5,7 @@
 | Document ID         | URS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.10 (Draft)                               |
+| Version             | 0.11 (Draft)                               |
 | Date                | 2026-02-16                                 |
 
 ---
@@ -157,8 +157,8 @@ A DevOps engineer configures single sign-on so that users authenticate through t
 **[URS-DP-10105] Backfill Historical Cost Data**
 A DevOps engineer triggers collection of historical cost data for all months available in Cost Explorer, so that Dapanoskop is populated with past cost trends immediately after initial deployment rather than accumulating data month by month.
 
-**[URS-DP-10106] Configure S3 Inventory Integration**
-A DevOps engineer optionally configures S3 Inventory integration by specifying an S3 bucket and prefix where inventory data is delivered, so that Dapanoskop displays actual total storage volume (in bytes) in addition to cost-derived storage metrics.
+**[URS-DP-10106] Configure S3 Storage Lens Integration**
+A DevOps engineer optionally configures S3 Storage Lens integration by specifying a Storage Lens configuration ID (or letting Dapanoskop auto-discover the first available organization-level configuration), so that Dapanoskop displays actual total storage volume from CloudWatch metrics in addition to cost-derived storage metrics.
 
 #### 3.1.2 Tag Resources for Cost Visibility (Macro-Step 2)
 
@@ -204,10 +204,12 @@ A Budget Owner identifies the underlying cost trajectory by viewing a smoothed t
 A Budget Owner views a dedicated page for a single cost center showing its historical cost trend, period-over-period comparisons (MoM, YoY), and workload breakdown, enabling focused analysis of a specific cost center without the context of other cost centers.
 
 **[URS-DP-10312] View Actual Total Storage Volume**
-A Budget Owner views the actual total storage volume (in bytes and TB) across all monitored S3 buckets, derived from S3 Inventory data when configured at deployment time, to validate that storage cost metrics reflect real usage.
+A Budget Owner views the actual total storage volume (in bytes and TB) across the entire AWS organization, derived from S3 Storage Lens CloudWatch metrics when configured at deployment time, to validate that storage cost metrics reflect real usage.
 
-**[URS-DP-10313] Investigate Storage Per Bucket**
+**[URS-DP-10313] Investigate Storage Per Bucket** (Deferred)
 A Budget Owner or DevOps engineer investigates storage volume and object count on a per-bucket basis to identify which S3 buckets are driving storage costs and volume, enabling targeted optimization efforts.
+
+**Note**: This requirement is deferred. The current implementation (Option A: CloudWatch-only) provides organization-wide storage totals from S3 Storage Lens but does not support per-bucket breakdowns. Per-bucket detail would require Option B (S3 Inventory) or Option C (S3 Storage Lens + Inventory), which are not currently implemented.
 
 #### 3.1.4 Investigate Cost Anomalies (Macro-Step 4)
 
@@ -292,3 +294,4 @@ A Budget Owner accesses and reviews the cost report on a mobile device (phone or
 | 0.8     | 2026-02-15 | —      | Consolidate v0.7 changes (trend line, tooltips, navigation, mobile) into single version entry |
 | 0.9     | 2026-02-15 | —      | Add cost trend time range toggle (URS-DP-10309 update) and cost center detail page navigation (URS-DP-10311) |
 | 0.10    | 2026-02-16 | —      | Add S3 Inventory integration (URS-DP-10106), actual storage volume display (URS-DP-10312), storage per-bucket investigation (URS-DP-10313), split charge cost allocation understanding (URS-DP-10403), and resource tags/permissions boundary configuration (URS-DP-10101 update) |
+| 0.11    | 2026-02-16 | —      | Replace S3 Inventory with S3 Storage Lens (URS-DP-10106, 10312 updates); defer per-bucket storage investigation (URS-DP-10313 note added) |

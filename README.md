@@ -156,8 +156,7 @@ Backfill processes months sequentially, skips existing data unless forced, and r
 | `schedule_expression`       | No       | EventBridge cron (default: `cron(0 6 * * ? *)`)                                          |
 | `include_efs`               | No       | Include EFS in storage metrics (default: `false`)                                        |
 | `include_ebs`               | No       | Include EBS in storage metrics (default: `false`)                                        |
-| `inventory_bucket`          | No       | S3 bucket containing S3 Inventory delivery. Leave empty to disable inventory integration. |
-| `inventory_prefix`          | No       | S3 prefix to inventory config (e.g., `inventory/source-bucket/AllObjects`)               |
+| `storage_lens_config_id`    | No       | S3 Storage Lens configuration ID (auto-discovers if empty). Leave empty to disable Storage Lens integration. |
 | `tags`                      | No       | Map of tags to apply to all resources via AWS provider `default_tags`                    |
 | `permissions_boundary`      | No       | ARN of IAM permissions boundary to attach to all IAM roles. Leave empty to skip.         |
 | `enable_access_logging`     | No       | Enable S3 and CloudFront access logging (default: `false`)                               |
@@ -203,14 +202,13 @@ For local development, the SPA falls back to `VITE_*` env vars:
 
 These are set by Terraform automatically:
 
-| Variable             | Required | Description                                                               |
-| -------------------- | -------- | ------------------------------------------------------------------------- |
-| `DATA_BUCKET`        | Yes      | S3 bucket name for output files                                           |
-| `COST_CATEGORY_NAME` | No       | AWS Cost Category name (auto-discovers if empty)                          |
-| `INCLUDE_EFS`        | No       | Include EFS in storage metrics                                            |
-| `INCLUDE_EBS`        | No       | Include EBS in storage metrics                                            |
-| `INVENTORY_BUCKET`   | No       | S3 bucket containing S3 Inventory delivery (optional)                     |
-| `INVENTORY_PREFIX`   | No       | S3 prefix to inventory config (e.g., `inventory/source-bucket/AllObjects`)|
+| Variable                 | Required | Description                                                                   |
+| ------------------------ | -------- | ----------------------------------------------------------------------------- |
+| `DATA_BUCKET`            | Yes      | S3 bucket name for output files                                               |
+| `COST_CATEGORY_NAME`     | No       | AWS Cost Category name (auto-discovers if empty)                              |
+| `INCLUDE_EFS`            | No       | Include EFS in storage metrics                                                |
+| `INCLUDE_EBS`            | No       | Include EBS in storage metrics                                                |
+| `STORAGE_LENS_CONFIG_ID` | No       | S3 Storage Lens configuration ID (optional — auto-discovers if empty)         |
 
 ## Testing
 

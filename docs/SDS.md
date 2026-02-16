@@ -5,7 +5,7 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.12 (Draft)                               |
+| Version             | 0.13 (Draft)                               |
 | Date                | 2026-02-16                                 |
 
 ---
@@ -236,8 +236,8 @@ Refs: SRS-DP-310304
 The cost center detail page layout includes: (1) a back link (`<Link to={/?period=${selectedPeriod}}>`) to return to the main report while preserving the period selection; (2) the cost center name as a page heading; (3) three summary cards in a responsive grid showing total spend, MoM change, and YoY change for the selected period, sourced from the fetched summary.json and filtered to the specific cost center; (4) the `CostTrendSection` component with cost center-filtered trend data; (5) the reusable `WorkloadTable` component displaying the cost center's workload breakdown in an always-visible (non-expandable) format. The route is registered in `routes.ts` as `route("cost-center/:name", "routes/cost-center-detail.tsx")`.
 Refs: SRS-DP-310302, SRS-DP-310303, SRS-DP-310304, SRS-DP-310305, SRS-DP-310306
 
-**[SDS-DP-010217] Render Storage Deep Dive Route**
-The Report Renderer includes a dedicated route component at `/storage` (route file: `routes/storage.tsx`) for displaying per-bucket storage breakdown when S3 Inventory data is available. The route follows the same authentication, period discovery, and summary data fetching patterns as the main report route. The component renders: (1) the shared `<Header>` and `<Footer>` components; (2) a back link to the main report; (3) a period selector; (4) summary cards showing total stored volume (bytes formatted as TB), total object count, and cost per TB; (5) a sortable table with columns for bucket name, size (bytes and TB), object count, and percentage of total; (6) a notice if `storage_inventory` is absent from summary.json. The table is sorted by size descending by default. The route is registered in `routes.ts` as `route("storage", "routes/storage.tsx")`.
+**[SDS-DP-010217] Render Storage Deep Dive Route** (Removed)
+This component has been removed. The storage deep dive route (`/storage`) providing per-bucket breakdown is not implemented in the current S3 Storage Lens CloudWatch-only integration. The `StorageLens` type replaces `StorageInventory` in the summary.json schema, and the frontend displays only organization-wide totals (no per-bucket table).
 Refs: SRS-DP-310307
 
 **[SDS-DP-010218] Render Split Charge Badge and Allocated Label**
@@ -267,12 +267,13 @@ Refs: SRS-DP-310210, SRS-DP-310213
 │                                                        │
 │  ┌─────────────┐  ┌───────────────────┐  ┌─────────┐  │
 │  │  C-2.1      │  │  C-2.2            │  │  C-2.3  │  │
-│  │  Cost       │  │  Data Processor   │  │  Inv.   │  │
-│  │  Collector  │  │  & Writer         │  │  Reader │  │
-│  │             │  │                   │  │         │  │
+│  │  Cost       │  │  Data Processor   │  │  Storage│  │
+│  │  Collector  │  │  & Writer         │  │  Lens   │  │
+│  │             │  │                   │  │  Reader │  │
 │  │  Queries CE │  │  Categorizes,     │  │  Reads  │  │
-│  │  API +      │  │  aggregates,      │  │  S3 Inv.│  │
-│  │  split chg  │  │  writes JSON      │  │  data   │  │
+│  │  API +      │  │  aggregates,      │  │  S3     │  │
+│  │  split chg  │  │  writes JSON      │  │  Storage│  │
+│  │             │  │                   │  │  Lens   │  │
 │  └─────────────┘  └───────────────────┘  └─────────┘  │
 │                                                        │
 └────────────────────────────────────────────────────────┘
@@ -320,8 +321,8 @@ Refs: SRS-DP-420103, SRS-DP-420107
 The Data Processor computes total storage volume from S3 `TimedStorage-*` usage quantities and calculates the hot tier percentage as: `(TimedStorage-ByteHrs + TimedStorage-INT-FA-ByteHrs) / total TimedStorage-*-ByteHrs`. When configured, EFS and EBS storage usage types are included in the totals. **AWS Cost Explorer returns `UsageQuantity` for TimedStorage-* in GB-hours, not byte-hours.** The processor converts GB-hours to average bytes stored by multiplying by 1,000,000,000 (bytes per GB) and then dividing by the number of hours in the reporting month. The processor uses decimal terabytes (TB = 10^12 bytes) for all volume conversions, consistent with AWS Cost Explorer and billing practices. Note: Prior to v1.5.0, the constant `_BYTES_PER_TB` incorrectly used tebibytes (TiB = 2^40 = 1,099,511,627,776) instead of terabytes, causing a ~10% overstatement in cost per TB values. This was corrected to 1,000,000,000,000 (10^12). Prior to v1.6.0, the processor incorrectly treated GB-hours as byte-hours, producing storage volumes ~1 billion times too large and cost-per-TB values ~1 billion times too small.
 Refs: SRS-DP-420104
 
-**[SDS-DP-020204] Write Summary JSON with Inventory Data**
-The Data Processor writes `{year}-{month}/summary.json` containing pre-computed aggregates for the 1-page report: cost center totals (current, prev month, YoY), workload breakdown per cost center (sorted by cost descending, with MoM/YoY), storage metrics (total cost, cost/TB, hot tier %), a `collected_at` ISO 8601 timestamp, and optionally a `storage_inventory` object containing per-bucket storage data from C-2.3 when inventory integration is configured. The `storage_inventory` object includes: `total_bytes`, `total_object_count`, `inventory_date`, and a `buckets` array with per-bucket details (`name`, `size_bytes`, `object_count`, `pct_of_total`). Cost centers with `is_split_charge: true` are included in the `cost_centers` array but excluded from global summary calculations.
+**[SDS-DP-020204] Write Summary JSON with Storage Lens Data**
+The Data Processor writes `{year}-{month}/summary.json` containing pre-computed aggregates for the 1-page report: cost center totals (current, prev month, YoY), workload breakdown per cost center (sorted by cost descending, with MoM/YoY), storage metrics (total cost, cost/TB, hot tier %), a `collected_at` ISO 8601 timestamp, and optionally a `storage_lens` object containing organization-wide storage data from C-2.3 when Storage Lens integration is configured. The `storage_lens` object includes: `total_bytes` and `storage_lens_date` (timestamp from CloudWatch metric). Cost centers with `is_split_charge: true` are included in the `cost_centers` array but excluded from global summary calculations.
 Refs: SRS-DP-430101, SRS-DP-510002, SRS-DP-420108
 
 **[SDS-DP-020205] Write Workload Parquet**
@@ -340,26 +341,26 @@ Refs: SRS-DP-430103
 The Lambda handler detects backfill mode via the event payload `{"backfill": true, "months": N, "force": false}`. In backfill mode, the handler generates a list of N target months (ending at the current month), processes each sequentially by invoking `collect_for_month()` (C-2.1) and `write_to_s3()` (C-2.2) per month with index updates suppressed. Before processing each month, the handler checks whether data already exists in S3 (by probing for `{year}-{month}/summary.json`) and skips existing months unless `force` is true. After all months are processed, the handler calls `update_index()` once to rebuild the period manifest. The response includes a multi-status report: `{"statusCode": 200|207, "succeeded": [...], "failed": [...], "skipped": [...]}`.
 Refs: SRS-DP-420106
 
-##### 3.2.3 C-2.3: Inventory Reader
+##### 3.2.3 C-2.3: Storage Lens Reader
 
-**Purpose / Responsibility**: Reads S3 Inventory manifests and CSV data files to provide actual total storage volume (in bytes) and object count per source bucket.
+**Purpose / Responsibility**: Queries S3 Storage Lens CloudWatch metrics to obtain actual total storage volume (in bytes) for the organization.
 
 **Interfaces**:
-- **Inbound**: Invoked by the Lambda handler when `INVENTORY_BUCKET` and `INVENTORY_PREFIX` environment variables are set
-- **Outbound**: S3 API (`ListObjectsV2`, `GetObject`) to read inventory manifests and CSV data files
+- **Inbound**: Invoked by the Lambda handler when `STORAGE_LENS_CONFIG_ID` environment variable is set (optional — auto-discovers if empty)
+- **Outbound**: S3 Control API (`ListStorageLensConfigurations`, `GetStorageLensConfiguration`) for discovery; CloudWatch API (`GetMetricData`) to query `AWS/S3/Storage-Lens` namespace
 
-**Variability**: Inventory bucket and prefix are configured at deploy time via Terraform variables. When not configured, this component is not invoked.
+**Variability**: Storage Lens configuration ID is optional at deploy time via Terraform variable. When not configured, the component auto-discovers the first available organization-level configuration. When no Storage Lens configs exist, this component is skipped.
 
-**[SDS-DP-020301] Discover Inventory Configurations**
-The Inventory Reader walks the configured S3 prefix (up to 2 levels deep) to discover inventory configuration paths. S3 Inventory delivers to `{prefix}/{source-bucket}/{config-name}/YYYY-MM-DDT00-00Z/`. The reader identifies date-stamped folders and collects their parent paths as inventory configs. If the prefix itself contains date folders, it is treated as a single config.
+**[SDS-DP-020301] Discover Storage Lens Configuration**
+The Storage Lens Reader queries `ListStorageLensConfigurations` to find available configurations. When `STORAGE_LENS_CONFIG_ID` is provided, the reader validates it exists by calling `GetStorageLensConfiguration`. When no ID is provided, the reader selects the first organization-level configuration (scope type `Organization`) from the list. If no organization-level configs exist, the reader logs a warning and returns no data (storage metrics fall back to Cost Explorer).
 Refs: SRS-DP-420108
 
-**[SDS-DP-020302] Read Latest Manifests**
-For each discovered inventory config, the Inventory Reader lists date-stamped folders, sorts them in reverse chronological order, and reads the `manifest.json` file from the most recent folder. The manifest contains metadata about the inventory report (destination bucket, CSV file list, schema).
+**[SDS-DP-020302] Query CloudWatch Storage Metrics**
+For the discovered or configured Storage Lens config, the reader queries the CloudWatch `AWS/S3/Storage-Lens` namespace for the `StorageBytes` metric using dimensions: `{configuration_id: <config_id>, storage_class: AllStorageClasses}`. The query period spans the entire reporting month (start = first day of month 00:00 UTC, end = first day of next month 00:00 UTC), using `Average` statistic and 1-day period granularity. The metric returns the total storage volume in bytes across all S3 storage classes for the organization.
 Refs: SRS-DP-420108
 
-**[SDS-DP-020303] Aggregate Per-Bucket Volume from CSV Data**
-The Inventory Reader downloads and parses each CSV data file referenced in the manifest (gzip-compressed). It sums the `Size` column and counts rows (objects) per source bucket. The source bucket identifier is derived from the inventory config path (e.g., `{prefix}/{source-bucket}/{config}/` → `source-bucket`). The reader returns a dictionary mapping source bucket names to `{"size_bytes": int, "object_count": int, "inventory_date": "YYYY-MM-DDTHH:MM:SSZ"}`.
+**[SDS-DP-020303] Return Organization-Wide Storage Volume**
+The Storage Lens Reader returns a single aggregate value: `{"total_bytes": int, "storage_lens_date": "YYYY-MM-DDTHH:MM:SSZ"}`. The timestamp is derived from the CloudWatch datapoint timestamp. No per-bucket breakdown is provided (CloudWatch-only integration provides organization-wide totals only).
 Refs: SRS-DP-420108
 
 ### 3.3 SS-3: Terraform Module
@@ -445,9 +446,9 @@ Refs: SRS-DP-450101, SRS-DP-520003, SRS-DP-530004
 
 **Purpose / Responsibility**: Provisions the Lambda function for cost data collection, its IAM role (with Cost Explorer and S3 permissions), and the EventBridge scheduled rule.
 
-**[SDS-DP-030301] Provision Lambda, IAM Role, and Schedule with Inventory Support**
-The module creates a Lambda function (Python runtime) from a packaged deployment artifact, an IAM role with permissions for `ce:GetCostAndUsage`, `ce:GetCostCategories`, `ce:ListCostCategoryDefinitions`, `ce:DescribeCostCategoryDefinition` (for split charge detection), `s3:PutObject` (to the data bucket), `s3:ListBucket` (on the data bucket for index.json generation, and optionally on the inventory bucket when configured), and `s3:GetObject` (on the inventory bucket when configured, for reading manifests and CSV data files), and an EventBridge rule to trigger the Lambda on a daily schedule.
-When S3 artifact references are provided (from C-3.5), the Lambda function is deployed using `s3_bucket`, `s3_key`, and `s3_object_version` — an `s3_object_version` change triggers a Lambda code update. Otherwise, the Lambda is packaged from the local source directory via Terraform's `archive_file` data source and deployed using `filename` and `source_code_hash`. The Lambda IAM role optionally includes a permissions boundary (via `var.permissions_boundary`) if configured. Environment variables include `DATA_BUCKET`, `COST_CATEGORY_NAME`, `INCLUDE_EFS`, `INCLUDE_EBS`, `INVENTORY_BUCKET`, and `INVENTORY_PREFIX` (the latter two optional). Memory: 256 MB. Timeout: 5 minutes. EventBridge schedule: `cron(0 6 * * ? *)` (daily at 06:00 UTC).
+**[SDS-DP-030301] Provision Lambda, IAM Role, and Schedule with Storage Lens Support**
+The module creates a Lambda function (Python runtime) from a packaged deployment artifact, an IAM role with permissions for `ce:GetCostAndUsage`, `ce:GetCostCategories`, `ce:ListCostCategoryDefinitions`, `ce:DescribeCostCategoryDefinition` (for split charge detection), `s3:PutObject` (to the data bucket), `s3:ListBucket` (on the data bucket for index.json generation), `s3control:ListStorageLensConfigurations`, `s3control:GetStorageLensConfiguration` (for Storage Lens discovery), `cloudwatch:GetMetricData` (for querying Storage Lens metrics), and an EventBridge rule to trigger the Lambda on a daily schedule.
+When S3 artifact references are provided (from C-3.5), the Lambda function is deployed using `s3_bucket`, `s3_key`, and `s3_object_version` — an `s3_object_version` change triggers a Lambda code update. Otherwise, the Lambda is packaged from the local source directory via Terraform's `archive_file` data source and deployed using `filename` and `source_code_hash`. The Lambda IAM role optionally includes a permissions boundary (via `var.permissions_boundary`) if configured. Environment variables include `DATA_BUCKET`, `COST_CATEGORY_NAME`, `INCLUDE_EFS`, `INCLUDE_EBS`, and `STORAGE_LENS_CONFIG_ID` (the latter optional — auto-discovers if empty). Memory: 256 MB. Timeout: 5 minutes. EventBridge schedule: `cron(0 6 * * ? *)` (daily at 06:00 UTC).
 Refs: SRS-DP-510002, SRS-DP-520002, SRS-DP-530001, SRS-DP-430103, SRS-DP-420107, SRS-DP-420108, SRS-DP-530004
 
 ##### 3.3.4 C-3.4: Data Store Infrastructure
@@ -551,24 +552,9 @@ Refs: SRS-DP-430101, SRS-DP-430102, SRS-DP-430103
     "untagged_cost_usd": 1000.00,
     "tagged_percentage": 93.3
   },
-  "storage_inventory": {
+  "storage_lens": {
     "total_bytes": 5500000000000,
-    "total_object_count": 12345678,
-    "inventory_date": "2026-01-31T23:00:00Z",
-    "buckets": [
-      {
-        "name": "my-data-bucket",
-        "size_bytes": 5000000000000,
-        "object_count": 10000000,
-        "pct_of_total": 90.9
-      },
-      {
-        "name": "my-logs-bucket",
-        "size_bytes": 500000000000,
-        "object_count": 2345678,
-        "pct_of_total": 9.1
-      }
-    ]
+    "storage_lens_date": "2026-01-31T23:00:00Z"
   }
 }
 ```
@@ -1180,6 +1166,34 @@ Which charting library should be used to render the multi-period cost trend stac
 #### 7.9.5 Decision
 **Option A: Recharts**. Its declarative React component API (`BarChart`, `Bar`, `XAxis`, etc.) aligns with the existing component architecture and requires minimal code for a stacked bar chart. The ~105 KB gzipped bundle is mitigated by code-splitting via `React.lazy`. D3 was rejected because the imperative API would require significantly more code for a single chart type.
 
+### 7.10 S3 Storage Lens Integration: CloudWatch-Only vs. Inventory vs. Hybrid
+
+#### 7.10.1 Issue
+How should Dapanoskop obtain actual storage volume data (in bytes) to supplement cost-derived storage metrics? The goal is to validate that storage cost metrics reflect real usage and help identify storage optimization opportunities.
+
+#### 7.10.2 Boundary Conditions
+- AWS provides two mechanisms for storage visibility: S3 Inventory (object-level manifest files) and S3 Storage Lens (aggregate CloudWatch metrics)
+- S3 Inventory delivers detailed per-bucket, per-object data but requires setup (destination bucket, prefix configuration) and has delivery latency (up to 48 hours)
+- S3 Storage Lens provides organization-wide aggregate metrics via CloudWatch with minimal setup (auto-discoverable) but no per-bucket breakdown in the free tier
+- The Lambda must query data during daily execution (not user request time)
+- Per-bucket breakdown was a nice-to-have feature, not a core requirement
+
+#### 7.10.3 Assumptions
+- Organization-wide storage totals are sufficient for validating cost-per-TB calculations
+- Per-bucket investigation can be performed via the AWS Console or CLI when needed
+- Minimizing deployment complexity and user configuration is valuable
+
+#### 7.10.4 Considered Alternatives
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **A: S3 Storage Lens CloudWatch-only** | Auto-discoverable (no user config required); native AWS integration; no additional S3 storage cost; simple IAM permissions (s3control:*, cloudwatch:GetMetricData) | Organization-wide totals only (no per-bucket breakdown); requires Organization-level Storage Lens config |
+| B: S3 Inventory only | Per-bucket and per-object detail; no CloudWatch dependency | Requires user to configure Inventory (bucket + prefix); delivery latency (up to 48h); additional S3 storage cost; more complex IAM (s3:GetObject on inventory bucket, s3:ListBucket for manifest discovery); CSV parsing complexity |
+| C: Hybrid (Storage Lens + Inventory) | Best of both: org-wide totals + per-bucket detail | Most complex setup; requires both Storage Lens and Inventory configuration; highest IAM permission footprint; two data sources to reconcile |
+
+#### 7.10.5 Decision
+**Option A: S3 Storage Lens CloudWatch-only**. Auto-discovery eliminates user configuration burden (deployment friction), CloudWatch metrics are native AWS integration (no CSV parsing or S3 storage costs), and organization-wide totals are sufficient for the primary use case (validating cost-per-TB calculations). Per-bucket investigation (URS-DP-10313) is deferred — users can access per-bucket data via the AWS Console S3 Storage Lens dashboard or CLI when needed. Options B and C were rejected because Inventory requires additional user configuration (bucket/prefix setup, lifecycle policies) and adds complexity (manifest discovery, CSV parsing, S3 storage costs) for a feature that is not core to the cost monitoring workflow. The storage deep dive page (`/storage`) with per-bucket table is removed from the UI.
+
 ---
 
 ## 8. Change History
@@ -1198,3 +1212,4 @@ Which charting library should be used to render the multi-period cost trend stac
 | 0.10    | 2026-02-15 | —      | Phase 2 enhancements: Change trendline color from gray to pink-700 for improved contrast (SDS-DP-010208); enrich InfoTooltip content with formulas, interpretation guidance, and optimization suggestions (SDS-DP-010212); add dynamic storage service tooltip generation in StorageOverview (SDS-DP-010204); extend local dev period discovery from 13 to 36 months with parallel probing (SDS-DP-010201) |
 | 0.11    | 2026-02-15 | —      | Phase 3 enhancements: Add time range toggle to cost trend chart (SDS-DP-010208 update); add clickable cost center name navigation (SDS-DP-010202 update); add cost center detail route, trend data fetching, and page layout (SDS-DP-010214, 010215, 010216); update responsive breakpoints documentation (SDS-DP-010213) |
 | 0.12    | 2026-02-16 | —      | Add S3 Inventory Reader component (C-2.3, SDS-DP-020301-020303); storage inventory in summary.json schema (SDS-DP-040002 update); split charge detection (SDS-DP-020102 update); allocated costs handling (SDS-DP-020202 update); storage inventory in summary writer (SDS-DP-020204 update); storage deep dive route (SDS-DP-010217); split charge badge rendering (SDS-DP-010218); Cognito Managed Login v2 (SDS-DP-030202 update); IAM permissions boundary on roles (SDS-DP-030207, 030301 updates); inventory IAM permissions (SDS-DP-030301 update); resource tags via provider default_tags (§3.3 variability update); x-host-override CORS header (SDS-DP-030402 update) |
+| 0.13    | 2026-02-16 | —      | Replace S3 Inventory with S3 Storage Lens CloudWatch integration: rename C-2.3 to "Storage Lens Reader" (§3.2.3 title update); rewrite SDS-DP-020301-020303 for Storage Lens discovery and CloudWatch query; update summary.json schema (SDS-DP-040002: storage_lens replaces storage_inventory); update summary writer (SDS-DP-020204); update IAM permissions (SDS-DP-030301: add s3control:*, cloudwatch:GetMetricData, remove s3:GetObject/ListBucket on inventory bucket); remove storage deep dive route (SDS-DP-010217 marked removed); add design decision §7.10 explaining Storage Lens option selection |

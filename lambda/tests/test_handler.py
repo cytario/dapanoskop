@@ -466,6 +466,131 @@ def test_handler_normal_mode_exception(
 
 
 @mock_aws
+def test_handler_enriches_with_storage_lens(
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test that handler enriches summary with Storage Lens metrics when configured."""
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket=s3_bucket_env)
+
+    from datetime import datetime, timezone
+
+    from dapanoskop import handler as handler_module
+
+    monkeypatch.setenv("STORAGE_LENS_CONFIG_ID", "my-lens-config")
+
+    def mock_collect(cost_category_name: str = "") -> dict:
+        return {
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "period_labels": {
+                "current": "2026-01",
+                "prev_month": "2025-12",
+                "yoy": "2025-01",
+            },
+            "raw_data": {
+                "current": [
+                    {
+                        "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                        "Metrics": {
+                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
+                        },
+                    }
+                ],
+                "prev_month": [],
+                "yoy": [],
+            },
+            "cc_mapping": {},
+        }
+
+    def mock_storage_lens(config_id: str = "") -> dict:
+        assert config_id == "my-lens-config"
+        return {
+            "total_bytes": 5_000_000_000_000,
+            "object_count": 12_000_000,
+            "timestamp": "2026-02-01T00:00:00+00:00",
+            "config_id": "my-lens-config",
+            "org_id": "o-abc123",
+        }
+
+    monkeypatch.setattr(handler_module, "collect", mock_collect)
+    monkeypatch.setattr(handler_module, "get_storage_lens_metrics", mock_storage_lens)
+
+    from dapanoskop.handler import handler
+
+    result = handler({}, None)
+    assert result["statusCode"] == 200
+
+    # Read back summary.json and verify storage lens data is present
+    summary_obj = s3.get_object(Bucket=s3_bucket_env, Key="2026-01/summary.json")
+    summary = json.loads(summary_obj["Body"].read())
+
+    assert summary["storage_metrics"]["storage_lens_total_bytes"] == 5_000_000_000_000
+    assert summary["storage_lens"]["total_bytes"] == 5_000_000_000_000
+    assert summary["storage_lens"]["object_count"] == 12_000_000
+    assert summary["storage_lens"]["config_id"] == "my-lens-config"
+
+
+@mock_aws
+def test_handler_continues_when_storage_lens_fails(
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test that handler completes successfully even when Storage Lens fails."""
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket=s3_bucket_env)
+
+    from datetime import datetime, timezone
+
+    from dapanoskop import handler as handler_module
+
+    monkeypatch.setenv("STORAGE_LENS_CONFIG_ID", "broken-config")
+
+    def mock_collect(cost_category_name: str = "") -> dict:
+        return {
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "period_labels": {
+                "current": "2026-01",
+                "prev_month": "2025-12",
+                "yoy": "2025-01",
+            },
+            "raw_data": {
+                "current": [
+                    {
+                        "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                        "Metrics": {
+                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
+                        },
+                    }
+                ],
+                "prev_month": [],
+                "yoy": [],
+            },
+            "cc_mapping": {},
+        }
+
+    def mock_storage_lens_fail(config_id: str = "") -> dict:
+        raise RuntimeError("Storage Lens unavailable")
+
+    monkeypatch.setattr(handler_module, "collect", mock_collect)
+    monkeypatch.setattr(
+        handler_module, "get_storage_lens_metrics", mock_storage_lens_fail
+    )
+
+    from dapanoskop.handler import handler
+
+    result = handler({}, None)
+    assert result["statusCode"] == 200
+
+    # Verify summary was written without storage lens data
+    summary_obj = s3.get_object(Bucket=s3_bucket_env, Key="2026-01/summary.json")
+    summary = json.loads(summary_obj["Body"].read())
+
+    assert "storage_lens_total_bytes" not in summary["storage_metrics"]
+    assert "storage_lens" not in summary
+
+
+@mock_aws
 def test_handler_error_response_no_arn_leak(
     s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
