@@ -53,6 +53,7 @@ resource "aws_cloudwatch_log_group" "lambda" {
 }
 
 resource "aws_iam_role_policy" "lambda" {
+  #checkov:skip=CKV_AWS_355:S3 Control and CloudWatch APIs do not support resource-level permissions; wildcard resource required
   name_prefix = "dapanoskop-pipeline-"
   role        = aws_iam_role.lambda.id
 
