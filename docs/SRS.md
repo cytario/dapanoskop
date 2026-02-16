@@ -5,8 +5,8 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.9 (Draft)                                |
-| Date                | 2026-02-15                                 |
+| Version             | 0.10 (Draft)                               |
+| Date                | 2026-02-16                                 |
 
 ---
 
@@ -172,8 +172,8 @@ Refs: URS-DP-10310
 ##### Cost Center Cards
 
 **[SRS-DP-310201] Display Cost Center Summary Cards**
-The system displays each cost center as a card showing the cost center name, current period total, workload count, and the top mover (the workload with the highest absolute MoM change). The cost center name is a clickable link that navigates to the cost center detail page, preserving the current reporting period as a query parameter.
-Refs: URS-DP-10301, URS-DP-10311
+The system displays each cost center as a card showing the cost center name, current period total, workload count, and the top mover (the workload with the highest absolute MoM change). The cost center name is a clickable link that navigates to the cost center detail page, preserving the current reporting period as a query parameter. Cost centers using AWS Cost Category split charge rules display a "Split Charge" badge and show "Allocated" instead of a dollar amount, with explanatory text that costs are allocated to other cost centers.
+Refs: URS-DP-10301, URS-DP-10311, URS-DP-10403
 
 **[SRS-DP-310202] Display MoM Cost Comparison**
 Each cost center card displays the MoM change as a single combined element showing absolute difference and percentage change (e.g., "+$800 (+5.6%)").
@@ -228,6 +228,14 @@ Refs: URS-DP-10306, URS-DP-30102
 **[SRS-DP-310208] Display Hot Tier Percentage**
 The system displays the percentage of total data volume (in bytes) stored in hot storage tiers (S3 Standard, S3 Intelligent-Tiering Frequent Access, and optionally EFS/EBS depending on configuration). A tooltip explains which tiers are considered "hot" and suggests optimization: "Percentage of stored data in frequently accessed tiers (e.g., S3 Standard, EFS Standard). High values may indicate optimization opportunities via lifecycle policies."
 Refs: URS-DP-10307, URS-DP-30102
+
+**[SRS-DP-310217] Display Actual Total Storage Volume**
+When S3 Inventory integration is configured, the system displays an additional storage metric card showing the actual total storage volume (in bytes, formatted as TB) read from S3 Inventory manifests. The card includes object count and a timestamp indicating when the inventory was generated. If inventory data is unavailable or not configured, this metric is not displayed.
+Refs: URS-DP-10312
+
+**[SRS-DP-310218] Navigate to Storage Deep Dive**
+When S3 Inventory data is available, the "Total Stored" metric card on the main cost report includes a clickable link navigating to the storage deep dive page (`/storage`), preserving the current reporting period as a query parameter.
+Refs: URS-DP-10313
 
 | No | Element | Data type | Value range | Other relevant information |
 |----|---------|-----------|-------------|---------------------------|
@@ -298,7 +306,20 @@ Refs: URS-DP-10311, URS-DP-10303
 The cost center detail page includes a back link that returns the user to the main cost report, preserving the currently selected reporting period.
 Refs: URS-DP-30103
 
-#### 3.1.5 Tagging Coverage Section
+#### 3.1.5 Storage Deep Dive Screen
+
+**[SRS-DP-310307] Display Storage Deep Dive Page**
+The system provides a dedicated storage deep dive page at route `/storage` showing per-bucket storage breakdown when S3 Inventory data is available. The page includes: (1) a back link to the main report; (2) period selector; (3) summary cards for total stored volume, total object count, and cost per TB; (4) a sortable table of all monitored S3 buckets showing bucket name, size (bytes and TB), object count, and percentage of total volume; (5) a notice if inventory data is unavailable. The page preserves the selected reporting period via query parameter.
+Refs: URS-DP-10313
+
+| No | Element | Data type | Value range | Other relevant information |
+|----|---------|-----------|-------------|---------------------------|
+| 1  | Bucket name | String | — | Derived from S3 Inventory source bucket identifier |
+| 2  | Size (bytes) | Integer | ≥ 0 | Displayed as formatted TB (e.g., "5.0 TB") |
+| 3  | Object count | Integer | ≥ 0 | Formatted with thousands separator |
+| 4  | % of Total | Percentage | 0–100% | Percentage of this bucket's size relative to total storage |
+
+#### 3.1.6 Tagging Coverage Section
 
 **[SRS-DP-310401] Display Tagging Coverage Summary**
 The system displays the percentage of total cost attributed to tagged workloads versus untagged resources as a visual progress bar on the 1-page cost report. The bar shows tagged versus untagged proportion, with the percentage value and absolute cost amounts.
@@ -310,7 +331,7 @@ Refs: URS-DP-10201, URS-DP-10202
 | 2  | Tagged cost | Currency (USD) | ≥ 0 | |
 | 3  | Untagged cost | Currency (USD) | ≥ 0 | |
 
-#### 3.1.6 Report Period Selection
+#### 3.1.7 Report Period Selection
 
 **[SRS-DP-310501] Select Reporting Month**
 The system displays a horizontal month strip showing all available reporting periods. The user selects a month by clicking it. The current (incomplete) month is labeled "MTD" (Month-to-date). The default selection is the most recently completed month. Note: The cost trend chart (SRS-DP-310214) operates independently of this selector and always displays all available periods.
@@ -337,8 +358,12 @@ The system validates Cognito JWT tokens (ID token and access token) before grant
 Refs: URS-DP-20301
 
 **[SRS-DP-410103] Managed User Pool Provisioning**
-When no existing Cognito User Pool ID is provided, the system creates and manages a Cognito User Pool with security-hardened defaults: 14-character minimum password, admin-only user creation, token revocation enabled, deletion protection active, and configurable MFA (OFF / OPTIONAL / ON, default OPTIONAL).
+When no existing Cognito User Pool ID is provided, the system creates and manages a Cognito User Pool with security-hardened defaults: 14-character minimum password, admin-only user creation, token revocation enabled, deletion protection active, and configurable MFA (OFF / OPTIONAL / ON, default OPTIONAL). The managed pool uses Cognito Managed Login version 2 (new Hosted UI) with default branding. All existing user sessions will be invalidated after initial deployment or upgrade to v2.
 Refs: URS-DP-10103
+
+**[SRS-DP-410107] Token Revocation on Logout**
+When a user logs out, the system revokes the refresh token via the Cognito `/oauth2/revoke` endpoint before redirecting to the logout URL. This ensures that existing sessions cannot be resumed with cached tokens.
+Refs: URS-DP-20301
 
 **[SRS-DP-410104] SAML Federation**
 When a SAML metadata URL is provided, the system configures the managed Cognito User Pool to federate with an external SAML identity provider (e.g., Azure Entra ID). The metadata URL must use HTTPS. When federation is active, the Cognito hosted UI redirects users to the external IdP and local password login is disabled.
@@ -424,8 +449,12 @@ The system queries Cost Explorer for the current month, the previous month, and 
 Refs: URS-DP-10302
 
 **[SRS-DP-420103] Query Cost Category Mapping**
-The system queries the configured AWS Cost Category (or the first one returned by the API if not explicitly configured) to obtain the mapping of workloads to cost centers. The Cost Category's values are the cost centers. This mapping is queried separately from the cost data and applied during data processing.
-Refs: URS-DP-10102, URS-DP-10301
+The system queries the configured AWS Cost Category (or the first one returned by the API if not explicitly configured) to obtain the mapping of workloads to cost centers. The Cost Category's values are the cost centers. This mapping is queried separately from the cost data and applied during data processing. The system also queries category-level allocated costs to properly handle split charge rules.
+Refs: URS-DP-10102, URS-DP-10301, URS-DP-10403
+
+**[SRS-DP-420107] Detect Split Charge Categories**
+The system queries the Cost Explorer `ListCostCategoryDefinitions` and `DescribeCostCategoryDefinition` APIs to identify which cost categories use split charge rules. Categories with split charge rules have their costs allocated to other categories rather than appearing as direct spend. The system uses this information to display split charge categories differently in the UI (showing "Allocated" instead of cost totals) and to query category-level allocated costs for accurate totals.
+Refs: URS-DP-10403
 
 **[SRS-DP-420104] Query Storage Volume**
 The system queries Cost Explorer for `TimedStorage-*` usage types (and optionally EFS/EBS usage types depending on configuration) with metric `UsageQuantity` to calculate total storage volume and hot tier distribution.
@@ -438,6 +467,10 @@ Refs: URS-DP-10305, URS-DP-10401
 **[SRS-DP-420106] Backfill Historical Cost Data**
 The system supports a backfill mode that collects cost data for all available historical months in Cost Explorer (up to 13 months). Backfill processes months sequentially, skips months for which data already exists in the data store (unless forced), and updates the period index once upon completion. The backfill returns a per-month status report indicating which months succeeded, failed, or were skipped.
 Refs: URS-DP-10105
+
+**[SRS-DP-420108] Query S3 Inventory for Actual Storage Volume**
+When S3 Inventory integration is configured (via `inventory_bucket` and `inventory_prefix` variables), the system reads S3 Inventory manifest files to obtain the actual total storage volume (in bytes) and object count across all monitored S3 buckets. The system auto-discovers inventory configurations under the specified prefix (walking up to 2 levels), reads the most recent manifest per config, parses CSV data files (gzip-compressed), and aggregates per source bucket. If inventory data is unavailable or not configured, this step is skipped and storage metrics rely solely on Cost Explorer usage quantities.
+Refs: URS-DP-10106, URS-DP-10312, URS-DP-10313
 
 #### 4.2.2 Models
 
@@ -543,6 +576,14 @@ Refs: URS-DP-10101
 Updating the system to a new version does not require downtime. The web application and data pipeline can be updated independently.
 Refs: URS-DP-10101
 
+**[SRS-DP-530003] Resource Tagging via Default Tags**
+The system applies user-defined resource tags to all AWS resources via the AWS provider `default_tags` mechanism. Tags are specified as a map of key-value pairs at deployment time and automatically applied to all taggable resources created by the module.
+Refs: URS-DP-10101
+
+**[SRS-DP-530004] IAM Permissions Boundary**
+The system optionally attaches an IAM permissions boundary policy (specified by ARN) to all IAM roles created by the module (pipeline Lambda role, authenticated user role). This enables compliance with organizational IAM policies that require boundaries on all roles. When not configured, no boundary is attached.
+Refs: URS-DP-10101
+
 ### 5.4 Applicable Standards and Regulations
 
 None — non-regulated software.
@@ -567,7 +608,7 @@ The web application runs in modern web browsers (latest versions of Chrome, Fire
 Refs: URS-DP-10308, URS-DP-30104
 
 **[SRS-DP-600003] Terraform Version**
-The Terraform module targets OpenTofu and is compatible with Terraform >= 1.5. It requires the AWS provider >= 5.0.
+The Terraform module targets OpenTofu and is compatible with Terraform >= 1.5. It requires the AWS provider >= 5.95 (for Cognito Managed Login v2 support).
 Refs: URS-DP-10101
 
 ---
@@ -585,3 +626,4 @@ Refs: URS-DP-10101
 | 0.7     | 2026-02-15 | —      | Add logo/favicon/header navigation (SRS-DP-310102-104), cost trend line (SRS-DP-310215), contextual tooltips (SRS-DP-310206-209 updates), version display (SRS-DP-310216), mobile responsiveness (SRS-DP-310211, 310214, 600002 updates); note decimal TB in cost per TB (SRS-DP-310207) |
 | 0.8     | 2026-02-15 | —      | Enhance trendline visibility (SRS-DP-310215: gray→pink-700); enrich tooltip explanations with formulas, interpretation guidance, and optimization suggestions (SRS-DP-310206-209); add dynamic storage service inclusion text in storage cost tooltip |
 | 0.9     | 2026-02-15 | —      | Add cost trend time range toggle (SRS-DP-310214 update); add clickable cost center names (SRS-DP-310201 update); add Cost Center Detail Screen (§3.1.4, SRS-DP-310302-310306); renumber Tagging Coverage (§3.1.4→§3.1.5) and Report Period Selection (§3.1.5→§3.1.6) |
+| 0.10    | 2026-02-16 | —      | Add S3 Inventory integration (SRS-DP-420108); actual storage volume display (SRS-DP-310217); storage deep dive navigation (SRS-DP-310218); Storage Deep Dive Screen (§3.1.5, SRS-DP-310307); split charge category detection (SRS-DP-420107); split charge badge display (SRS-DP-310201 update); token revocation on logout (SRS-DP-410107); Managed Login v2 requirement (SRS-DP-410103 update); resource tags (SRS-DP-530003); permissions boundary (SRS-DP-530004); AWS provider version bump to >= 5.95 (SRS-DP-600003 update); renumber Tagging Coverage and Report Period Selection sections (§3.1.5→§3.1.6, §3.1.6→§3.1.7) |
