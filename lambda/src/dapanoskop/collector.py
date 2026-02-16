@@ -157,6 +157,102 @@ def get_cost_categories(
     return mapping
 
 
+def get_split_charge_categories(
+    ce_client: Any,
+    category_name: str,
+) -> list[str]:
+    """Detect split charge source categories by inspecting the Cost Category definition.
+
+    Returns a list of category values that are split charge sources (their costs
+    are allocated to other categories and should not be displayed directly).
+    """
+    if not category_name:
+        return []
+
+    # Find the category ARN from its name
+    try:
+        resp = ce_client.list_cost_category_definitions()
+    except Exception:
+        logger.warning("Failed to list cost category definitions", exc_info=True)
+        return []
+
+    target_arn = None
+    for defn in resp.get("CostCategoryReferences", []):
+        if defn.get("Name") == category_name:
+            target_arn = defn["CostCategoryArn"]
+            break
+
+    if not target_arn:
+        return []
+
+    # Get the full definition including split charge rules
+    try:
+        defn_resp = ce_client.describe_cost_category_definition(
+            CostCategoryArn=target_arn
+        )
+    except Exception:
+        logger.warning("Failed to describe cost category definition", exc_info=True)
+        return []
+
+    cost_category = defn_resp.get("CostCategory", {})
+    split_charge_rules = cost_category.get("SplitChargeRules", [])
+
+    # Extract source values from split charge rules
+    sources: set[str] = set()
+    for rule in split_charge_rules:
+        source = rule.get("Source")
+        if source:
+            sources.add(source)
+
+    logger.info("Split charge sources: %s", sources)
+    return sorted(sources)
+
+
+def get_allocated_costs_by_category(
+    ce_client: Any,
+    category_name: str,
+    start: str,
+    end: str,
+) -> dict[str, float]:
+    """Get total allocated cost per cost category value (includes split charge allocations).
+
+    Queries CE grouped by COST_CATEGORY only (no App tag) to get the true
+    allocated totals that match the AWS Cost Category console.
+    """
+    if not category_name:
+        return {}
+
+    totals: dict[str, float] = {}
+    kwargs: dict[str, Any] = {
+        "TimePeriod": {"Start": start, "End": end},
+        "Granularity": "MONTHLY",
+        "Metrics": ["UnblendedCost"],
+        "GroupBy": [
+            {"Type": "COST_CATEGORY", "Key": category_name},
+        ],
+    }
+
+    while True:
+        response = ce_client.get_cost_and_usage(**kwargs)
+        for result_by_time in response.get("ResultsByTime", []):
+            for group in result_by_time.get("Groups", []):
+                keys = group.get("Keys", [])
+                if keys:
+                    cc_value = keys[0].removeprefix(f"{category_name}$")
+                    cost = float(
+                        group.get("Metrics", {})
+                        .get("UnblendedCost", {})
+                        .get("Amount", 0)
+                    )
+                    totals[cc_value] = totals.get(cc_value, 0) + cost
+        token = response.get("NextPageToken")
+        if not token:
+            break
+        kwargs["NextPageToken"] = token
+
+    return totals
+
+
 def collect(
     cost_category_name: str = "",
     target_year: int | None = None,
@@ -190,9 +286,20 @@ def collect(
     )
     logger.info("Cost category mapping: %d entries", len(cc_mapping))
 
+    # Detect split charge categories and get allocated totals
+    split_charge_categories = get_split_charge_categories(ce_client, cost_category_name)
+    allocated_costs: dict[str, dict[str, float]] = {}
+    if cost_category_name:
+        for period_key, (start, end) in periods.items():
+            allocated_costs[period_key] = get_allocated_costs_by_category(
+                ce_client, cost_category_name, start, end
+            )
+
     return {
         "now": now,
         "period_labels": period_labels,
         "raw_data": raw_data,
         "cc_mapping": cc_mapping,
+        "split_charge_categories": split_charge_categories,
+        "allocated_costs": allocated_costs,
     }

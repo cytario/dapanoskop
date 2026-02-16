@@ -62,33 +62,50 @@ export function CostCenterCard({ costCenter, period }: CostCenterCardProps) {
             >
               {costCenter.name}
             </Link>
+            {costCenter.is_split_charge && (
+              <span className="ml-2 text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
+                Split Charge
+              </span>
+            )}
           </div>
           <span className="text-xl font-semibold">
-            {formatUsd(costCenter.current_cost_usd)}
+            {costCenter.is_split_charge ? (
+              <span className="text-sm font-normal text-gray-400">
+                Allocated
+              </span>
+            ) : (
+              formatUsd(costCenter.current_cost_usd)
+            )}
           </span>
         </div>
-        <div className="flex items-center gap-6 mt-2 ml-7 text-sm">
-          <span className="inline-flex items-center">
-            <CostChange
-              current={costCenter.current_cost_usd}
-              previous={costCenter.prev_month_cost_usd}
-              label="MoM"
-            />
-            <InfoTooltip text="Cost change from the previous calendar month, shown as absolute and percentage." />
-          </span>
-          {costCenter.yoy_cost_usd > 0 ? (
+        {costCenter.is_split_charge ? (
+          <div className="mt-2 ml-7 text-sm text-gray-400">
+            Costs allocated to other cost centers
+          </div>
+        ) : (
+          <div className="flex items-center gap-6 mt-2 ml-7 text-sm">
             <span className="inline-flex items-center">
               <CostChange
                 current={costCenter.current_cost_usd}
-                previous={costCenter.yoy_cost_usd}
-                label="YoY"
+                previous={costCenter.prev_month_cost_usd}
+                label="MoM"
               />
-              <InfoTooltip text="Cost change compared to the same month last year. Helps identify long-term trends." />
+              <InfoTooltip text="Cost change from the previous calendar month, shown as absolute and percentage." />
             </span>
-          ) : (
-            <span className="text-gray-400 text-sm">YoY N/A</span>
-          )}
-        </div>
+            {costCenter.yoy_cost_usd > 0 ? (
+              <span className="inline-flex items-center">
+                <CostChange
+                  current={costCenter.current_cost_usd}
+                  previous={costCenter.yoy_cost_usd}
+                  label="YoY"
+                />
+                <InfoTooltip text="Cost change compared to the same month last year. Helps identify long-term trends." />
+              </span>
+            ) : (
+              <span className="text-gray-400 text-sm">YoY N/A</span>
+            )}
+          </div>
+        )}
         <div className="mt-1 ml-7 text-xs text-gray-500">
           {costCenter.workloads.length} workloads
           {topMover && (

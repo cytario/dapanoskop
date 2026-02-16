@@ -574,3 +574,61 @@ def test_storage_metrics_with_efs_and_ebs() -> None:
     result_both = process(collected, include_efs=True, include_ebs=True)
     sm_both = result_both["summary"]["storage_metrics"]
     assert sm_both["total_volume_bytes"] == 170_000_000_000  # 170 GB
+
+
+def test_split_charge_categories() -> None:
+    """Test that split charge categories are marked and have zero cost."""
+    collected = _make_collected(
+        current_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 800, 744),
+            _make_group("shared-infra", "BoxUsage:t3.medium", 200, 744),
+        ],
+        prev_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 750, 720),
+            _make_group("shared-infra", "BoxUsage:t3.medium", 180, 720),
+        ],
+        yoy_groups=[],
+        cc_mapping={"web-app": "Engineering", "shared-infra": "Shared Services"},
+    )
+    collected["split_charge_categories"] = ["Shared Services"]
+    collected["allocated_costs"] = {
+        "current": {"Engineering": 1000.0, "Shared Services": 0.0},
+        "prev_month": {"Engineering": 930.0, "Shared Services": 0.0},
+        "yoy": {},
+    }
+
+    result = process(collected)
+    ccs = result["summary"]["cost_centers"]
+
+    # Engineering should use allocated cost (1000), not workload sum (800)
+    eng = next(cc for cc in ccs if cc["name"] == "Engineering")
+    assert eng["current_cost_usd"] == 1000.0
+    assert eng["prev_month_cost_usd"] == 930.0
+    assert "is_split_charge" not in eng
+
+    # Shared Services should be marked as split charge with zero cost
+    shared = next(cc for cc in ccs if cc["name"] == "Shared Services")
+    assert shared["is_split_charge"] is True
+    assert shared["current_cost_usd"] == 0.0
+    assert shared["prev_month_cost_usd"] == 0.0
+    # But workloads should still be present for drill-down
+    assert len(shared["workloads"]) == 1
+
+
+def test_no_split_charge_fallback() -> None:
+    """Test that without split charge data, workload sums are used as before."""
+    collected = _make_collected(
+        current_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 1000, 744),
+        ],
+        prev_groups=[],
+        yoy_groups=[],
+        cc_mapping={"web-app": "Engineering"},
+    )
+    # No split_charge_categories or allocated_costs keys
+
+    result = process(collected)
+    eng = result["summary"]["cost_centers"][0]
+    assert eng["name"] == "Engineering"
+    assert eng["current_cost_usd"] == 1000.0
+    assert "is_split_charge" not in eng

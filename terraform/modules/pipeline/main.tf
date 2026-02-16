@@ -62,6 +62,8 @@ resource "aws_iam_role_policy" "lambda" {
         Action = [
           "ce:GetCostAndUsage",
           "ce:GetCostCategories",
+          "ce:ListCostCategoryDefinitions",
+          "ce:DescribeCostCategoryDefinition",
         ]
         Resource = "*"
       },

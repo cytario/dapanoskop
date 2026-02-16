@@ -140,6 +140,8 @@ def process(
     period_labels: dict[str, str] = collected["period_labels"]
     raw_data: dict[str, list[dict[str, Any]]] = collected["raw_data"]
     cc_mapping: dict[str, str] = collected["cc_mapping"]
+    split_charge_cats: list[str] = collected.get("split_charge_categories", [])
+    allocated_costs: dict[str, dict[str, float]] = collected.get("allocated_costs", {})
 
     # Parse all periods
     parsed: dict[str, list[dict[str, Any]]] = {}
@@ -163,8 +165,13 @@ def process(
         cc_groups.setdefault(cc, []).append(wl)
 
     # Build cost center summaries
+    current_allocated = allocated_costs.get("current", {})
+    prev_allocated = allocated_costs.get("prev_month", {})
+    yoy_allocated = allocated_costs.get("yoy", {})
+
     cost_centers = []
     for cc_name in sorted(cc_groups):
+        is_split_charge = cc_name in split_charge_cats
         wls = cc_groups[cc_name]
         workloads = []
         for wl_name in wls:
@@ -179,19 +186,35 @@ def process(
         # Sort workloads by current cost descending
         workloads.sort(key=lambda w: w["current_cost_usd"], reverse=True)
 
-        cc_current = sum(w["current_cost_usd"] for w in workloads)
-        cc_prev = sum(w["prev_month_cost_usd"] for w in workloads)
-        cc_yoy = sum(w["yoy_cost_usd"] for w in workloads)
+        # Use allocated costs from category-level query if available,
+        # otherwise fall back to summing workload costs
+        if current_allocated:
+            cc_current = round(current_allocated.get(cc_name, 0), 2)
+            cc_prev = round(prev_allocated.get(cc_name, 0), 2)
+            cc_yoy = round(yoy_allocated.get(cc_name, 0), 2)
+        else:
+            cc_current = round(sum(w["current_cost_usd"] for w in workloads), 2)
+            cc_prev = round(sum(w["prev_month_cost_usd"] for w in workloads), 2)
+            cc_yoy = round(sum(w["yoy_cost_usd"] for w in workloads), 2)
 
-        cost_centers.append(
-            {
-                "name": cc_name,
-                "current_cost_usd": round(cc_current, 2),
-                "prev_month_cost_usd": round(cc_prev, 2),
-                "yoy_cost_usd": round(cc_yoy, 2),
-                "workloads": workloads,
-            }
-        )
+        # Split charge categories have their cost redistributed to others;
+        # show them with zero cost to avoid double-counting
+        if is_split_charge:
+            cc_current = 0.0
+            cc_prev = 0.0
+            cc_yoy = 0.0
+
+        cc_entry: dict[str, Any] = {
+            "name": cc_name,
+            "current_cost_usd": cc_current,
+            "prev_month_cost_usd": cc_prev,
+            "yoy_cost_usd": cc_yoy,
+            "workloads": workloads,
+        }
+        if is_split_charge:
+            cc_entry["is_split_charge"] = True
+
+        cost_centers.append(cc_entry)
 
     # Sort cost centers by current cost descending
     cost_centers.sort(key=lambda c: c["current_cost_usd"], reverse=True)
