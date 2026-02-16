@@ -30,6 +30,7 @@ export interface CostCenter {
   prev_month_cost_usd: number;
   yoy_cost_usd: number;
   workloads: Workload[];
+  is_split_charge?: boolean;
 }
 
 export interface Workload {

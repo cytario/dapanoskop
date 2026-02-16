@@ -8,18 +8,18 @@ interface GlobalSummaryProps {
 }
 
 export function GlobalSummary({ summary }: GlobalSummaryProps) {
-  const totalCurrent = summary.cost_centers.reduce(
+  const activeCenters = summary.cost_centers.filter(
+    (cc) => !cc.is_split_charge,
+  );
+  const totalCurrent = activeCenters.reduce(
     (sum, cc) => sum + cc.current_cost_usd,
     0,
   );
-  const totalPrev = summary.cost_centers.reduce(
+  const totalPrev = activeCenters.reduce(
     (sum, cc) => sum + cc.prev_month_cost_usd,
     0,
   );
-  const totalYoy = summary.cost_centers.reduce(
-    (sum, cc) => sum + cc.yoy_cost_usd,
-    0,
-  );
+  const totalYoy = activeCenters.reduce((sum, cc) => sum + cc.yoy_cost_usd, 0);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
