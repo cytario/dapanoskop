@@ -26,8 +26,8 @@ from dapanoskop.categories import categorize
         # Other
         ("DataTransfer-Out-Bytes", "Other"),
         ("NatGateway-Hours", "Other"),
-        ("Requests-Tier1", "Other"),
-        ("Requests-Tier2", "Other"),
+        ("Requests-Tier1", "Storage"),
+        ("Requests-Tier2", "Storage"),
         ("CW:MetricMonitorUsage", "Other"),
         ("SomeUnknownUsageType", "Other"),
         # Support
