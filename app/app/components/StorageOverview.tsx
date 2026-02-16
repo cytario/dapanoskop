@@ -1,5 +1,5 @@
 import type { StorageMetrics, CostSummary } from "~/types/cost-data";
-import { formatUsd } from "~/lib/format";
+import { formatUsd, formatBytes } from "~/lib/format";
 import { CostChange } from "./CostChange";
 import { InfoTooltip } from "./InfoTooltip";
 
@@ -21,8 +21,11 @@ export function StorageOverview({
   metrics,
   storageConfig,
 }: StorageOverviewProps) {
+  const hasInventory = metrics.inventory_total_bytes != null;
+  const gridCols = hasInventory ? "sm:grid-cols-4" : "sm:grid-cols-3";
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className={`grid grid-cols-1 ${gridCols} gap-4`}>
       <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
         <div className="text-sm text-gray-500">
           Storage Cost
@@ -38,6 +41,17 @@ export function StorageOverview({
           />
         </div>
       </div>
+      {hasInventory && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
+          <div className="text-sm text-gray-500">
+            Total Stored
+            <InfoTooltip text="Actual total storage volume from S3 Inventory. This is the precise amount of data stored, measured at the time of the latest inventory snapshot." />
+          </div>
+          <div className="text-xl font-semibold mt-1">
+            {formatBytes(metrics.inventory_total_bytes!)}
+          </div>
+        </div>
+      )}
       <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
         <div className="text-sm text-gray-500">
           Cost / TB

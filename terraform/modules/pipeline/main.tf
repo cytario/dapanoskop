@@ -55,7 +55,7 @@ resource "aws_iam_role_policy" "lambda" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         # Cost Explorer API actions do not support resource-level permissions
         Effect = "Allow"
@@ -87,7 +87,22 @@ resource "aws_iam_role_policy" "lambda" {
         ]
         Resource = "${aws_cloudwatch_log_group.lambda.arn}:*"
       },
-    ]
+      ],
+      # Read access for S3 Inventory bucket (when configured)
+      var.inventory_bucket != "" ? [
+        {
+          Effect = "Allow"
+          Action = [
+            "s3:GetObject",
+            "s3:ListBucket",
+          ]
+          Resource = [
+            "arn:aws:s3:::${var.inventory_bucket}",
+            "arn:aws:s3:::${var.inventory_bucket}/${var.inventory_prefix}/*",
+          ]
+        },
+      ] : [],
+    )
   })
 }
 
@@ -118,12 +133,18 @@ resource "aws_lambda_function" "pipeline" {
   ]
 
   environment {
-    variables = {
-      DATA_BUCKET        = var.data_bucket_name
-      COST_CATEGORY_NAME = var.cost_category_name
-      INCLUDE_EFS        = tostring(var.include_efs)
-      INCLUDE_EBS        = tostring(var.include_ebs)
-    }
+    variables = merge(
+      {
+        DATA_BUCKET        = var.data_bucket_name
+        COST_CATEGORY_NAME = var.cost_category_name
+        INCLUDE_EFS        = tostring(var.include_efs)
+        INCLUDE_EBS        = tostring(var.include_ebs)
+      },
+      var.inventory_bucket != "" ? {
+        INVENTORY_BUCKET = var.inventory_bucket
+        INVENTORY_PREFIX = var.inventory_prefix
+      } : {},
+    )
   }
 }
 
