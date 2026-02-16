@@ -83,7 +83,10 @@ resource "aws_s3_bucket_cors_configuration" "data" {
   bucket = aws_s3_bucket.data.id
 
   cors_rule {
-    allowed_headers = ["Authorization", "Range", "x-amz-*", "amz-sdk-*"]
+    # x-host-override: DuckDB-wasm renames the forbidden browser "Host" header
+    # to "X-Host-Override" in its HTTP adapter (http_wasm.cc). S3 ignores it,
+    # but the CORS preflight must allow it or the browser blocks the request.
+    allowed_headers = ["Authorization", "Range", "x-amz-*", "amz-sdk-*", "x-host-override"]
     allowed_methods = ["GET", "HEAD"]
     allowed_origins = var.allowed_origins
     expose_headers  = ["Content-Length", "Content-Range", "ETag"]
