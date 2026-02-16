@@ -160,11 +160,71 @@ run "logs_scoped_to_log_group" {
   }
 }
 
+run "storage_lens_permissions" {
+  command = plan
+
+  assert {
+    condition = contains(
+      jsondecode(output.iam_policy_json).Statement[4].Action,
+      "s3:ListStorageLensConfigurations"
+    )
+    error_message = "Policy must include s3:ListStorageLensConfigurations"
+  }
+
+  assert {
+    condition = contains(
+      jsondecode(output.iam_policy_json).Statement[4].Action,
+      "s3:GetStorageLensConfiguration"
+    )
+    error_message = "Policy must include s3:GetStorageLensConfiguration"
+  }
+
+  assert {
+    condition     = length(jsondecode(output.iam_policy_json).Statement[4].Action) == 2
+    error_message = "S3 Control statement must contain exactly 2 actions"
+  }
+
+  assert {
+    condition     = jsondecode(output.iam_policy_json).Statement[4].Resource == "*"
+    error_message = "S3 Control actions require wildcard resource (no resource-level permissions)"
+  }
+}
+
+run "cloudwatch_metrics_permissions" {
+  command = plan
+
+  assert {
+    condition = contains(
+      jsondecode(output.iam_policy_json).Statement[5].Action,
+      "cloudwatch:ListMetrics"
+    )
+    error_message = "Policy must include cloudwatch:ListMetrics"
+  }
+
+  assert {
+    condition = contains(
+      jsondecode(output.iam_policy_json).Statement[5].Action,
+      "cloudwatch:GetMetricData"
+    )
+    error_message = "Policy must include cloudwatch:GetMetricData"
+  }
+
+  assert {
+    condition     = length(jsondecode(output.iam_policy_json).Statement[5].Action) == 2
+    error_message = "CloudWatch statement must contain exactly 2 actions"
+  }
+
+  assert {
+    condition     = jsondecode(output.iam_policy_json).Statement[5].Resource == "*"
+    error_message = "CloudWatch actions require wildcard resource (no resource-level permissions)"
+  }
+}
+
 run "total_statement_count" {
   command = plan
 
   assert {
-    condition     = length(jsondecode(output.iam_policy_json).Statement) == 4
-    error_message = "Policy must contain exactly 4 statements (CE, S3 PutObject, S3 ListBucket, Logs)"
+    condition     = length(jsondecode(output.iam_policy_json).Statement) == 6
+    error_message = "Policy must contain exactly 6 statements (CE, S3 PutObject, S3 ListBucket, Logs, S3 Control, CloudWatch)"
   }
 }

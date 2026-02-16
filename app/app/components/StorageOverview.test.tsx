@@ -92,4 +92,34 @@ describe("StorageOverview", () => {
     // The CostChange component should show a delta between current and prev month
     expect(container.textContent).toContain("+$150.00");
   });
+
+  it("renders Total Stored card when storage_lens_total_bytes is present", () => {
+    const metricsWithLens: StorageMetrics = {
+      ...metrics,
+      storage_lens_total_bytes: 5_000_000_000_000, // 5 TB
+    };
+    const { container } = render(<StorageOverview metrics={metricsWithLens} />);
+    expect(container.textContent).toContain("Total Stored");
+    expect(container.textContent).toContain("5.0 TB");
+  });
+
+  it("does not render Total Stored card when storage_lens_total_bytes is absent", () => {
+    const { container } = render(<StorageOverview metrics={metrics} />);
+    expect(container.textContent).not.toContain("Total Stored");
+  });
+
+  it("renders Storage Lens tooltip on Total Stored card", () => {
+    const metricsWithLens: StorageMetrics = {
+      ...metrics,
+      storage_lens_total_bytes: 1_000_000_000_000,
+    };
+    const { container } = render(<StorageOverview metrics={metricsWithLens} />);
+    const tooltips = container.querySelectorAll('[role="tooltip"]');
+    // Should have 4 tooltips now (Storage Cost, Total Stored, Cost/TB, Hot Tier)
+    expect(tooltips.length).toBe(4);
+    const tooltipTexts = Array.from(tooltips).map((t) => t.textContent);
+    expect(
+      tooltipTexts.some((t) => t?.includes("S3 Storage Lens")),
+    ).toBeTruthy();
+  });
 });

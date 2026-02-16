@@ -11,34 +11,47 @@ from typing import Any
 import boto3
 
 from dapanoskop.collector import collect
-from dapanoskop.inventory import get_inventory_bucket_summary, get_inventory_total_bytes
 from dapanoskop.processor import process, update_index, write_to_s3
+from dapanoskop.storage_lens import get_storage_lens_metrics
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def _enrich_with_inventory(
-    processed: dict[str, Any], inventory_bucket: str, inventory_prefix: str
+def _enrich_with_storage_lens(
+    processed: dict[str, Any], storage_lens_config_id: str
 ) -> None:
-    """Add S3 Inventory data to the processed summary (in-place)."""
+    """Add S3 Storage Lens data to the processed summary (in-place)."""
     logger.info(
-        "Reading S3 Inventory from s3://%s/%s", inventory_bucket, inventory_prefix
+        "Querying S3 Storage Lens metrics (config_id=%s)",
+        storage_lens_config_id or "auto-discover",
     )
     try:
-        inv_bytes = get_inventory_total_bytes(inventory_bucket, inventory_prefix)
-        if inv_bytes is not None:
-            processed["summary"]["storage_metrics"]["inventory_total_bytes"] = inv_bytes
-            logger.info("Inventory total bytes: %d", inv_bytes)
+        metrics = get_storage_lens_metrics(config_id=storage_lens_config_id)
+        if metrics is not None:
+            # Add to storage_metrics
+            processed["summary"]["storage_metrics"]["storage_lens_total_bytes"] = (
+                metrics["total_bytes"]
+            )
 
-        bucket_summary = get_inventory_bucket_summary(
-            inventory_bucket, inventory_prefix
-        )
-        if bucket_summary:
-            processed["summary"]["storage_inventory"] = {"buckets": bucket_summary}
-            logger.info("Inventory: %d buckets discovered", len(bucket_summary))
+            # Add storage_lens object to summary
+            processed["summary"]["storage_lens"] = {
+                "total_bytes": metrics["total_bytes"],
+                "object_count": metrics["object_count"],
+                "timestamp": metrics["timestamp"],
+                "config_id": metrics["config_id"],
+                "org_id": metrics["org_id"],
+            }
+            logger.info(
+                "Storage Lens: %d bytes, %d objects (config: %s)",
+                metrics["total_bytes"],
+                metrics["object_count"],
+                metrics["config_id"],
+            )
     except Exception:
-        logger.warning("Failed to read S3 Inventory, skipping", exc_info=True)
+        logger.warning(
+            "Failed to read S3 Storage Lens metrics, skipping", exc_info=True
+        )
 
 
 def _sanitize_error_message(error_msg: str) -> str:
@@ -91,8 +104,7 @@ def _handle_backfill(
     include_ebs: bool,
     months: int,
     force: bool,
-    inventory_bucket: str = "",
-    inventory_prefix: str = "",
+    storage_lens_config_id: str = "",
 ) -> dict[str, Any]:
     """Handle backfill mode: process multiple historical months."""
     logger.info("Starting backfill for %d months (force=%s)", months, force)
@@ -125,9 +137,9 @@ def _handle_backfill(
                 collected, include_efs=include_efs, include_ebs=include_ebs
             )
 
-            # Enrich with S3 Inventory data if configured
-            if inventory_bucket and inventory_prefix:
-                _enrich_with_inventory(processed, inventory_bucket, inventory_prefix)
+            # Enrich with S3 Storage Lens data if configured
+            if storage_lens_config_id is not None:
+                _enrich_with_storage_lens(processed, storage_lens_config_id)
 
             logger.info("Writing to S3 for %s", period_label)
             write_to_s3(processed, bucket, update_index_file=False)
@@ -182,8 +194,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     cost_category_name = os.environ.get("COST_CATEGORY_NAME", "")
     include_efs = os.environ.get("INCLUDE_EFS", "false").lower() == "true"
     include_ebs = os.environ.get("INCLUDE_EBS", "false").lower() == "true"
-    inventory_bucket = os.environ.get("INVENTORY_BUCKET", "")
-    inventory_prefix = os.environ.get("INVENTORY_PREFIX", "")
+    storage_lens_config_id = os.environ.get("STORAGE_LENS_CONFIG_ID", "")
 
     # Check for backfill mode
     backfill = event.get("backfill", False)
@@ -197,8 +208,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             include_ebs,
             months,
             force,
-            inventory_bucket,
-            inventory_prefix,
+            storage_lens_config_id,
         )
 
     # Normal mode: process current month
@@ -209,9 +219,9 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         logger.info("Processing collected data")
         processed = process(collected, include_efs=include_efs, include_ebs=include_ebs)
 
-        # Enrich with S3 Inventory data if configured
-        if inventory_bucket and inventory_prefix:
-            _enrich_with_inventory(processed, inventory_bucket, inventory_prefix)
+        # Enrich with S3 Storage Lens data if configured
+        if storage_lens_config_id is not None:
+            _enrich_with_storage_lens(processed, storage_lens_config_id)
 
         logger.info("Writing to S3")
         write_to_s3(processed, bucket)

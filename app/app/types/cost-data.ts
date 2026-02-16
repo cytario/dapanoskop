@@ -12,19 +12,16 @@ export interface CostSummary {
     include_ebs: boolean;
   };
   storage_metrics: StorageMetrics;
-  storage_inventory?: StorageInventory;
+  storage_lens?: StorageLens;
   cost_centers: CostCenter[];
   tagging_coverage: TaggingCoverage;
 }
 
-export interface StorageInventory {
-  buckets: BucketSummary[];
-}
-
-export interface BucketSummary {
-  source_bucket: string;
+export interface StorageLens {
   total_bytes: number;
   object_count: number;
+  timestamp: string;
+  config_id: string;
 }
 
 export interface StorageMetrics {
@@ -33,7 +30,7 @@ export interface StorageMetrics {
   total_volume_bytes: number;
   hot_tier_percentage: number;
   cost_per_tb_usd: number;
-  inventory_total_bytes?: number;
+  storage_lens_total_bytes?: number;
 }
 
 export interface CostCenter {

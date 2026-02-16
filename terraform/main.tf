@@ -68,8 +68,7 @@ module "pipeline" {
   schedule_expression      = var.schedule_expression
   include_efs              = var.include_efs
   include_ebs              = var.include_ebs
-  inventory_bucket         = var.inventory_bucket
-  inventory_prefix         = var.inventory_prefix
+  storage_lens_config_id   = var.storage_lens_config_id
   lambda_s3_bucket         = module.artifacts.lambda_s3_bucket
   lambda_s3_key            = module.artifacts.lambda_s3_key
   lambda_s3_object_version = module.artifacts.lambda_s3_object_version
