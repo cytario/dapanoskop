@@ -5,8 +5,8 @@
 | Document ID         | URS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.9 (Draft)                                |
-| Date                | 2026-02-15                                 |
+| Version             | 0.10 (Draft)                               |
+| Date                | 2026-02-16                                 |
 
 ---
 
@@ -143,7 +143,7 @@ The name comes from Greek δαπάνη (dapáni, "cost") + σκοπέω (skopéo
 #### 3.1.1 Deploy Dapanoskop (Macro-Step 1)
 
 **[URS-DP-10101] Provision Dapanoskop Instance**
-A DevOps engineer deploys a complete Dapanoskop instance into an AWS account using a Terraform module, providing configuration values for the target environment. The deployment uses pre-built release artifacts and does not require local build tools (Node.js, Python).
+A DevOps engineer deploys a complete Dapanoskop instance into an AWS account using a Terraform module, providing configuration values for the target environment. The deployment uses pre-built release artifacts and does not require local build tools (Node.js, Python). The engineer optionally configures resource tags (applied to all AWS resources) and an IAM permissions boundary (applied to all IAM roles) to comply with organizational policies.
 
 **[URS-DP-10102] Configure Cost Category**
 A DevOps engineer specifies which AWS Cost Category Dapanoskop uses to derive cost centers. By default, the first Cost Category returned by the Cost Explorer API is used. All values within the selected Cost Category are treated as cost centers and reported on.
@@ -156,6 +156,9 @@ A DevOps engineer configures single sign-on so that users authenticate through t
 
 **[URS-DP-10105] Backfill Historical Cost Data**
 A DevOps engineer triggers collection of historical cost data for all months available in Cost Explorer, so that Dapanoskop is populated with past cost trends immediately after initial deployment rather than accumulating data month by month.
+
+**[URS-DP-10106] Configure S3 Inventory Integration**
+A DevOps engineer optionally configures S3 Inventory integration by specifying an S3 bucket and prefix where inventory data is delivered, so that Dapanoskop displays actual total storage volume (in bytes) in addition to cost-derived storage metrics.
 
 #### 3.1.2 Tag Resources for Cost Visibility (Macro-Step 2)
 
@@ -200,6 +203,12 @@ A Budget Owner identifies the underlying cost trajectory by viewing a smoothed t
 **[URS-DP-10311] View Cost Center Detail Page**
 A Budget Owner views a dedicated page for a single cost center showing its historical cost trend, period-over-period comparisons (MoM, YoY), and workload breakdown, enabling focused analysis of a specific cost center without the context of other cost centers.
 
+**[URS-DP-10312] View Actual Total Storage Volume**
+A Budget Owner views the actual total storage volume (in bytes and TB) across all monitored S3 buckets, derived from S3 Inventory data when configured at deployment time, to validate that storage cost metrics reflect real usage.
+
+**[URS-DP-10313] Investigate Storage Per Bucket**
+A Budget Owner or DevOps engineer investigates storage volume and object count on a per-bucket basis to identify which S3 buckets are driving storage costs and volume, enabling targeted optimization efforts.
+
 #### 3.1.4 Investigate Cost Anomalies (Macro-Step 4)
 
 **[URS-DP-10401] Drill Into Workload Cost**
@@ -207,6 +216,9 @@ A DevOps engineer or Budget Owner examines the usage types within a specific wor
 
 **[URS-DP-10402] Identify Cost Changes**
 A Budget Owner identifies which workloads or cost components changed significantly compared to previous periods, to focus investigation on the largest movers.
+
+**[URS-DP-10403] Understand Split Charge Cost Allocation**
+A Budget Owner or DevOps engineer identifies cost centers that use AWS Cost Category split charge rules, where costs are automatically allocated to other cost centers rather than appearing as direct spend, to understand the full picture of cost distribution including both direct and allocated costs.
 
 #### 3.1.5 Manage Users and Access (Macro-Step 5)
 
@@ -279,3 +291,4 @@ A Budget Owner accesses and reviews the cost report on a mobile device (phone or
 | 0.7     | 2026-02-15 | —      | Add cost trajectory trend line (URS-DP-10310), contextual tooltips (URS-DP-30102 update), header navigation (URS-DP-30103), and mobile device access (URS-DP-30104) |
 | 0.8     | 2026-02-15 | —      | Consolidate v0.7 changes (trend line, tooltips, navigation, mobile) into single version entry |
 | 0.9     | 2026-02-15 | —      | Add cost trend time range toggle (URS-DP-10309 update) and cost center detail page navigation (URS-DP-10311) |
+| 0.10    | 2026-02-16 | —      | Add S3 Inventory integration (URS-DP-10106), actual storage volume display (URS-DP-10312), storage per-bucket investigation (URS-DP-10313), split charge cost allocation understanding (URS-DP-10403), and resource tags/permissions boundary configuration (URS-DP-10101 update) |

@@ -5,8 +5,8 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.11 (Draft)                               |
-| Date                | 2026-02-15                                 |
+| Version             | 0.12 (Draft)                               |
+| Date                | 2026-02-16                                 |
 
 ---
 
@@ -236,6 +236,14 @@ Refs: SRS-DP-310304
 The cost center detail page layout includes: (1) a back link (`<Link to={/?period=${selectedPeriod}}>`) to return to the main report while preserving the period selection; (2) the cost center name as a page heading; (3) three summary cards in a responsive grid showing total spend, MoM change, and YoY change for the selected period, sourced from the fetched summary.json and filtered to the specific cost center; (4) the `CostTrendSection` component with cost center-filtered trend data; (5) the reusable `WorkloadTable` component displaying the cost center's workload breakdown in an always-visible (non-expandable) format. The route is registered in `routes.ts` as `route("cost-center/:name", "routes/cost-center-detail.tsx")`.
 Refs: SRS-DP-310302, SRS-DP-310303, SRS-DP-310304, SRS-DP-310305, SRS-DP-310306
 
+**[SDS-DP-010217] Render Storage Deep Dive Route**
+The Report Renderer includes a dedicated route component at `/storage` (route file: `routes/storage.tsx`) for displaying per-bucket storage breakdown when S3 Inventory data is available. The route follows the same authentication, period discovery, and summary data fetching patterns as the main report route. The component renders: (1) the shared `<Header>` and `<Footer>` components; (2) a back link to the main report; (3) a period selector; (4) summary cards showing total stored volume (bytes formatted as TB), total object count, and cost per TB; (5) a sortable table with columns for bucket name, size (bytes and TB), object count, and percentage of total; (6) a notice if `storage_inventory` is absent from summary.json. The table is sorted by size descending by default. The route is registered in `routes.ts` as `route("storage", "routes/storage.tsx")`.
+Refs: SRS-DP-310307
+
+**[SDS-DP-010218] Render Split Charge Badge and Allocated Label**
+The `CostCenterCard` component conditionally renders a "Split Charge" badge (gray background, small text) next to the cost center name when `costCenter.is_split_charge` is true. When a split charge category is detected, the card displays "Allocated" (in gray, small font) instead of the current cost amount, and replaces MoM/YoY change rows with explanatory text: "Costs allocated to other cost centers". This visual distinction prevents confusion about zero-dollar cost centers whose costs are redistributed to other categories.
+Refs: SRS-DP-310201
+
 Wireframes: See `docs/wireframes/cost-report.puml` and `docs/wireframes/workload-detail.puml`.
 Cost direction indicators (color coding, direction arrows, +/- prefixes) and anomaly highlighting are implemented with Tailwind CSS utility classes.
 Refs: SRS-DP-310210, SRS-DP-310213
@@ -254,21 +262,20 @@ Refs: SRS-DP-310210, SRS-DP-310213
 #### Level 2: Data Pipeline Components
 
 ```
-┌──────────────────────────────────────────────┐
-│           SS-2: Data Pipeline                │
-│                                              │
-│  ┌─────────────┐  ┌───────────────────────┐  │
-│  │  C-2.1      │  │  C-2.2                │  │
-│  │  Cost       │  │  Data Processor       │  │
-│  │  Collector  │  │  & Writer             │  │
-│  │             │  │                       │  │
-│  │  Queries CE │  │  Categorizes usage    │  │
-│  │  API        │  │  types, computes      │  │
-│  │             │  │  aggregates, writes   │  │
-│  │             │  │  JSON to S3           │  │
-│  └─────────────┘  └───────────────────────┘  │
-│                                              │
-└──────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│               SS-2: Data Pipeline                      │
+│                                                        │
+│  ┌─────────────┐  ┌───────────────────┐  ┌─────────┐  │
+│  │  C-2.1      │  │  C-2.2            │  │  C-2.3  │  │
+│  │  Cost       │  │  Data Processor   │  │  Inv.   │  │
+│  │  Collector  │  │  & Writer         │  │  Reader │  │
+│  │             │  │                   │  │         │  │
+│  │  Queries CE │  │  Categorizes,     │  │  Reads  │  │
+│  │  API +      │  │  aggregates,      │  │  S3 Inv.│  │
+│  │  split chg  │  │  writes JSON      │  │  data   │  │
+│  └─────────────┘  └───────────────────┘  └─────────┘  │
+│                                                        │
+└────────────────────────────────────────────────────────┘
 ```
 
 ##### 3.2.1 C-2.1: Cost Collector
@@ -285,9 +292,9 @@ Refs: SRS-DP-310210, SRS-DP-310213
 The Cost Collector queries `GetCostAndUsage` for three time periods: the current (or most recent complete) month, the previous month, and the same month of the previous year. Each query uses `MONTHLY` granularity and requests `UnblendedCost` and `UsageQuantity` metrics, grouped by App tag and USAGE_TYPE (2 GroupBy dimensions, within the CE API limit).
 Refs: SRS-DP-420101, SRS-DP-420102
 
-**[SDS-DP-020102] Query Cost Category Mapping**
-The Cost Collector queries the configured AWS Cost Category (by name, or the first one returned by `GetCostCategories` if not configured) to obtain the mapping of workloads (App tag values) to cost centers. The AWS CE API returns cost category group keys with the format `{CategoryName}${Value}` (e.g., `CostCenter$IT`). The collector strips the `{CategoryName}$` prefix to extract the clean cost center name. This mapping is applied during data processing (C-2.2) to allocate workload costs to cost centers.
-Refs: SRS-DP-420103
+**[SDS-DP-020102] Query Cost Category Mapping and Detect Split Charges**
+The Cost Collector queries the configured AWS Cost Category (by name, or the first one returned by `GetCostCategories` if not configured) to obtain the mapping of workloads (App tag values) to cost centers. The AWS CE API returns cost category group keys with the format `{CategoryName}${Value}` (e.g., `CostCenter$IT`). The collector strips the `{CategoryName}$` prefix to extract the clean cost center name. Additionally, the collector calls `ListCostCategoryDefinitions` and `DescribeCostCategoryDefinition` to identify cost categories with split charge rules (indicated by the presence of `SplitChargeRules` array in the definition). For each detected split charge category, the collector queries category-level allocated costs using `GetCostAndUsage` with `GroupBy: [{"Type": "COST_CATEGORY", "Key": "{CategoryName}"}]` and metric `NetAmortizedCost` for all three periods. This mapping and split charge detection data are applied during data processing (C-2.2) to allocate workload costs to cost centers and correctly handle split charge categories.
+Refs: SRS-DP-420103, SRS-DP-420107
 
 **[SDS-DP-020103] Support Parameterized Period Generation**
 The Cost Collector supports generating target periods for an arbitrary month (specified by year and month) in addition to the default "current month" logic. This enables the backfill handler to request data for any historical month using the same collection logic.
@@ -305,17 +312,17 @@ Refs: SRS-DP-420106
 The Data Processor categorizes each AWS usage type into Storage, Compute, Other, or Support by matching the usage type string against known patterns.
 Refs: SRS-DP-420105
 
-**[SDS-DP-020202] Apply Cost Category Mapping**
-The Data Processor applies the Cost Category mapping from C-2.1 to assign each workload's cost to a cost center. Workloads not matched by any Cost Category rule are grouped under a default label.
-Refs: SRS-DP-420103
+**[SDS-DP-020202] Apply Cost Category Mapping and Handle Split Charges**
+The Data Processor applies the Cost Category mapping from C-2.1 to assign each workload's cost to a cost center. Workloads not matched by any Cost Category rule are grouped under a default label. When split charge categories are detected (C-2.1), the processor uses category-level allocated costs (`NetAmortizedCost`) from the collector instead of summing workload costs. For split charge categories, the processor sets `is_split_charge: true` in the cost center entry and zeroes out the displayed cost amounts (`current_cost_usd`, `prev_month_cost_usd`, `yoy_cost_usd`) to prevent double-counting, since their costs are already included in other categories' allocated totals. The Global Summary total explicitly excludes split charge categories to avoid inflating the overall spend figure.
+Refs: SRS-DP-420103, SRS-DP-420107
 
 **[SDS-DP-020203] Compute Storage Volume and Hot Tier Metrics**
 The Data Processor computes total storage volume from S3 `TimedStorage-*` usage quantities and calculates the hot tier percentage as: `(TimedStorage-ByteHrs + TimedStorage-INT-FA-ByteHrs) / total TimedStorage-*-ByteHrs`. When configured, EFS and EBS storage usage types are included in the totals. **AWS Cost Explorer returns `UsageQuantity` for TimedStorage-* in GB-hours, not byte-hours.** The processor converts GB-hours to average bytes stored by multiplying by 1,000,000,000 (bytes per GB) and then dividing by the number of hours in the reporting month. The processor uses decimal terabytes (TB = 10^12 bytes) for all volume conversions, consistent with AWS Cost Explorer and billing practices. Note: Prior to v1.5.0, the constant `_BYTES_PER_TB` incorrectly used tebibytes (TiB = 2^40 = 1,099,511,627,776) instead of terabytes, causing a ~10% overstatement in cost per TB values. This was corrected to 1,000,000,000,000 (10^12). Prior to v1.6.0, the processor incorrectly treated GB-hours as byte-hours, producing storage volumes ~1 billion times too large and cost-per-TB values ~1 billion times too small.
 Refs: SRS-DP-420104
 
-**[SDS-DP-020204] Write Summary JSON**
-The Data Processor writes `{year}-{month}/summary.json` containing pre-computed aggregates for the 1-page report: cost center totals (current, prev month, YoY), workload breakdown per cost center (sorted by cost descending, with MoM/YoY), storage metrics (total cost, cost/TB, hot tier %), and a `collected_at` ISO 8601 timestamp.
-Refs: SRS-DP-430101, SRS-DP-510002
+**[SDS-DP-020204] Write Summary JSON with Inventory Data**
+The Data Processor writes `{year}-{month}/summary.json` containing pre-computed aggregates for the 1-page report: cost center totals (current, prev month, YoY), workload breakdown per cost center (sorted by cost descending, with MoM/YoY), storage metrics (total cost, cost/TB, hot tier %), a `collected_at` ISO 8601 timestamp, and optionally a `storage_inventory` object containing per-bucket storage data from C-2.3 when inventory integration is configured. The `storage_inventory` object includes: `total_bytes`, `total_object_count`, `inventory_date`, and a `buckets` array with per-bucket details (`name`, `size_bytes`, `object_count`, `pct_of_total`). Cost centers with `is_split_charge: true` are included in the `cost_centers` array but excluded from global summary calculations.
+Refs: SRS-DP-430101, SRS-DP-510002, SRS-DP-420108
 
 **[SDS-DP-020205] Write Workload Parquet**
 The Data Processor writes `{year}-{month}/cost-by-workload.parquet` containing per-workload cost data with columns: `cost_center`, `workload`, `period`, `cost_usd`. Rows for all three periods (current, previous month, YoY month) are included so the SPA can compute comparisons via DuckDB queries.
@@ -333,6 +340,28 @@ Refs: SRS-DP-430103
 The Lambda handler detects backfill mode via the event payload `{"backfill": true, "months": N, "force": false}`. In backfill mode, the handler generates a list of N target months (ending at the current month), processes each sequentially by invoking `collect_for_month()` (C-2.1) and `write_to_s3()` (C-2.2) per month with index updates suppressed. Before processing each month, the handler checks whether data already exists in S3 (by probing for `{year}-{month}/summary.json`) and skips existing months unless `force` is true. After all months are processed, the handler calls `update_index()` once to rebuild the period manifest. The response includes a multi-status report: `{"statusCode": 200|207, "succeeded": [...], "failed": [...], "skipped": [...]}`.
 Refs: SRS-DP-420106
 
+##### 3.2.3 C-2.3: Inventory Reader
+
+**Purpose / Responsibility**: Reads S3 Inventory manifests and CSV data files to provide actual total storage volume (in bytes) and object count per source bucket.
+
+**Interfaces**:
+- **Inbound**: Invoked by the Lambda handler when `INVENTORY_BUCKET` and `INVENTORY_PREFIX` environment variables are set
+- **Outbound**: S3 API (`ListObjectsV2`, `GetObject`) to read inventory manifests and CSV data files
+
+**Variability**: Inventory bucket and prefix are configured at deploy time via Terraform variables. When not configured, this component is not invoked.
+
+**[SDS-DP-020301] Discover Inventory Configurations**
+The Inventory Reader walks the configured S3 prefix (up to 2 levels deep) to discover inventory configuration paths. S3 Inventory delivers to `{prefix}/{source-bucket}/{config-name}/YYYY-MM-DDT00-00Z/`. The reader identifies date-stamped folders and collects their parent paths as inventory configs. If the prefix itself contains date folders, it is treated as a single config.
+Refs: SRS-DP-420108
+
+**[SDS-DP-020302] Read Latest Manifests**
+For each discovered inventory config, the Inventory Reader lists date-stamped folders, sorts them in reverse chronological order, and reads the `manifest.json` file from the most recent folder. The manifest contains metadata about the inventory report (destination bucket, CSV file list, schema).
+Refs: SRS-DP-420108
+
+**[SDS-DP-020303] Aggregate Per-Bucket Volume from CSV Data**
+The Inventory Reader downloads and parses each CSV data file referenced in the manifest (gzip-compressed). It sums the `Size` column and counts rows (objects) per source bucket. The source bucket identifier is derived from the inventory config path (e.g., `{prefix}/{source-bucket}/{config}/` → `source-bucket`). The reader returns a dictionary mapping source bucket names to `{"size_bytes": int, "object_count": int, "inventory_date": "YYYY-MM-DDTHH:MM:SSZ"}`.
+Refs: SRS-DP-420108
+
 ### 3.3 SS-3: Terraform Module
 
 **Purpose / Responsibility**: Provides a single Terraform module that provisions all AWS resources needed for a complete Dapanoskop deployment.
@@ -341,7 +370,7 @@ Refs: SRS-DP-420106
 - **Inbound**: Terraform input variables from the deployer
 - **Outbound**: Provisions AWS resources (S3 buckets, CloudFront distribution, Cognito User Pool or app client on existing pool, optional SAML/OIDC federation, Lambda function, EventBridge rule, IAM roles)
 
-**Variability**: Configurable via Terraform variables (domain name, Cost Category name (optional, defaults to first), existing Cognito User Pool ID (optional — managed pool created if omitted), federation settings (SAML/OIDC), MFA configuration, schedule, storage services to include, release version, etc.).
+**Variability**: Configurable via Terraform variables (domain name, Cost Category name (optional, defaults to first), existing Cognito User Pool ID (optional — managed pool created if omitted), federation settings (SAML/OIDC), MFA configuration, schedule, storage services to include, S3 Inventory integration (optional inventory bucket and prefix), resource tags (applied to all resources via provider default_tags), IAM permissions boundary (optional ARN), release version, etc.). When `var.tags` is set (non-empty map), the AWS provider applies those tags automatically to all taggable resources created by the module and its sub-modules via the `default_tags` block.
 
 #### Level 2: Terraform Module Components
 
@@ -388,8 +417,8 @@ Refs: SRS-DP-510003
 The module creates a Cognito app client configured for authorization code flow with PKCE, token revocation enabled, and user-existence-error prevention. Callback URLs point to the CloudFront distribution domain. Token validity: 1 hour for ID/access tokens, 12 hours for refresh tokens. The app client references either the provided existing User Pool or the newly created managed pool.
 Refs: SRS-DP-410101, SRS-DP-520004
 
-**[SDS-DP-030202] Create Managed Cognito User Pool**
-When `cognito_user_pool_id` is empty, the module creates a Cognito User Pool (`count`-conditional) with: email as username, admin-only user creation, 14-character password policy, configurable MFA with software TOTP, deletion protection, verified email recovery, and optional advanced security (ENFORCED mode). A Cognito domain is created using the configured domain prefix.
+**[SDS-DP-030202] Create Managed Cognito User Pool with Managed Login v2**
+When `cognito_user_pool_id` is empty, the module creates a Cognito User Pool (`count`-conditional) with: email as username, admin-only user creation, 14-character password policy, configurable MFA with software TOTP, deletion protection, verified email recovery, and optional advanced security (ENFORCED mode). A Cognito domain is created using the configured domain prefix with `managed_login_version = 2`, enabling the new Hosted UI (Managed Login v2). A `aws_cognito_managed_login_branding` resource is created with default branding settings tied to the app client. All existing user sessions are invalidated when upgrading from v1 to v2.
 Refs: SRS-DP-410103, SRS-DP-520004
 
 **[SDS-DP-030203] Configure SAML Identity Provider**
@@ -408,18 +437,18 @@ Refs: SRS-DP-410106
 The module creates a Cognito Identity Pool configured with the Cognito User Pool as the sole identity provider. Unauthenticated identities are disabled. The classic (basic) authflow is disabled; only the enhanced (simplified) authflow is allowed. Server-side token validation is enabled.
 Refs: SRS-DP-450101, SRS-DP-520003
 
-**[SDS-DP-030207] Provision IAM Role for Authenticated Users**
-The module creates an IAM role with an `AssumeRoleWithWebIdentity` trust policy restricted to the Identity Pool (`cognito-identity.amazonaws.com:aud` = pool ID, `amr` = `authenticated`). An inline policy grants only `s3:GetObject` on the data bucket. The role is attached to the Identity Pool as the default authenticated role.
-Refs: SRS-DP-450101, SRS-DP-520003
+**[SDS-DP-030207] Provision IAM Role for Authenticated Users with Optional Permissions Boundary**
+The module creates an IAM role with an `AssumeRoleWithWebIdentity` trust policy restricted to the Identity Pool (`cognito-identity.amazonaws.com:aud` = pool ID, `amr` = `authenticated`). An inline policy grants only `s3:GetObject` on the data bucket. The role is attached to the Identity Pool as the default authenticated role. If `var.permissions_boundary` is set, the specified permissions boundary ARN is attached to the role via the `permissions_boundary` attribute.
+Refs: SRS-DP-450101, SRS-DP-520003, SRS-DP-530004
 
 ##### 3.3.3 C-3.3: Pipeline Infrastructure
 
 **Purpose / Responsibility**: Provisions the Lambda function for cost data collection, its IAM role (with Cost Explorer and S3 permissions), and the EventBridge scheduled rule.
 
-**[SDS-DP-030301] Provision Lambda and Schedule**
-The module creates a Lambda function (Python runtime) from a packaged deployment artifact, an IAM role with permissions for `ce:GetCostAndUsage`, `ce:GetCostCategories`, `s3:PutObject` (to the data bucket), and `s3:ListBucket` (on the data bucket, for index.json generation), and an EventBridge rule to trigger the Lambda on a daily schedule.
-When S3 artifact references are provided (from C-3.5), the Lambda function is deployed using `s3_bucket`, `s3_key`, and `s3_object_version` — an `s3_object_version` change triggers a Lambda code update. Otherwise, the Lambda is packaged from the local source directory via Terraform's `archive_file` data source and deployed using `filename` and `source_code_hash`. Memory: 256 MB. Timeout: 5 minutes. EventBridge schedule: `cron(0 6 * * ? *)` (daily at 06:00 UTC).
-Refs: SRS-DP-510002, SRS-DP-520002, SRS-DP-530001, SRS-DP-430103
+**[SDS-DP-030301] Provision Lambda, IAM Role, and Schedule with Inventory Support**
+The module creates a Lambda function (Python runtime) from a packaged deployment artifact, an IAM role with permissions for `ce:GetCostAndUsage`, `ce:GetCostCategories`, `ce:ListCostCategoryDefinitions`, `ce:DescribeCostCategoryDefinition` (for split charge detection), `s3:PutObject` (to the data bucket), `s3:ListBucket` (on the data bucket for index.json generation, and optionally on the inventory bucket when configured), and `s3:GetObject` (on the inventory bucket when configured, for reading manifests and CSV data files), and an EventBridge rule to trigger the Lambda on a daily schedule.
+When S3 artifact references are provided (from C-3.5), the Lambda function is deployed using `s3_bucket`, `s3_key`, and `s3_object_version` — an `s3_object_version` change triggers a Lambda code update. Otherwise, the Lambda is packaged from the local source directory via Terraform's `archive_file` data source and deployed using `filename` and `source_code_hash`. The Lambda IAM role optionally includes a permissions boundary (via `var.permissions_boundary`) if configured. Environment variables include `DATA_BUCKET`, `COST_CATEGORY_NAME`, `INCLUDE_EFS`, `INCLUDE_EBS`, `INVENTORY_BUCKET`, and `INVENTORY_PREFIX` (the latter two optional). Memory: 256 MB. Timeout: 5 minutes. EventBridge schedule: `cron(0 6 * * ? *)` (daily at 06:00 UTC).
+Refs: SRS-DP-510002, SRS-DP-520002, SRS-DP-530001, SRS-DP-430103, SRS-DP-420107, SRS-DP-420108, SRS-DP-530004
 
 ##### 3.3.4 C-3.4: Data Store Infrastructure
 
@@ -434,7 +463,7 @@ The data bucket has a lifecycle configuration that aborts incomplete multipart u
 Refs: SRS-DP-510003
 
 **[SDS-DP-030402] Configure S3 CORS for Browser Access**
-The module configures CORS on the data bucket allowing `GET` and `HEAD` methods from the CloudFront distribution origin. Allowed headers include `Authorization`, `Range`, `x-amz-*`, and `amz-sdk-*`. The `amz-sdk-*` pattern is required because AWS SDK v3 sends `amz-sdk-invocation-id` and `amz-sdk-request` headers that do not match the `x-amz-*` prefix — without this, S3 returns 403 without CORS headers, which browsers report as a CORS error. Exposed headers include `Content-Length`, `Content-Range`, and `ETag`. Max age: 300 seconds.
+The module configures CORS on the data bucket allowing `GET` and `HEAD` methods from the CloudFront distribution origin. Allowed headers include `Authorization`, `Range`, `x-amz-*`, `amz-sdk-*`, and `x-host-override`. The `amz-sdk-*` pattern is required because AWS SDK v3 sends `amz-sdk-invocation-id` and `amz-sdk-request` headers that do not match the `x-amz-*` prefix. The `x-host-override` header is required by DuckDB-wasm's HTTP adapter, which renames the forbidden browser `Host` header to `X-Host-Override` for SigV4 request signing (S3 ignores this header, but CORS preflight must allow it). Without these headers, S3 returns 403 without CORS headers, which browsers report as CORS errors. Exposed headers include `Content-Length`, `Content-Range`, and `ETag`. Max age: 300 seconds.
 Refs: SRS-DP-430104
 
 ##### 3.3.5 C-3.5: Artifacts
@@ -507,12 +536,39 @@ Refs: SRS-DP-430101, SRS-DP-430102, SRS-DP-430103
           "yoy_cost_usd": 3200.00
         }
       ]
+    },
+    {
+      "name": "SharedServices",
+      "current_cost_usd": 0.00,
+      "prev_month_cost_usd": 0.00,
+      "yoy_cost_usd": 0.00,
+      "is_split_charge": true,
+      "workloads": []
     }
   ],
   "tagging_coverage": {
     "tagged_cost_usd": 14000.00,
     "untagged_cost_usd": 1000.00,
     "tagged_percentage": 93.3
+  },
+  "storage_inventory": {
+    "total_bytes": 5500000000000,
+    "total_object_count": 12345678,
+    "inventory_date": "2026-01-31T23:00:00Z",
+    "buckets": [
+      {
+        "name": "my-data-bucket",
+        "size_bytes": 5000000000000,
+        "object_count": 10000000,
+        "pct_of_total": 90.9
+      },
+      {
+        "name": "my-logs-bucket",
+        "size_bytes": 500000000000,
+        "object_count": 2345678,
+        "pct_of_total": 9.1
+      }
+    ]
   }
 }
 ```
@@ -1141,3 +1197,4 @@ Which charting library should be used to render the multi-period cost trend stac
 | 0.9     | 2026-02-15 | —      | Bug fix documentation: Clarify AWS Cost Explorer returns GB-hours (not byte-hours) for TimedStorage-* usage quantities; document GB→bytes conversion formula (SDS-DP-020203, §6.6); add self-hosted DuckDB WASM bundle deployment via Vite copy plugin (SDS-DP-010206) |
 | 0.10    | 2026-02-15 | —      | Phase 2 enhancements: Change trendline color from gray to pink-700 for improved contrast (SDS-DP-010208); enrich InfoTooltip content with formulas, interpretation guidance, and optimization suggestions (SDS-DP-010212); add dynamic storage service tooltip generation in StorageOverview (SDS-DP-010204); extend local dev period discovery from 13 to 36 months with parallel probing (SDS-DP-010201) |
 | 0.11    | 2026-02-15 | —      | Phase 3 enhancements: Add time range toggle to cost trend chart (SDS-DP-010208 update); add clickable cost center name navigation (SDS-DP-010202 update); add cost center detail route, trend data fetching, and page layout (SDS-DP-010214, 010215, 010216); update responsive breakpoints documentation (SDS-DP-010213) |
+| 0.12    | 2026-02-16 | —      | Add S3 Inventory Reader component (C-2.3, SDS-DP-020301-020303); storage inventory in summary.json schema (SDS-DP-040002 update); split charge detection (SDS-DP-020102 update); allocated costs handling (SDS-DP-020202 update); storage inventory in summary writer (SDS-DP-020204 update); storage deep dive route (SDS-DP-010217); split charge badge rendering (SDS-DP-010218); Cognito Managed Login v2 (SDS-DP-030202 update); IAM permissions boundary on roles (SDS-DP-030207, 030301 updates); inventory IAM permissions (SDS-DP-030301 update); resource tags via provider default_tags (§3.3 variability update); x-host-override CORS header (SDS-DP-030402 update) |
