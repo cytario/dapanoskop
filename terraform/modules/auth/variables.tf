@@ -106,3 +106,9 @@ variable "data_bucket_arn" {
   description = "ARN of the S3 data bucket (for Identity Pool IAM policy)"
   type        = string
 }
+
+variable "permissions_boundary" {
+  description = "ARN of an IAM permissions boundary to attach to IAM roles. Leave empty to skip."
+  type        = string
+  default     = ""
+}

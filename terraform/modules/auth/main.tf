@@ -163,7 +163,8 @@ resource "aws_cognito_identity_pool" "main" {
 }
 
 resource "aws_iam_role" "identity_pool_authenticated" {
-  name_prefix = "dapanoskop-cognito-auth-"
+  name_prefix          = "dapanoskop-cognito-auth-"
+  permissions_boundary = var.permissions_boundary != "" ? var.permissions_boundary : null
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

@@ -61,3 +61,9 @@ variable "lambda_s3_object_version" {
   type        = string
   default     = ""
 }
+
+variable "permissions_boundary" {
+  description = "ARN of an IAM permissions boundary to attach to IAM roles. Leave empty to skip."
+  type        = string
+  default     = ""
+}

@@ -147,3 +147,15 @@ variable "inventory_prefix" {
   type        = string
   default     = ""
 }
+
+variable "tags" {
+  description = "Map of tags to apply to all resources via the AWS provider default_tags"
+  type        = map(string)
+  default     = {}
+}
+
+variable "permissions_boundary" {
+  description = "ARN of an IAM permissions boundary to attach to all IAM roles. Leave empty to skip."
+  type        = string
+  default     = ""
+}
