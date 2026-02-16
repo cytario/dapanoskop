@@ -29,6 +29,7 @@ data "archive_file" "lambda" {
 resource "aws_iam_role" "lambda" {
   name_prefix          = "dapanoskop-pipeline-"
   permissions_boundary = var.permissions_boundary != "" ? var.permissions_boundary : null
+  tags                 = var.tags
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -48,6 +49,7 @@ resource "aws_cloudwatch_log_group" "lambda" {
   #checkov:skip=CKV_AWS_158:Logs contain no secrets or PII; AWS managed encryption sufficient
   name              = "/aws/lambda/dapanoskop-pipeline"
   retention_in_days = 365
+  tags              = var.tags
 }
 
 resource "aws_iam_role_policy" "lambda" {
@@ -126,6 +128,7 @@ resource "aws_lambda_function" "pipeline" {
   timeout           = 300
 
   reserved_concurrent_executions = 1
+  tags                           = var.tags
 
   depends_on = [aws_cloudwatch_log_group.lambda]
 
@@ -152,6 +155,7 @@ resource "aws_lambda_function" "pipeline" {
 resource "aws_cloudwatch_event_rule" "daily" {
   name_prefix         = "dapanoskop-pipeline-"
   schedule_expression = var.schedule_expression
+  tags                = var.tags
 }
 
 resource "aws_cloudwatch_event_target" "lambda" {

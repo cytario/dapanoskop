@@ -29,6 +29,7 @@ resource "aws_s3_bucket" "artifacts" {
   #checkov:skip=CKV_AWS_18:Access logging not needed for deployment artifact bucket with restricted access
   #checkov:skip=CKV_AWS_145:SSE-S3 (AES256) sufficient; no compliance requirement for KMS
   bucket_prefix = "dapanoskop-artifacts-"
+  tags          = var.tags
 }
 
 resource "aws_s3_bucket_versioning" "artifacts" {

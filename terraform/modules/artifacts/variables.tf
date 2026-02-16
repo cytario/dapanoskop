@@ -9,3 +9,9 @@ variable "github_repo" {
   type        = string
   default     = "cytario/dapanoskop"
 }
+
+variable "tags" {
+  description = "Map of tags to apply to all taggable resources"
+  type        = map(string)
+  default     = {}
+}
