@@ -12,6 +12,13 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # Storage — S3
     (re.compile(r"TimedStorage"), "Storage"),
     (re.compile(r"^EarlyDelete"), "Storage"),
+    (re.compile(r"Requests-"), "Storage"),
+    (re.compile(r"^Retrieval"), "Storage"),
+    (re.compile(r"^TagStorage"), "Storage"),
+    (re.compile(r"^Inventory"), "Storage"),
+    (re.compile(r"^Select-"), "Storage"),
+    (re.compile(r"^StorageObjectCount"), "Storage"),
+    (re.compile(r"^Monitoring"), "Storage"),
     # Storage — EBS
     (re.compile(r"^EBS:"), "Storage"),
     # Storage — EFS
@@ -22,8 +29,6 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"^Lambda"), "Compute"),
     (re.compile(r"^Fargate"), "Compute"),
     (re.compile(r"^ECS"), "Compute"),
-    # S3 request tiers
-    (re.compile(r"Requests-"), "Other"),
     # Data transfer
     (re.compile(r"DataTransfer"), "Other"),
     (re.compile(r"^NatGateway"), "Other"),
