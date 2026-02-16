@@ -166,6 +166,7 @@ export default function Home() {
             <StorageOverview
               metrics={summary.storage_metrics}
               storageConfig={summary.storage_config}
+              period={selectedPeriod}
             />
 
             {/* Tagging Coverage */}

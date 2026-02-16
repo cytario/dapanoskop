@@ -12,8 +12,19 @@ export interface CostSummary {
     include_ebs: boolean;
   };
   storage_metrics: StorageMetrics;
+  storage_inventory?: StorageInventory;
   cost_centers: CostCenter[];
   tagging_coverage: TaggingCoverage;
+}
+
+export interface StorageInventory {
+  buckets: BucketSummary[];
+}
+
+export interface BucketSummary {
+  source_bucket: string;
+  total_bytes: number;
+  object_count: number;
 }
 
 export interface StorageMetrics {

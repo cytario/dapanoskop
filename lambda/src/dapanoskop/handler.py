@@ -11,11 +11,34 @@ from typing import Any
 import boto3
 
 from dapanoskop.collector import collect
-from dapanoskop.inventory import get_inventory_total_bytes
+from dapanoskop.inventory import get_inventory_bucket_summary, get_inventory_total_bytes
 from dapanoskop.processor import process, update_index, write_to_s3
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+def _enrich_with_inventory(
+    processed: dict[str, Any], inventory_bucket: str, inventory_prefix: str
+) -> None:
+    """Add S3 Inventory data to the processed summary (in-place)."""
+    logger.info(
+        "Reading S3 Inventory from s3://%s/%s", inventory_bucket, inventory_prefix
+    )
+    try:
+        inv_bytes = get_inventory_total_bytes(inventory_bucket, inventory_prefix)
+        if inv_bytes is not None:
+            processed["summary"]["storage_metrics"]["inventory_total_bytes"] = inv_bytes
+            logger.info("Inventory total bytes: %d", inv_bytes)
+
+        bucket_summary = get_inventory_bucket_summary(
+            inventory_bucket, inventory_prefix
+        )
+        if bucket_summary:
+            processed["summary"]["storage_inventory"] = {"buckets": bucket_summary}
+            logger.info("Inventory: %d buckets discovered", len(bucket_summary))
+    except Exception:
+        logger.warning("Failed to read S3 Inventory, skipping", exc_info=True)
 
 
 def _sanitize_error_message(error_msg: str) -> str:
@@ -104,20 +127,7 @@ def _handle_backfill(
 
             # Enrich with S3 Inventory data if configured
             if inventory_bucket and inventory_prefix:
-                try:
-                    inv_bytes = get_inventory_total_bytes(
-                        inventory_bucket, inventory_prefix
-                    )
-                    if inv_bytes is not None:
-                        processed["summary"]["storage_metrics"][
-                            "inventory_total_bytes"
-                        ] = inv_bytes
-                except Exception:
-                    logger.warning(
-                        "Failed to read S3 Inventory for %s, skipping",
-                        period_label,
-                        exc_info=True,
-                    )
+                _enrich_with_inventory(processed, inventory_bucket, inventory_prefix)
 
             logger.info("Writing to S3 for %s", period_label)
             write_to_s3(processed, bucket, update_index_file=False)
@@ -201,22 +211,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         # Enrich with S3 Inventory data if configured
         if inventory_bucket and inventory_prefix:
-            logger.info(
-                "Reading S3 Inventory from s3://%s/%s",
-                inventory_bucket,
-                inventory_prefix,
-            )
-            try:
-                inv_bytes = get_inventory_total_bytes(
-                    inventory_bucket, inventory_prefix
-                )
-                if inv_bytes is not None:
-                    processed["summary"]["storage_metrics"]["inventory_total_bytes"] = (
-                        inv_bytes
-                    )
-                    logger.info("Inventory total bytes: %d", inv_bytes)
-            except Exception:
-                logger.warning("Failed to read S3 Inventory, skipping", exc_info=True)
+            _enrich_with_inventory(processed, inventory_bucket, inventory_prefix)
 
         logger.info("Writing to S3")
         write_to_s3(processed, bucket)
