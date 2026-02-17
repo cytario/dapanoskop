@@ -632,3 +632,151 @@ def test_handler_error_response_no_arn_leak(
     account_id_pattern = r"\b\d{12}\b"
     matches = re.findall(account_id_pattern, error_message)
     assert len(matches) == 0, f"Account IDs leaked in error message: {matches}"
+
+
+@mock_aws
+def test_handler_backfill_skips_unavailable_months(
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test backfill gracefully skips months with no Cost Explorer data."""
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket=s3_bucket_env)
+
+    from datetime import datetime, timezone
+
+    from dapanoskop import handler as handler_module
+
+    call_count = [0]
+
+    def mock_collect(
+        cost_category_name: str = "",
+        target_year: int | None = None,
+        target_month: int | None = None,
+    ) -> dict:
+        call_count[0] += 1
+        # Simulate DataUnavailableException for 2025-11 (too old)
+        if target_year == 2025 and target_month == 11:
+            raise RuntimeError(
+                "DataUnavailableException: Cost data not available for this time period"
+            )
+
+        # 2026-01 succeeds
+        return {
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "period_labels": {
+                "current": f"{target_year:04d}-{target_month:02d}"
+                if target_year and target_month
+                else "2026-01",
+                "prev_month": "2025-12",
+                "yoy": "2025-01",
+            },
+            "raw_data": {
+                "current": [
+                    {
+                        "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                        "Metrics": {
+                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
+                        },
+                    }
+                ],
+                "prev_month": [],
+                "yoy": [],
+            },
+            "cc_mapping": {},
+        }
+
+    monkeypatch.setattr(handler_module, "collect", mock_collect)
+
+    from dapanoskop.handler import handler
+
+    # Request backfill for 3 months (2026-01, 2025-12, 2025-11)
+    event = {"backfill": True, "months": 3}
+    result = handler(event, None)
+
+    # Should return 200 (no failures, just skips)
+    assert result["statusCode"] == 200
+
+    body = json.loads(result["body"])
+    assert body["message"] == "backfill_complete"
+    assert len(body["succeeded"]) == 2  # 2026-01 and 2025-12
+    assert len(body["skipped"]) == 1  # 2025-11 skipped (no data)
+    assert "2025-11" in body["skipped"]
+    assert len(body["failed"]) == 0  # No failures
+
+    # Verify index.json was created with the 2 successful periods
+    index_obj = s3.get_object(Bucket=s3_bucket_env, Key="index.json")
+    index_data = json.loads(index_obj["Body"].read())
+    assert len(index_data["periods"]) == 2
+    assert "2026-01" in index_data["periods"]
+    assert "2025-12" in index_data["periods"]
+
+
+@mock_aws
+def test_handler_backfill_index_survives_failures(
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test that index.json is updated even when some months fail."""
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket=s3_bucket_env)
+
+    from datetime import datetime, timezone
+
+    from dapanoskop import handler as handler_module
+
+    def mock_collect(
+        cost_category_name: str = "",
+        target_year: int | None = None,
+        target_month: int | None = None,
+    ) -> dict:
+        # 2025-12 fails with a real error (not DataUnavailable)
+        if target_year == 2025 and target_month == 12:
+            raise RuntimeError("Network timeout connecting to Cost Explorer API")
+
+        # 2026-01 succeeds
+        return {
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "period_labels": {
+                "current": f"{target_year:04d}-{target_month:02d}"
+                if target_year and target_month
+                else "2026-01",
+                "prev_month": "2025-12",
+                "yoy": "2025-01",
+            },
+            "raw_data": {
+                "current": [
+                    {
+                        "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                        "Metrics": {
+                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
+                        },
+                    }
+                ],
+                "prev_month": [],
+                "yoy": [],
+            },
+            "cc_mapping": {},
+        }
+
+    monkeypatch.setattr(handler_module, "collect", mock_collect)
+
+    from dapanoskop.handler import handler
+
+    # Request backfill for 2 months (2026-01, 2025-12)
+    event = {"backfill": True, "months": 2}
+    result = handler(event, None)
+
+    # Should return 207 Multi-Status (partial success)
+    assert result["statusCode"] == 207
+
+    body = json.loads(result["body"])
+    assert len(body["succeeded"]) == 1  # 2026-01
+    assert len(body["failed"]) == 1  # 2025-12
+    assert "2025-12" in [f["period"] for f in body["failed"]]
+
+    # Verify index.json was still updated with the successful period
+    index_obj = s3.get_object(Bucket=s3_bucket_env, Key="index.json")
+    index_data = json.loads(index_obj["Body"].read())
+    assert len(index_data["periods"]) == 1
+    assert "2026-01" in index_data["periods"]

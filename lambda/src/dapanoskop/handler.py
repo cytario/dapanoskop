@@ -148,14 +148,35 @@ def _handle_backfill(
             logger.info("Completed %s", period_label)
 
         except Exception as e:
-            logger.exception("Failed to process %s", period_label)
-            failed.append(
-                {"period": period_label, "error": _sanitize_error_message(str(e))}
+            error_str = str(e)
+            # Check if this is a "no data available" error from Cost Explorer
+            # CE returns DataUnavailableException or similar errors for months without data
+            is_no_data_error = (
+                "DataUnavailableException" in error_str
+                or "No data available" in error_str
             )
 
-    # Update index once at the end
+            if is_no_data_error:
+                logger.info(
+                    "Skipping %s (no data available in Cost Explorer)", period_label
+                )
+                skipped.append(period_label)
+            else:
+                logger.exception("Failed to process %s", period_label)
+                failed.append(
+                    {
+                        "period": period_label,
+                        "error": _sanitize_error_message(error_str),
+                    }
+                )
+
+    # Update index once at the end (always, even if some months failed)
     logger.info("Updating index.json")
-    update_index(bucket)
+    try:
+        update_index(bucket)
+    except Exception:
+        logger.exception("Failed to update index.json")
+        # Don't fail the entire backfill if index update fails
 
     logger.info(
         "Backfill complete: %d succeeded, %d failed, %d skipped",
