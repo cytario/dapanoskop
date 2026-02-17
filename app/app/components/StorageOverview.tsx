@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import type { StorageMetrics, CostSummary } from "~/types/cost-data";
 import { formatUsd, formatBytes } from "~/lib/format";
 import { CostChange } from "./CostChange";
@@ -6,6 +7,7 @@ import { InfoTooltip } from "./InfoTooltip";
 interface StorageOverviewProps {
   metrics: StorageMetrics;
   storageConfig?: CostSummary["storage_config"];
+  period: string;
 }
 
 function buildStorageCostTooltip(
@@ -20,13 +22,17 @@ function buildStorageCostTooltip(
 export function StorageOverview({
   metrics,
   storageConfig,
+  period,
 }: StorageOverviewProps) {
   const hasStorageLens = metrics.storage_lens_total_bytes != null;
   const gridCols = hasStorageLens ? "sm:grid-cols-4" : "sm:grid-cols-3";
 
   return (
     <div className={`grid grid-cols-1 ${gridCols} gap-4`}>
-      <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
+      <Link
+        to={`/storage-cost?period=${period}`}
+        className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md block"
+      >
         <div className="text-sm text-gray-500">
           Storage Cost
           <InfoTooltip text={buildStorageCostTooltip(storageConfig)} />
@@ -40,7 +46,7 @@ export function StorageOverview({
             previous={metrics.prev_month_cost_usd}
           />
         </div>
-      </div>
+      </Link>
       {hasStorageLens && (
         <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
           <div className="text-sm text-gray-500">
