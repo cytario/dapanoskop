@@ -157,4 +157,20 @@ describe("StorageOverview", () => {
     expect(link).toBeTruthy();
     expect(link?.textContent).toContain("Storage Cost");
   });
+
+  it("renders Total Stored card as a link to storage-detail when storage_lens_total_bytes is present", () => {
+    const metricsWithLens: StorageMetrics = {
+      ...metrics,
+      storage_lens_total_bytes: 5_000_000_000_000,
+    };
+    const { container } = renderWithRouter(
+      <StorageOverview metrics={metricsWithLens} period="2026-01" />,
+    );
+    const link = container.querySelector(
+      'a[href="/storage-detail?period=2026-01"]',
+    );
+    expect(link).toBeTruthy();
+    expect(link?.textContent).toContain("Total Stored");
+    expect(link?.textContent).toContain("5.0 TB");
+  });
 });

@@ -5,8 +5,8 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.13 (Draft)                               |
-| Date                | 2026-02-16                                 |
+| Version             | 0.16 (Draft)                               |
+| Date                | 2026-02-17                                 |
 
 ---
 
@@ -184,8 +184,8 @@ Refs: SRS-DP-310201, SRS-DP-310202, SRS-DP-310203, SRS-DP-310212
 The Report Renderer renders the workload breakdown table from summary.json, with workloads sorted by current month cost descending and MoM/YoY deltas included.
 Refs: SRS-DP-310204, SRS-DP-310205
 
-**[SDS-DP-010204] Render Storage Metrics with Dynamic Tooltips**
-The Report Renderer renders total storage cost, cost per TB, and hot tier percentage from the pre-computed summary.json. The `StorageOverview` component accepts a `storageConfig` prop (from `summary.json`) and dynamically generates tooltip text reflecting which storage services are included (e.g., "S3 only" or "S3, EFS, and EBS"). Tooltips include calculation formulas, interpretation guidance, and optimization suggestions.
+**[SDS-DP-010204] Render Storage Metrics with Dynamic Tooltips and Navigation**
+The Report Renderer renders total storage cost, cost per TB, and hot tier percentage from the pre-computed summary.json. The `StorageOverview` component accepts a `storageConfig` prop (from `summary.json`) and a `period` prop. It dynamically generates tooltip text reflecting which storage services are included (e.g., "S3 only" or "S3, EFS, and EBS"). Tooltips include calculation formulas, interpretation guidance, and optimization suggestions. The "Storage Cost" metric card is rendered as a clickable `<Link to={/storage-cost?period=${period}}>` that navigates to the storage cost breakdown detail page while preserving the current reporting period.
 Refs: SRS-DP-310206, SRS-DP-310207, SRS-DP-310208
 
 **[SDS-DP-010206] Query Parquet via DuckDB-wasm httpfs S3**
@@ -243,6 +243,14 @@ Refs: SRS-DP-310307
 **[SDS-DP-010218] Render Split Charge Badge and Allocated Label**
 The `CostCenterCard` component conditionally renders a "Split Charge" badge (gray background, small text) next to the cost center name when `costCenter.is_split_charge` is true. When a split charge category is detected, the card displays "Allocated" (in gray, small font) instead of the current cost amount, and replaces MoM/YoY change rows with explanatory text: "Costs allocated to other cost centers". This visual distinction prevents confusion about zero-dollar cost centers whose costs are redistributed to other categories.
 Refs: SRS-DP-310201
+
+**[SDS-DP-010219] Render Storage Cost Breakdown Route**
+The Report Renderer includes a dedicated route component at `/storage-cost` (route file: `routes/storage-cost-detail.tsx`) for displaying a breakdown of storage costs by usage type across all workloads. The route reads the period from the query string via `useSearchParams()` and follows the same authentication pattern as other detail routes. The component fetches the summary.json for context (storage metrics, periods), then initializes DuckDB-wasm and queries the `cost-by-usage-type.parquet` file with a `WHERE category = 'Storage'` filter, sorted by `cost_usd DESC`. The query returns columns: `workload`, `usage_type`, `category`, `period`, `cost_usd`, `usage_quantity`. The component renders the shared `<Header>` and `<Footer>` components, a back link to the main report (`<Link to={/?period=${period}}>`), a page heading "Storage Cost Breakdown", two summary cards showing total storage cost and MoM change from summary.json, and a lazy-loaded `<UsageTypeTable>` component displaying the query results. The table displays all storage usage types across all workloads, providing a cross-workload view of storage cost drivers. The route is registered in `routes.ts` as `route("storage-cost", "routes/storage-cost-detail.tsx")`.
+Refs: SRS-DP-310206, SRS-DP-430102
+
+**[SDS-DP-010220] Render Storage Tier Breakdown Route**
+The Report Renderer includes a dedicated route component at `/storage-detail` (route file: `routes/storage-detail.tsx`) for displaying storage volume distribution across S3 storage tiers (S3 Standard, Intelligent-Tiering access tiers, Glacier tiers, etc.). The route is accessed by clicking the "Total Stored" card in the StorageOverview component, which passes the current period as a query parameter. The component reads the period from the query string via `useSearchParams()` and follows the same authentication pattern as other detail routes. The component fetches the summary.json for context (storage metrics, periods), then initializes DuckDB-wasm and queries the `cost-by-usage-type.parquet` file with a `WHERE usage_type LIKE '%TimedStorage%'` filter, grouped by `usage_type` and sorted by `usage_quantity DESC`. The query returns columns: `usage_type`, `gb_months` (sum of usage_quantity), `cost_usd`. The component maps AWS usage type suffixes (e.g., "TimedStorage-ByteHrs", "TimedStorage-INT-FA-ByteHrs") to friendly tier names ("S3 Standard", "IT Frequent Access") using a predefined mapping. The component renders the shared `<Header>` and `<Footer>` components, a back link to the main report, three summary cards showing Total Stored (from Storage Lens), Hot Tier %, and Cost/TB (all sourced from summary.json), a pie chart (Recharts `<PieChart>`) showing tier distribution by volume with color-coded segments (warm-to-cool palette matching hot-to-cold tiers), and a table displaying tier name, volume (formatted GB or TB), cost, and percentage of total. The route is registered in `routes.ts` as `route("storage-detail", "routes/storage-detail.tsx")`. This feature provides tier-level drill-down; per-bucket detail (URS-DP-10313) remains deferred.
+Refs: SRS-DP-310207, SRS-DP-310208, SRS-DP-310217
 
 Wireframes: See `docs/wireframes/cost-report.puml` and `docs/wireframes/workload-detail.puml`.
 Cost direction indicators (color coding, direction arrows, +/- prefixes) and anomaly highlighting are implemented with Tailwind CSS utility classes.
@@ -1218,3 +1226,5 @@ How should Dapanoskop obtain actual storage volume data (in bytes) to supplement
 | 0.12    | 2026-02-16 | —      | Add S3 Inventory Reader component (C-2.3, SDS-DP-020301-020303); storage inventory in summary.json schema (SDS-DP-040002 update); split charge detection (SDS-DP-020102 update); allocated costs handling (SDS-DP-020202 update); storage inventory in summary writer (SDS-DP-020204 update); storage deep dive route (SDS-DP-010217); split charge badge rendering (SDS-DP-010218); Cognito Managed Login v2 (SDS-DP-030202 update); IAM permissions boundary on roles (SDS-DP-030207, 030301 updates); inventory IAM permissions (SDS-DP-030301 update); resource tags via provider default_tags (§3.3 variability update); x-host-override CORS header (SDS-DP-030402 update) |
 | 0.13    | 2026-02-16 | —      | Replace S3 Inventory with S3 Storage Lens CloudWatch integration: rename C-2.3 to "Storage Lens Reader" (§3.2.3 title update); rewrite SDS-DP-020301-020303 for Storage Lens discovery and CloudWatch query; update summary.json schema (SDS-DP-040002: storage_lens replaces storage_inventory); update summary writer (SDS-DP-020204); update IAM permissions (SDS-DP-030301: add s3control:*, cloudwatch:GetMetricData, remove s3:GetObject/ListBucket on inventory bucket); remove storage deep dive route (SDS-DP-010217 marked removed); add design decision §7.10 explaining Storage Lens option selection |
 | 0.14    | 2026-02-17 | —      | Bug fix batch: region-prefixed usage type matching for hot tier and storage volume (SDS-DP-020203, §6.5); period-aware Storage Lens time windowing (SDS-DP-020302); cost_per_tb recalculation using Storage Lens volume (§6.6); allocated costs fallback to workload sums when cost center name not in allocated dict (SDS-DP-020202) |
+| 0.15    | 2026-02-17 | —      | Phase 2 Storage Cost Breakdown: Add storage cost detail route (SDS-DP-010219); update StorageOverview to render Storage Cost card as clickable link with period param (SDS-DP-010204 update) |
+| 0.16    | 2026-02-17 | —      | Phase 3 Storage Tier Breakdown: Add storage tier breakdown route (SDS-DP-010220); update StorageOverview to render Total Stored card as clickable link with period param (SDS-DP-010204 update) |

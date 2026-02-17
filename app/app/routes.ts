@@ -5,4 +5,5 @@ export default [
   route("workload/:name", "routes/workload-detail.tsx"),
   route("cost-center/:name", "routes/cost-center-detail.tsx"),
   route("storage-cost", "routes/storage-cost-detail.tsx"),
+  route("storage-detail", "routes/storage-detail.tsx"),
 ] satisfies RouteConfig;
