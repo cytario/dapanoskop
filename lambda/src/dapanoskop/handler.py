@@ -19,20 +19,54 @@ logger.setLevel(logging.INFO)
 
 
 def _enrich_with_storage_lens(
-    processed: dict[str, Any], storage_lens_config_id: str
+    processed: dict[str, Any],
+    storage_lens_config_id: str,
+    target_year: int | None = None,
+    target_month: int | None = None,
 ) -> None:
-    """Add S3 Storage Lens data to the processed summary (in-place)."""
+    """Add S3 Storage Lens data to the processed summary (in-place).
+
+    When target_year/target_month are provided, queries Storage Lens for
+    the end of that month instead of using the current date. This ensures
+    backfill produces period-appropriate storage volumes.
+    """
     logger.info(
         "Querying S3 Storage Lens metrics (config_id=%s)",
         storage_lens_config_id or "auto-discover",
     )
     try:
-        metrics = get_storage_lens_metrics(config_id=storage_lens_config_id)
+        # Compute period-appropriate time window for Storage Lens query
+        sl_kwargs: dict[str, Any] = {"config_id": storage_lens_config_id}
+        if target_year is not None and target_month is not None:
+            # Query around the end of the target month
+            if target_month == 12:
+                end_dt = datetime(target_year + 1, 1, 1, tzinfo=timezone.utc)
+            else:
+                end_dt = datetime(target_year, target_month + 1, 1, tzinfo=timezone.utc)
+            # Storage Lens data may lag a few days; use a 14-day window
+            from datetime import timedelta
+
+            start_dt = end_dt - timedelta(days=14)
+            sl_kwargs["start_time"] = start_dt
+            sl_kwargs["end_time"] = end_dt
+
+        metrics = get_storage_lens_metrics(**sl_kwargs)
         if metrics is not None:
             # Add to storage_metrics
             processed["summary"]["storage_metrics"]["storage_lens_total_bytes"] = (
                 metrics["total_bytes"]
             )
+
+            # Recalculate cost_per_tb using Storage Lens volume (more accurate
+            # than CE-derived GB-Months since it reflects actual storage, not
+            # billing usage quantities that may include non-volume items)
+            storage_metrics = processed["summary"]["storage_metrics"]
+            total_bytes = metrics["total_bytes"]
+            if total_bytes > 0:
+                total_tb = total_bytes / 1_000_000_000_000
+                storage_metrics["cost_per_tb_usd"] = round(
+                    storage_metrics["total_cost_usd"] / total_tb, 2
+                )
 
             # Add storage_lens object to summary
             processed["summary"]["storage_lens"] = {
@@ -139,7 +173,9 @@ def _handle_backfill(
 
             # Enrich with S3 Storage Lens data if configured
             if storage_lens_config_id is not None:
-                _enrich_with_storage_lens(processed, storage_lens_config_id)
+                _enrich_with_storage_lens(
+                    processed, storage_lens_config_id, year, month
+                )
 
             logger.info("Writing to S3 for %s", period_label)
             write_to_s3(processed, bucket, update_index_file=False)
@@ -242,7 +278,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         # Enrich with S3 Storage Lens data if configured
         if storage_lens_config_id is not None:
-            _enrich_with_storage_lens(processed, storage_lens_config_id)
+            period_label = processed["summary"]["period"]
+            p_year, p_month = int(period_label[:4]), int(period_label[5:7])
+            _enrich_with_storage_lens(
+                processed, storage_lens_config_id, p_year, p_month
+            )
 
         logger.info("Writing to S3")
         write_to_s3(processed, bucket)

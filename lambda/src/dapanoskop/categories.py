@@ -8,32 +8,32 @@ import re
 # Order matters: first match wins.
 _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # Support
-    (re.compile(r"^(Tax|Fee|Refund|Credit|Premium)", re.IGNORECASE), "Support"),
-    # Storage — S3
+    (re.compile(r"(^|-)(Tax|Fee|Refund|Credit|Premium)", re.IGNORECASE), "Support"),
+    # Storage — S3 (CE returns region-prefixed types like USE1-TimedStorage-ByteHrs)
     (re.compile(r"TimedStorage"), "Storage"),
-    (re.compile(r"^EarlyDelete"), "Storage"),
+    (re.compile(r"EarlyDelete"), "Storage"),
     (re.compile(r"Requests-"), "Storage"),
-    (re.compile(r"^Retrieval"), "Storage"),
-    (re.compile(r"^TagStorage"), "Storage"),
-    (re.compile(r"^Inventory"), "Storage"),
-    (re.compile(r"^Select-"), "Storage"),
-    (re.compile(r"^StorageObjectCount"), "Storage"),
-    (re.compile(r"^Monitoring"), "Storage"),
+    (re.compile(r"Retrieval"), "Storage"),
+    (re.compile(r"TagStorage"), "Storage"),
+    (re.compile(r"Inventory"), "Storage"),
+    (re.compile(r"Select-"), "Storage"),
+    (re.compile(r"StorageObjectCount"), "Storage"),
+    (re.compile(r"Monitoring"), "Storage"),
     # Storage — EBS
-    (re.compile(r"^EBS:"), "Storage"),
+    (re.compile(r"EBS:"), "Storage"),
     # Storage — EFS
-    (re.compile(r"^EFS:"), "Storage"),
+    (re.compile(r"EFS:"), "Storage"),
     # Compute — EC2 / Lambda / ECS / Fargate
     (re.compile(r"BoxUsage"), "Compute"),
     (re.compile(r"SpotUsage"), "Compute"),
-    (re.compile(r"^Lambda"), "Compute"),
-    (re.compile(r"^Fargate"), "Compute"),
-    (re.compile(r"^ECS"), "Compute"),
+    (re.compile(r"Lambda"), "Compute"),
+    (re.compile(r"Fargate"), "Compute"),
+    (re.compile(r"ECS"), "Compute"),
     # Data transfer
     (re.compile(r"DataTransfer"), "Other"),
-    (re.compile(r"^NatGateway"), "Other"),
+    (re.compile(r"NatGateway"), "Other"),
     # CloudWatch
-    (re.compile(r"^CW:"), "Other"),
+    (re.compile(r"CW:"), "Other"),
 ]
 
 

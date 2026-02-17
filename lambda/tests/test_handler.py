@@ -503,7 +503,7 @@ def test_handler_enriches_with_storage_lens(
             "cc_mapping": {},
         }
 
-    def mock_storage_lens(config_id: str = "") -> dict:
+    def mock_storage_lens(config_id: str = "", **kwargs) -> dict:
         assert config_id == "my-lens-config"
         return {
             "total_bytes": 5_000_000_000_000,
@@ -569,7 +569,7 @@ def test_handler_continues_when_storage_lens_fails(
             "cc_mapping": {},
         }
 
-    def mock_storage_lens_fail(config_id: str = "") -> dict:
+    def mock_storage_lens_fail(config_id: str = "", **kwargs) -> dict:
         raise RuntimeError("Storage Lens unavailable")
 
     monkeypatch.setattr(handler_module, "collect", mock_collect)
@@ -710,6 +710,97 @@ def test_handler_backfill_skips_unavailable_months(
     assert len(index_data["periods"]) == 2
     assert "2026-01" in index_data["periods"]
     assert "2025-12" in index_data["periods"]
+
+
+@mock_aws
+def test_handler_storage_lens_recalculates_cost_per_tb(
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test that cost_per_tb_usd is recalculated using storage_lens_total_bytes (Bug 3).
+
+    After Storage Lens enrichment, cost_per_tb should use the Storage Lens
+    total_bytes as the denominator instead of the CE-derived volume. This is
+    more accurate since CE GB-Months can be skewed by non-volume billing items.
+    """
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket=s3_bucket_env)
+
+    from datetime import datetime, timezone
+
+    from dapanoskop import handler as handler_module
+
+    monkeypatch.setenv("STORAGE_LENS_CONFIG_ID", "my-lens-config")
+
+    def mock_collect(cost_category_name: str = "") -> dict:
+        return {
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "period_labels": {
+                "current": "2026-01",
+                "prev_month": "2025-12",
+                "yoy": "2025-01",
+            },
+            "raw_data": {
+                "current": [
+                    # S3 storage: $230 total cost, CE reports 5,000 GB-Months
+                    {
+                        "Keys": ["App$web-app", "TimedStorage-ByteHrs"],
+                        "Metrics": {
+                            "UnblendedCost": {"Amount": "200", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "5000", "Unit": "GB-Mo"},
+                        },
+                    },
+                    # Non-volume storage cost (requests)
+                    {
+                        "Keys": ["App$web-app", "Requests-Tier1"],
+                        "Metrics": {
+                            "UnblendedCost": {"Amount": "30", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "1000000", "Unit": "Requests"},
+                        },
+                    },
+                ],
+                "prev_month": [],
+                "yoy": [],
+            },
+            "cc_mapping": {},
+        }
+
+    def mock_storage_lens(config_id: str = "", **kwargs) -> dict:
+        # Storage Lens reports 10 TB actual storage
+        # (different from CE's 5 TB derived from GB-Months)
+        return {
+            "total_bytes": 10_000_000_000_000,  # 10 TB
+            "object_count": 25_000_000,
+            "timestamp": "2026-02-01T00:00:00+00:00",
+            "config_id": "my-lens-config",
+            "org_id": "o-abc123",
+        }
+
+    monkeypatch.setattr(handler_module, "collect", mock_collect)
+    monkeypatch.setattr(handler_module, "get_storage_lens_metrics", mock_storage_lens)
+
+    from dapanoskop.handler import handler
+
+    result = handler({}, None)
+    assert result["statusCode"] == 200
+
+    # Read back summary.json
+    summary_obj = s3.get_object(Bucket=s3_bucket_env, Key="2026-01/summary.json")
+    summary = json.loads(summary_obj["Body"].read())
+
+    sm = summary["storage_metrics"]
+
+    # Storage Lens total bytes should be present
+    assert sm["storage_lens_total_bytes"] == 10_000_000_000_000
+
+    # total_cost_usd should include all storage items: $200 + $30 = $230
+    assert sm["total_cost_usd"] == 230.0
+
+    # cost_per_tb should be recalculated using Storage Lens volume (10 TB)
+    # not the CE-derived volume (5 TB)
+    # $230 / 10 TB = $23.0/TB
+    assert sm["cost_per_tb_usd"] == 23.0, (
+        "cost_per_tb should use Storage Lens bytes as denominator, not CE GB-Months"
+    )
 
 
 @mock_aws
