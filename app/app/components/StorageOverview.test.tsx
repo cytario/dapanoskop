@@ -1,7 +1,12 @@
 import { render } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { describe, it, expect } from "vitest";
 import { StorageOverview } from "./StorageOverview";
 import type { StorageMetrics } from "~/types/cost-data";
+
+function renderWithRouter(ui: React.ReactElement) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
 
 describe("StorageOverview", () => {
   const metrics: StorageMetrics = {
@@ -13,25 +18,33 @@ describe("StorageOverview", () => {
   };
 
   it("renders the storage cost card", () => {
-    const { container } = render(<StorageOverview metrics={metrics} />);
+    const { container } = renderWithRouter(
+      <StorageOverview metrics={metrics} period="2026-01" />,
+    );
     expect(container.textContent).toContain("Storage Cost");
     expect(container.textContent).toContain("$1,234.56");
   });
 
   it("renders the cost per TB card", () => {
-    const { container } = render(<StorageOverview metrics={metrics} />);
+    const { container } = renderWithRouter(
+      <StorageOverview metrics={metrics} period="2026-01" />,
+    );
     expect(container.textContent).toContain("Cost / TB");
     expect(container.textContent).toContain("$23.33");
   });
 
   it("renders the hot tier card", () => {
-    const { container } = render(<StorageOverview metrics={metrics} />);
+    const { container } = renderWithRouter(
+      <StorageOverview metrics={metrics} period="2026-01" />,
+    );
     expect(container.textContent).toContain("Hot Tier");
     expect(container.textContent).toContain("62.3%");
   });
 
   it("renders tooltip explanations for each metric card", () => {
-    const { container } = render(<StorageOverview metrics={metrics} />);
+    const { container } = renderWithRouter(
+      <StorageOverview metrics={metrics} period="2026-01" />,
+    );
     const tooltips = container.querySelectorAll('[role="tooltip"]');
     expect(tooltips.length).toBe(3);
 
@@ -46,10 +59,11 @@ describe("StorageOverview", () => {
   });
 
   it("renders dynamic tooltip when storageConfig includes EFS and EBS", () => {
-    const { container } = render(
+    const { container } = renderWithRouter(
       <StorageOverview
         metrics={metrics}
         storageConfig={{ include_efs: true, include_ebs: true }}
+        period="2026-01"
       />,
     );
     const tooltips = container.querySelectorAll('[role="tooltip"]');
@@ -60,10 +74,11 @@ describe("StorageOverview", () => {
   });
 
   it("renders dynamic tooltip when storageConfig includes only EFS", () => {
-    const { container } = render(
+    const { container } = renderWithRouter(
       <StorageOverview
         metrics={metrics}
         storageConfig={{ include_efs: true, include_ebs: false }}
+        period="2026-01"
       />,
     );
     const tooltips = container.querySelectorAll('[role="tooltip"]');
@@ -74,10 +89,11 @@ describe("StorageOverview", () => {
   });
 
   it("renders dynamic tooltip when storageConfig includes only EBS", () => {
-    const { container } = render(
+    const { container } = renderWithRouter(
       <StorageOverview
         metrics={metrics}
         storageConfig={{ include_efs: false, include_ebs: true }}
+        period="2026-01"
       />,
     );
     const tooltips = container.querySelectorAll('[role="tooltip"]');
@@ -88,7 +104,9 @@ describe("StorageOverview", () => {
   });
 
   it("renders CostChange for storage cost month-over-month", () => {
-    const { container } = render(<StorageOverview metrics={metrics} />);
+    const { container } = renderWithRouter(
+      <StorageOverview metrics={metrics} period="2026-01" />,
+    );
     // The CostChange component should show a delta between current and prev month
     expect(container.textContent).toContain("+$150.00");
   });
@@ -98,13 +116,17 @@ describe("StorageOverview", () => {
       ...metrics,
       storage_lens_total_bytes: 5_000_000_000_000, // 5 TB
     };
-    const { container } = render(<StorageOverview metrics={metricsWithLens} />);
+    const { container } = renderWithRouter(
+      <StorageOverview metrics={metricsWithLens} period="2026-01" />,
+    );
     expect(container.textContent).toContain("Total Stored");
     expect(container.textContent).toContain("5.0 TB");
   });
 
   it("does not render Total Stored card when storage_lens_total_bytes is absent", () => {
-    const { container } = render(<StorageOverview metrics={metrics} />);
+    const { container } = renderWithRouter(
+      <StorageOverview metrics={metrics} period="2026-01" />,
+    );
     expect(container.textContent).not.toContain("Total Stored");
   });
 
@@ -113,7 +135,9 @@ describe("StorageOverview", () => {
       ...metrics,
       storage_lens_total_bytes: 1_000_000_000_000,
     };
-    const { container } = render(<StorageOverview metrics={metricsWithLens} />);
+    const { container } = renderWithRouter(
+      <StorageOverview metrics={metricsWithLens} period="2026-01" />,
+    );
     const tooltips = container.querySelectorAll('[role="tooltip"]');
     // Should have 4 tooltips now (Storage Cost, Total Stored, Cost/TB, Hot Tier)
     expect(tooltips.length).toBe(4);
@@ -121,5 +145,16 @@ describe("StorageOverview", () => {
     expect(
       tooltipTexts.some((t) => t?.includes("S3 Storage Lens")),
     ).toBeTruthy();
+  });
+
+  it("renders storage cost card as a link to storage-cost detail", () => {
+    const { container } = renderWithRouter(
+      <StorageOverview metrics={metrics} period="2026-01" />,
+    );
+    const link = container.querySelector(
+      'a[href="/storage-cost?period=2026-01"]',
+    );
+    expect(link).toBeTruthy();
+    expect(link?.textContent).toContain("Storage Cost");
   });
 });
