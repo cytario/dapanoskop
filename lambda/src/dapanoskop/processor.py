@@ -62,16 +62,22 @@ def _compute_storage_metrics(
     hot_gb_months = 0.0
 
     def _is_storage_volume(usage_type: str) -> bool:
-        if usage_type.startswith("TimedStorage"):
-            return True
-        if include_efs and usage_type.startswith("EFS:"):
-            return True
-        if include_ebs and usage_type.startswith("EBS:"):
+        # Check EFS/EBS prefixes first — they may contain "TimedStorage"
+        # (e.g. EFS:TimedStorage-ByteHrs) but should only count when enabled
+        if "EFS:" in usage_type:
+            return include_efs
+        if "EBS:" in usage_type:
+            return include_ebs
+        # CE returns usage types with region prefixes (e.g. USE1-TimedStorage-ByteHrs)
+        if "TimedStorage" in usage_type:
             return True
         return False
 
     def _is_hot_tier(usage_type: str) -> bool:
-        return usage_type in ("TimedStorage-ByteHrs", "TimedStorage-INT-FA-ByteHrs")
+        # Match region-prefixed usage types (e.g. USE1-TimedStorage-ByteHrs)
+        return usage_type.endswith("TimedStorage-ByteHrs") or usage_type.endswith(
+            "TimedStorage-INT-FA-ByteHrs"
+        )
 
     for row in rows:
         if row["category"] == "Storage":
@@ -186,10 +192,14 @@ def process(
         # Sort workloads by current cost descending
         workloads.sort(key=lambda w: w["current_cost_usd"], reverse=True)
 
-        # Use allocated costs from category-level query if available,
-        # otherwise fall back to summing workload costs
-        if current_allocated:
-            cc_current = round(current_allocated.get(cc_name, 0), 2)
+        # Use allocated costs from category-level query if available AND
+        # the cost center name exists in the allocated costs dict.
+        # Fall back to summing workload costs when allocated costs are
+        # unavailable or the cost center is not present (e.g. historic months
+        # before Cost Categories were defined return keys like
+        # "No cost category" instead of the expected cost center names).
+        if current_allocated and cc_name in current_allocated:
+            cc_current = round(current_allocated[cc_name], 2)
             cc_prev = round(prev_allocated.get(cc_name, 0), 2)
             cc_yoy = round(yoy_allocated.get(cc_name, 0), 2)
         else:

@@ -632,3 +632,122 @@ def test_no_split_charge_fallback() -> None:
     assert eng["name"] == "Engineering"
     assert eng["current_cost_usd"] == 1000.0
     assert "is_split_charge" not in eng
+
+
+def test_hot_tier_with_region_prefixed_usage_types() -> None:
+    """Test hot tier calculation with region-prefixed usage types (Bug 4).
+
+    AWS Cost Explorer returns usage types with region prefixes like
+    USE1-TimedStorage-ByteHrs instead of bare TimedStorage-ByteHrs.
+    The _is_hot_tier() function must use endswith() to handle these,
+    and _is_storage_volume() must use an 'in' check for TimedStorage.
+    """
+    collected = _make_collected(
+        current_groups=[
+            # Region-prefixed hot tier: Standard and Infrequent Access
+            _make_group("app", "USE1-TimedStorage-ByteHrs", 200, 1_000),
+            _make_group("app", "EUW1-TimedStorage-INT-FA-ByteHrs", 100, 500),
+            # Region-prefixed cold tier: Glacier (not hot)
+            _make_group("app", "USE1-TimedStorage-GlacierByteHrs", 10, 2_000),
+        ],
+        prev_groups=[],
+        yoy_groups=[],
+    )
+
+    result = process(collected)
+    sm = result["summary"]["storage_metrics"]
+
+    # All three are volume-contributing (TimedStorage in usage_type)
+    # Total GB-Months: 1,000 + 500 + 2,000 = 3,500
+    # Total bytes: 3,500 * 1e9 = 3,500,000,000,000
+    assert sm["total_volume_bytes"] == 3_500_000_000_000
+
+    # Hot tier = Standard + INT-FA = 1,000 + 500 = 1,500 of 3,500
+    expected_hot = (1_000 + 500) / (1_000 + 500 + 2_000) * 100
+    assert abs(sm["hot_tier_percentage"] - round(expected_hot, 1)) < 0.2
+
+    # All items are Storage category, so total_cost = 200 + 100 + 10 = 310
+    assert sm["total_cost_usd"] == 310.0
+
+    # Cost per TB: $310 / 3.5 TB
+    expected_cost_per_tb = round(310.0 / 3.5, 2)
+    assert sm["cost_per_tb_usd"] == expected_cost_per_tb
+
+
+def test_cost_per_tb_with_non_volume_storage_costs() -> None:
+    """Test that non-volume storage items contribute to cost but not volume (Bug 4).
+
+    Storage category items like Requests-Tier1 and Retrieval-SIA contribute
+    to total_cost_usd but NOT to total_volume_bytes. Only TimedStorage-*
+    items contribute to volume. cost_per_tb_usd uses total_cost / volume.
+    """
+    collected = _make_collected(
+        current_groups=[
+            # Volume-contributing: TimedStorage
+            _make_group("app", "TimedStorage-ByteHrs", 200, 1_000),
+            # Storage cost but NOT volume-contributing
+            _make_group("app", "Requests-Tier1", 50, 1_000_000),
+            _make_group("app", "Retrieval-SIA", 30, 500),
+        ],
+        prev_groups=[],
+        yoy_groups=[],
+    )
+
+    result = process(collected)
+    sm = result["summary"]["storage_metrics"]
+
+    # Only TimedStorage contributes to volume: 1,000 GB-Months = 1 TB
+    assert sm["total_volume_bytes"] == 1_000_000_000_000
+
+    # All three are Storage category, so total cost = 200 + 50 + 30 = 280
+    assert sm["total_cost_usd"] == 280.0
+
+    # cost_per_tb = total_storage_cost / volume_in_tb = 280 / 1.0 = 280
+    assert sm["cost_per_tb_usd"] == 280.0
+
+    # Hot tier: only TimedStorage-ByteHrs is hot = 1,000 / 1,000 = 100%
+    assert sm["hot_tier_percentage"] == 100.0
+
+
+def test_total_spend_with_allocated_costs_missing_cc_name() -> None:
+    """Test fallback to workload sums when allocated_costs keys don't match (Bug 2 & 5).
+
+    When allocated_costs exist but contain keys like 'No cost category' instead
+    of the expected cost center names, the processor should fall back to summing
+    workload costs for those cost centers, not show $0.
+    """
+    collected = _make_collected(
+        current_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 1000, 744),
+            _make_group("api", "BoxUsage:t3.medium", 500, 1488),
+        ],
+        prev_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 900, 720),
+            _make_group("api", "BoxUsage:t3.medium", 450, 1440),
+        ],
+        yoy_groups=[],
+        cc_mapping={"web-app": "Engineering", "api": "Platform"},
+    )
+    # Allocated costs have keys that DON'T match the cost center names
+    # (e.g. historic months before Cost Categories were defined)
+    collected["allocated_costs"] = {
+        "current": {"No cost category": 1500.0},
+        "prev_month": {"No cost category": 1350.0},
+        "yoy": {},
+    }
+
+    result = process(collected)
+    ccs = result["summary"]["cost_centers"]
+
+    # Both cost centers should fall back to workload sums
+    eng = next(cc for cc in ccs if cc["name"] == "Engineering")
+    assert eng["current_cost_usd"] == 1000.0, (
+        "Engineering should use workload sum, not $0 from missing allocated key"
+    )
+    assert eng["prev_month_cost_usd"] == 900.0
+
+    platform = next(cc for cc in ccs if cc["name"] == "Platform")
+    assert platform["current_cost_usd"] == 500.0, (
+        "Platform should use workload sum, not $0 from missing allocated key"
+    )
+    assert platform["prev_month_cost_usd"] == 450.0
