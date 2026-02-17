@@ -60,3 +60,4 @@ override.tf.json
 
 # Lambda packaging
 *.zip
+/ISSUES.md
