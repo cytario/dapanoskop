@@ -48,7 +48,10 @@ export function StorageOverview({
         </div>
       </Link>
       {hasStorageLens && (
-        <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
+        <Link
+          to={`/storage-detail?period=${period}`}
+          className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md block"
+        >
           <div className="text-sm text-gray-500">
             Total Stored
             <InfoTooltip text="Actual total storage volume from S3 Storage Lens. This is the precise amount of data stored, measured at the time of the latest metrics snapshot." />
@@ -56,7 +59,7 @@ export function StorageOverview({
           <div className="text-xl font-semibold mt-1">
             {formatBytes(metrics.storage_lens_total_bytes!)}
           </div>
-        </div>
+        </Link>
       )}
       <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
         <div className="text-sm text-gray-500">
