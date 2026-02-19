@@ -114,7 +114,7 @@ describe("StorageOverview", () => {
   it("renders Total Stored card when storage_lens_total_bytes is present", () => {
     const metricsWithLens: StorageMetrics = {
       ...metrics,
-      storage_lens_total_bytes: 5_000_000_000_000, // 5 TB
+      storage_lens_total_bytes: 5 * 1_099_511_627_776, // 5 TB (binary)
     };
     const { container } = renderWithRouter(
       <StorageOverview metrics={metricsWithLens} period="2026-01" />,
@@ -161,7 +161,7 @@ describe("StorageOverview", () => {
   it("renders Total Stored card as a link to storage-detail when storage_lens_total_bytes is present", () => {
     const metricsWithLens: StorageMetrics = {
       ...metrics,
-      storage_lens_total_bytes: 5_000_000_000_000,
+      storage_lens_total_bytes: 5 * 1_099_511_627_776, // 5 TB (binary)
     };
     const { container } = renderWithRouter(
       <StorageOverview metrics={metricsWithLens} period="2026-01" />,

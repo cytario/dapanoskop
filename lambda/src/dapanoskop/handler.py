@@ -63,7 +63,7 @@ def _enrich_with_storage_lens(
             storage_metrics = processed["summary"]["storage_metrics"]
             total_bytes = metrics["total_bytes"]
             if total_bytes > 0:
-                total_tb = total_bytes / 1_000_000_000_000
+                total_tb = total_bytes / 1_099_511_627_776  # 2^40 bytes per binary TB
                 storage_metrics["cost_per_tb_usd"] = round(
                     storage_metrics["total_cost_usd"] / total_tb, 2
                 )

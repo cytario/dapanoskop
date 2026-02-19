@@ -80,20 +80,29 @@ describe("formatPeriodLabel", () => {
 
 describe("formatBytes", () => {
   test("TB range", () => {
-    // 5 TB (decimal)
-    expect(formatBytes(5 * 1_000_000_000_000)).toBe("5.0 TB");
+    // 5 TB (binary: 5 * 2^40)
+    expect(formatBytes(5 * 1_099_511_627_776)).toBe("5.0 TB");
   });
 
   test("GB range", () => {
-    // 512 GB (decimal)
-    expect(formatBytes(512 * 1_000_000_000)).toBe("512.0 GB");
+    // 512 GB (binary: 512 * 2^30)
+    expect(formatBytes(512 * 1_073_741_824)).toBe("512.0 GB");
   });
 
   test("exact boundary at 1 TB", () => {
-    expect(formatBytes(1_000_000_000_000)).toBe("1.0 TB");
+    expect(formatBytes(1_099_511_627_776)).toBe("1.0 TB");
   });
 
   test("0 bytes", () => {
     expect(formatBytes(0)).toBe("0.0 GB");
+  });
+
+  test("PB range", () => {
+    // Real AWS Storage Lens value: 1.5 PB
+    expect(formatBytes(1_649_188_949_133_511)).toBe("1.5 PB");
+  });
+
+  test("exact boundary at 1 PB", () => {
+    expect(formatBytes(1_125_899_906_842_624)).toBe("1.0 PB");
   });
 });

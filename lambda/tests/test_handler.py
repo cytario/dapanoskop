@@ -765,10 +765,10 @@ def test_handler_storage_lens_recalculates_cost_per_tb(
         }
 
     def mock_storage_lens(config_id: str = "", **kwargs) -> dict:
-        # Storage Lens reports 10 TB actual storage
-        # (different from CE's 5 TB derived from GB-Months)
+        # Storage Lens reports 10,000,000,000,000 bytes actual storage
+        # (different from CE's 5,000 GB-Months derived volume)
         return {
-            "total_bytes": 10_000_000_000_000,  # 10 TB
+            "total_bytes": 10_000_000_000_000,
             "object_count": 25_000_000,
             "timestamp": "2026-02-01T00:00:00+00:00",
             "config_id": "my-lens-config",
@@ -795,10 +795,10 @@ def test_handler_storage_lens_recalculates_cost_per_tb(
     # total_cost_usd should include all storage items: $200 + $30 = $230
     assert sm["total_cost_usd"] == 230.0
 
-    # cost_per_tb should be recalculated using Storage Lens volume (10 TB)
-    # not the CE-derived volume (5 TB)
-    # $230 / 10 TB = $23.0/TB
-    assert sm["cost_per_tb_usd"] == 23.0, (
+    # cost_per_tb should be recalculated using Storage Lens volume
+    # not the CE-derived volume (5,000 GB-Months)
+    # $230 / (10,000,000,000,000 / 2^40) = $230 / 9.0949... TB = $25.29/TB (binary TB)
+    assert sm["cost_per_tb_usd"] == 25.29, (
         "cost_per_tb should use Storage Lens bytes as denominator, not CE GB-Months"
     )
 

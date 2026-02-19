@@ -17,8 +17,8 @@ from dapanoskop.categories import categorize
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CC = "Uncategorized"
-_BYTES_PER_GB = 1_000_000_000  # 10^9 bytes per gigabyte (decimal)
-_BYTES_PER_TB = 1_000_000_000_000  # 10^12 bytes per terabyte (decimal)
+_BYTES_PER_GB = 1_073_741_824  # 2^30 bytes per gibibyte (binary)
+_BYTES_PER_TB = 1_099_511_627_776  # 2^40 bytes per tebibyte (binary)
 
 
 def _parse_groups(
@@ -57,7 +57,7 @@ def _compute_storage_metrics(
 
     Note: AWS Cost Explorer returns UsageQuantity for TimedStorage-* in GB-Months,
     which represents the average GB stored during the billing period.
-    We convert GB-Months to bytes: GB-Months * 1e9 = average bytes stored.
+    We convert GB-Months to bytes: GB-Months * 2^30 = average bytes stored (binary).
     """
     total_cost = 0.0
     prev_total_cost = 0.0
@@ -94,7 +94,7 @@ def _compute_storage_metrics(
         if row["category"] == "Storage":
             prev_total_cost += row["cost_usd"]
 
-    # Convert GB-Months to bytes: GB-Months × 1e9 bytes/GB = average bytes stored
+    # Convert GB-Months to bytes: GB-Months × 2^30 bytes/GiB = average bytes stored (binary)
     total_bytes = total_gb_months * _BYTES_PER_GB if total_gb_months else 0
     cost_per_tb = total_cost / (total_bytes / _BYTES_PER_TB) if total_bytes else 0
     hot_pct = (hot_gb_months / total_gb_months * 100) if total_gb_months else 0

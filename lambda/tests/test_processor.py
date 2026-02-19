@@ -136,13 +136,13 @@ def test_storage_metrics() -> None:
     assert sm["total_cost_usd"] == 750.0
     assert sm["prev_month_cost_usd"] == 450.0
     # Total GB-Months: 1,000 + 500 + 1,000 = 2,500
-    # Total bytes: 2,500 × 1e9 = 2,500,000,000,000 = 2.5 TB
-    assert sm["total_volume_bytes"] == 2_500_000_000_000
+    # Total bytes: 2,500 × 2^30 = 2,684,354,560,000 bytes
+    assert sm["total_volume_bytes"] == 2_684_354_560_000
     # Hot tier = (ByteHrs + INT-FA) / total = (1000 + 500) / (1000 + 500 + 1000)
     expected_hot = (1_000 + 500) / (1_000 + 500 + 1_000) * 100
     assert abs(sm["hot_tier_percentage"] - round(expected_hot, 1)) < 0.2
-    # Cost per TB: $750 / 2.5 TB = $300/TB
-    assert sm["cost_per_tb_usd"] == 300.0
+    # Cost per TB: $750 / (2,684,354,560,000 / 2^40) = $307.2/TB
+    assert sm["cost_per_tb_usd"] == 307.2
 
 
 def test_multiple_cost_centers() -> None:
@@ -507,11 +507,11 @@ def test_storage_metrics_realistic_scale() -> None:
     result = process(collected)
     sm = result["summary"]["storage_metrics"]
 
-    # Verify volume: 5,000 GB-Months × 1e9 = 5,000,000,000,000 bytes = 5 TB
-    assert sm["total_volume_bytes"] == 5_000_000_000_000
+    # Verify volume: 5,000 GB-Months × 2^30 = 5,368,709,120,000 bytes
+    assert sm["total_volume_bytes"] == 5_368_709_120_000
 
-    # Verify cost per TB: $115 / 5 TB = $23/TB (realistic S3 Standard pricing)
-    assert sm["cost_per_tb_usd"] == 23.0
+    # Verify cost per TB: $115 / (5,368,709,120,000 / 2^40) = $23.55/TB
+    assert sm["cost_per_tb_usd"] == 23.55
 
 
 def test_storage_metrics_zero_volume() -> None:
@@ -561,23 +561,23 @@ def test_storage_metrics_with_efs_and_ebs() -> None:
     # Without flags: only TimedStorage-ByteHrs contributes to volume
     result_no_flags = process(collected)
     sm_no_flags = result_no_flags["summary"]["storage_metrics"]
-    assert sm_no_flags["total_volume_bytes"] == 100_000_000_000  # 100 GB
+    assert sm_no_flags["total_volume_bytes"] == 107_374_182_400  # 100 × 2^30 bytes
 
     # With include_efs: S3 + EFS contribute
     result_efs = process(collected, include_efs=True)
     sm_efs = result_efs["summary"]["storage_metrics"]
-    assert sm_efs["total_volume_bytes"] == 150_000_000_000  # 150 GB
+    assert sm_efs["total_volume_bytes"] == 161_061_273_600  # 150 × 2^30 bytes
     assert sm_efs["total_volume_bytes"] > sm_no_flags["total_volume_bytes"]
 
     # With include_ebs: S3 + EBS contribute
     result_ebs = process(collected, include_ebs=True)
     sm_ebs = result_ebs["summary"]["storage_metrics"]
-    assert sm_ebs["total_volume_bytes"] == 120_000_000_000  # 120 GB
+    assert sm_ebs["total_volume_bytes"] == 128_849_018_880  # 120 × 2^30 bytes
 
     # With both flags: all three contribute
     result_both = process(collected, include_efs=True, include_ebs=True)
     sm_both = result_both["summary"]["storage_metrics"]
-    assert sm_both["total_volume_bytes"] == 170_000_000_000  # 170 GB
+    assert sm_both["total_volume_bytes"] == 182_536_110_080  # 170 × 2^30 bytes
 
 
 def test_split_charge_categories() -> None:
@@ -672,8 +672,8 @@ def test_hot_tier_with_region_prefixed_usage_types() -> None:
 
     # All three are volume-contributing (TimedStorage in usage_type)
     # Total GB-Months: 1,000 + 500 + 2,000 = 3,500
-    # Total bytes: 3,500 * 1e9 = 3,500,000,000,000
-    assert sm["total_volume_bytes"] == 3_500_000_000_000
+    # Total bytes: 3,500 × 2^30 = 3,758,096,384,000
+    assert sm["total_volume_bytes"] == 3_758_096_384_000
 
     # Hot tier = Standard + INT-FA = 1,000 + 500 = 1,500 of 3,500
     expected_hot = (1_000 + 500) / (1_000 + 500 + 2_000) * 100
@@ -682,9 +682,8 @@ def test_hot_tier_with_region_prefixed_usage_types() -> None:
     # All items are Storage category, so total_cost = 200 + 100 + 10 = 310
     assert sm["total_cost_usd"] == 310.0
 
-    # Cost per TB: $310 / 3.5 TB
-    expected_cost_per_tb = round(310.0 / 3.5, 2)
-    assert sm["cost_per_tb_usd"] == expected_cost_per_tb
+    # Cost per TB: $310 / (3,758,096,384,000 / 2^40) = $310 / 3.41796875 = $90.7/TB
+    assert sm["cost_per_tb_usd"] == 90.7
 
 
 def test_cost_per_tb_with_non_volume_storage_costs() -> None:
@@ -709,14 +708,14 @@ def test_cost_per_tb_with_non_volume_storage_costs() -> None:
     result = process(collected)
     sm = result["summary"]["storage_metrics"]
 
-    # Only TimedStorage contributes to volume: 1,000 GB-Months = 1 TB
-    assert sm["total_volume_bytes"] == 1_000_000_000_000
+    # Only TimedStorage contributes to volume: 1,000 GB-Months × 2^30 = 1,073,741,824,000 bytes
+    assert sm["total_volume_bytes"] == 1_073_741_824_000
 
     # All three are Storage category, so total cost = 200 + 50 + 30 = 280
     assert sm["total_cost_usd"] == 280.0
 
-    # cost_per_tb = total_storage_cost / volume_in_tb = 280 / 1.0 = 280
-    assert sm["cost_per_tb_usd"] == 280.0
+    # cost_per_tb = 280 / (1,073,741,824,000 / 2^40) = 280 / 0.9765625 = $286.72/TB
+    assert sm["cost_per_tb_usd"] == 286.72
 
     # Hot tier: only TimedStorage-ByteHrs is hot = 1,000 / 1,000 = 100%
     assert sm["hot_tier_percentage"] == 100.0
