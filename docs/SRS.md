@@ -5,8 +5,8 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.11 (Draft)                               |
-| Date                | 2026-02-16                                 |
+| Version             | 0.12 (Draft)                               |
+| Date                | 2026-02-19                                 |
 
 ---
 
@@ -34,7 +34,8 @@ Dapanoskop is a web-based AWS cloud cost monitoring application. This document d
 | Cost Explorer | AWS Cost Explorer API for querying cost and usage data |
 | Cost Category | A single AWS Cost Category whose values represent cost centers |
 | App tag | AWS resource tag with key `App` (or `user:App`) |
-| UnblendedCost | AWS cost metric showing the actual cost of each usage type |
+| UnblendedCost | AWS cost metric showing the on-demand cost of each usage type, without RI/SP amortization or enterprise discount adjustments; used for per-workload and per-usage-type data stored in parquet files |
+| NetAmortizedCost | AWS cost metric that distributes RI and Savings Plan fees across the period and includes enterprise discount adjustments; matches the "Total allocated cost" column in the AWS Cost Categories console; used for cost center totals in summary.json when allocated costs are available |
 | TimedStorage-ByteHrs | AWS usage type metric measuring S3 storage volume over time |
 | Identity Pool | Amazon Cognito Identity Pool — exchanges Cognito ID tokens for temporary AWS credentials via the enhanced (simplified) authflow |
 | httpfs | DuckDB extension enabling SQL queries against remote files via HTTP(S) or S3 protocols |
@@ -443,8 +444,8 @@ Refs: URS-DP-10302
 The system queries the configured AWS Cost Category (or the first one returned by the API if not explicitly configured) to obtain the mapping of workloads to cost centers. The Cost Category's values are the cost centers. This mapping is queried separately from the cost data and applied during data processing. The system also queries category-level allocated costs to properly handle split charge rules.
 Refs: URS-DP-10102, URS-DP-10301, URS-DP-10403
 
-**[SRS-DP-420107] Detect Split Charge Categories**
-The system queries the Cost Explorer `ListCostCategoryDefinitions` and `DescribeCostCategoryDefinition` APIs to identify which cost categories use split charge rules. Categories with split charge rules have their costs allocated to other categories rather than appearing as direct spend. The system uses this information to display split charge categories differently in the UI (showing "Allocated" instead of cost totals) and to query category-level allocated costs for accurate totals.
+**[SRS-DP-420107] Detect Split Charge Categories and Pass Rule Structure to Processor**
+The system queries the Cost Explorer `ListCostCategoryDefinitions` and `DescribeCostCategoryDefinition` APIs to identify which cost categories use split charge rules. Categories with split charge rules have their costs allocated to other categories rather than appearing as direct spend. The system passes the complete split charge rule structure — not just the list of split charge category names — to the data processor so that redistribution logic can be applied before cost center totals are computed. Each rule specifies a Source cost center, a list of Target cost centers (or the sentinel `"ALL_OTHER"`), a redistribution Method (`PROPORTIONAL`, `EVEN`, or `FIXED`), and optional Parameters (percentage allocations for the `FIXED` method). The system uses this information to display split charge categories differently in the UI (showing "Allocated" instead of cost totals) and to query category-level allocated costs (`NetAmortizedCost`) for accurate totals.
 Refs: URS-DP-10403
 
 **[SRS-DP-420104] Query Storage Volume**
@@ -465,7 +466,7 @@ Refs: URS-DP-10106, URS-DP-10312
 
 #### 4.2.2 Models
 
-**Cost Explorer Query Parameters:**
+**Cost Explorer Query Parameters — workload and usage-type queries (SRS-DP-420101):**
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -475,7 +476,28 @@ Refs: URS-DP-10106, URS-DP-10312
 | Metrics | List[String] | `UnblendedCost`, `UsageQuantity` |
 | GroupBy | List[Object] | `TAG` (App) and `DIMENSION` (USAGE_TYPE) |
 
-**Cost Data Record:**
+**Cost Explorer Query Parameters — cost center allocated totals query (SRS-DP-420107):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| TimePeriod.Start | String (YYYY-MM-DD) | First day of the queried month |
+| TimePeriod.End | String (YYYY-MM-DD) | First day of the following month |
+| Granularity | String | Always `MONTHLY` |
+| Metrics | List[String] | `NetAmortizedCost` |
+| GroupBy | List[Object] | `COST_CATEGORY` (configured category name) |
+
+**Metric Usage by Data Destination:**
+
+The system uses two different Cost Explorer metrics for two distinct purposes:
+
+| Destination | Metric | Rationale |
+|-------------|--------|-----------|
+| Parquet files (`cost-by-workload.parquet`, `cost-by-usage-type.parquet`) | `UnblendedCost` | Per-workload and per-usage-type on-demand cost data for drill-down queries |
+| `summary.json` cost center totals (when allocated costs are available) | `NetAmortizedCost` | Matches the "Total allocated cost" column in the AWS Cost Categories console, including RI/SP amortization and enterprise discount adjustments |
+
+As a consequence, summing the usage-type costs visible in a workload drill-down will not necessarily equal the cost center total shown on the summary card. The gap reflects RI/SP amortization and enterprise discount adjustments that are included in `NetAmortizedCost` but not in `UnblendedCost`.
+
+**Cost Data Record (parquet files):**
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -619,3 +641,4 @@ Refs: URS-DP-10101
 | 0.9     | 2026-02-15 | —      | Add cost trend time range toggle (SRS-DP-310214 update); add clickable cost center names (SRS-DP-310201 update); add Cost Center Detail Screen (§3.1.4, SRS-DP-310302-310306); renumber Tagging Coverage (§3.1.4→§3.1.5) and Report Period Selection (§3.1.5→§3.1.6) |
 | 0.10    | 2026-02-16 | —      | Add S3 Inventory integration (SRS-DP-420108); actual storage volume display (SRS-DP-310217); storage deep dive navigation (SRS-DP-310218); Storage Deep Dive Screen (§3.1.5, SRS-DP-310307); split charge category detection (SRS-DP-420107); split charge badge display (SRS-DP-310201 update); token revocation on logout (SRS-DP-410107); Managed Login v2 requirement (SRS-DP-410103 update); resource tags (SRS-DP-530003); permissions boundary (SRS-DP-530004); AWS provider version bump to >= 5.95 (SRS-DP-600003 update); renumber Tagging Coverage and Report Period Selection sections (§3.1.5→§3.1.6, §3.1.6→§3.1.7) |
 | 0.11    | 2026-02-16 | —      | Replace S3 Inventory with S3 Storage Lens CloudWatch integration (SRS-DP-420108 rewrite); remove storage deep dive screen (§3.1.5 removed, SRS-DP-310307 removed); remove storage deep dive navigation (SRS-DP-310218 marked removed); update actual storage volume display to use Storage Lens (SRS-DP-310217 update) |
+| 0.12    | 2026-02-19 | —      | Document dual-metric architecture: `NetAmortizedCost` for cost center allocated totals in summary.json, `UnblendedCost` for parquet drill-down data (§4.2.2 new tables + note); add `NetAmortizedCost` definition (§1.4); update SRS-DP-420107 to specify that the complete split charge rule structure (Source, Targets, Method, Parameters) is passed to the processor for redistribution, not just category names |

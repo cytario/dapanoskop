@@ -7,7 +7,11 @@ from datetime import datetime, timezone
 
 from moto import mock_aws
 
-from dapanoskop.processor import process, update_index
+from dapanoskop.processor import (
+    _apply_split_charge_redistribution,
+    process,
+    update_index,
+)
 
 
 def _make_group(app: str, usage_type: str, cost: float, quantity: float) -> dict:
@@ -591,16 +595,25 @@ def test_split_charge_categories() -> None:
         cc_mapping={"web-app": "Engineering", "shared-infra": "Shared Services"},
     )
     collected["split_charge_categories"] = ["Shared Services"]
+    collected["split_charge_rules"] = [
+        {
+            "Source": "Shared Services",
+            "Targets": ["Engineering"],
+            "Method": "PROPORTIONAL",
+            "Parameters": [],
+        }
+    ]
     collected["allocated_costs"] = {
-        "current": {"Engineering": 1000.0, "Shared Services": 0.0},
-        "prev_month": {"Engineering": 930.0, "Shared Services": 0.0},
+        "current": {"Engineering": 800.0, "Shared Services": 200.0},
+        "prev_month": {"Engineering": 750.0, "Shared Services": 180.0},
         "yoy": {},
     }
 
     result = process(collected)
     ccs = result["summary"]["cost_centers"]
 
-    # Engineering should use allocated cost (1000), not workload sum (800)
+    # Engineering should get its allocated cost + redistributed Shared Services
+    # current: 800 + 200 = 1000, prev: 750 + 180 = 930
     eng = next(cc for cc in ccs if cc["name"] == "Engineering")
     assert eng["current_cost_usd"] == 1000.0
     assert eng["prev_month_cost_usd"] == 930.0
@@ -751,3 +764,277 @@ def test_total_spend_with_allocated_costs_missing_cc_name() -> None:
         "Platform should use workload sum, not $0 from missing allocated key"
     )
     assert platform["prev_month_cost_usd"] == 450.0
+
+
+# --- Split charge redistribution unit tests ---
+
+
+def test_redistribution_proportional() -> None:
+    """Test PROPORTIONAL redistribution distributes by target cost ratio."""
+    costs = {"Shared": 100.0, "Eng": 300.0, "Data": 100.0}
+    rules = [
+        {
+            "Source": "Shared",
+            "Targets": ["Eng", "Data"],
+            "Method": "PROPORTIONAL",
+            "Parameters": [],
+        }
+    ]
+    result = _apply_split_charge_redistribution(costs, rules)
+    assert result["Shared"] == 0.0
+    # Eng gets 300/(300+100) * 100 = 75, Data gets 100/(300+100) * 100 = 25
+    assert result["Eng"] == 375.0
+    assert result["Data"] == 125.0
+
+
+def test_redistribution_even() -> None:
+    """Test EVEN redistribution splits equally among targets."""
+    costs = {"Shared": 100.0, "Eng": 300.0, "Data": 100.0}
+    rules = [
+        {
+            "Source": "Shared",
+            "Targets": ["Eng", "Data"],
+            "Method": "EVEN",
+            "Parameters": [],
+        }
+    ]
+    result = _apply_split_charge_redistribution(costs, rules)
+    assert result["Shared"] == 0.0
+    assert result["Eng"] == 350.0
+    assert result["Data"] == 150.0
+
+
+def test_redistribution_fixed() -> None:
+    """Test FIXED redistribution uses explicit allocation percentages."""
+    costs = {"Shared": 200.0, "Eng": 300.0, "Data": 100.0}
+    rules = [
+        {
+            "Source": "Shared",
+            "Targets": ["Eng", "Data"],
+            "Method": "FIXED",
+            "Parameters": [
+                {"Type": "ALLOCATION_PERCENTAGES", "Values": ["Eng=70", "Data=30"]}
+            ],
+        }
+    ]
+    result = _apply_split_charge_redistribution(costs, rules)
+    assert result["Shared"] == 0.0
+    # Eng gets 70% of 200 = 140, Data gets 30% of 200 = 60
+    assert result["Eng"] == 440.0
+    assert result["Data"] == 160.0
+
+
+def test_redistribution_zero_source_cost() -> None:
+    """Test that zero source cost results in no redistribution."""
+    costs = {"Shared": 0.0, "Eng": 300.0}
+    rules = [
+        {
+            "Source": "Shared",
+            "Targets": ["Eng"],
+            "Method": "PROPORTIONAL",
+            "Parameters": [],
+        }
+    ]
+    result = _apply_split_charge_redistribution(costs, rules)
+    assert result["Shared"] == 0.0
+    assert result["Eng"] == 300.0
+
+
+def test_redistribution_target_not_in_costs() -> None:
+    """Test that missing targets get initialized to zero before redistribution."""
+    costs = {"Shared": 100.0}
+    rules = [
+        {
+            "Source": "Shared",
+            "Targets": ["NewTeam"],
+            "Method": "EVEN",
+            "Parameters": [],
+        }
+    ]
+    result = _apply_split_charge_redistribution(costs, rules)
+    assert result["Shared"] == 0.0
+    assert result["NewTeam"] == 100.0
+
+
+def test_redistribution_no_rules() -> None:
+    """Test that empty rules returns a copy of original costs unchanged."""
+    costs = {"Eng": 300.0, "Data": 100.0}
+    result = _apply_split_charge_redistribution(costs, [])
+    assert result == costs
+    # Verify it's a copy, not the same object
+    assert result is not costs
+
+
+def test_redistribution_proportional_zero_targets_fallback() -> None:
+    """Test PROPORTIONAL falls back to EVEN when all targets have zero cost."""
+    costs = {"Shared": 100.0, "Eng": 0.0, "Data": 0.0}
+    rules = [
+        {
+            "Source": "Shared",
+            "Targets": ["Eng", "Data"],
+            "Method": "PROPORTIONAL",
+            "Parameters": [],
+        }
+    ]
+    result = _apply_split_charge_redistribution(costs, rules)
+    assert result["Shared"] == 0.0
+    assert result["Eng"] == 50.0
+    assert result["Data"] == 50.0
+
+
+def test_redistribution_fixed_malformed_value_skipped() -> None:
+    """Test Issue 2: non-numeric percentage string is skipped with a warning.
+
+    When AWS returns a value like 'Eng=abc' or 'Eng=Team=70', the float()
+    conversion would raise ValueError. The function must log a warning and skip
+    the malformed entry rather than crashing, then fall back to EVEN split.
+    """
+    costs = {"Shared": 100.0, "Eng": 0.0, "Data": 0.0}
+    rules = [
+        {
+            "Source": "Shared",
+            "Targets": ["Eng", "Data"],
+            "Method": "FIXED",
+            "Parameters": [
+                # Both values are malformed — no valid percentages can be parsed
+                {
+                    "Type": "ALLOCATION_PERCENTAGES",
+                    "Values": ["Eng=abc", "Data=xyz"],
+                }
+            ],
+        }
+    ]
+    # Should not raise; falls back to EVEN split (param_map ends up empty)
+    result = _apply_split_charge_redistribution(costs, rules)
+    assert result["Shared"] == 0.0
+    # EVEN fallback: 100 / 2 = 50 each
+    assert result["Eng"] == 50.0
+    assert result["Data"] == 50.0
+
+
+def test_redistribution_fixed_no_equals_falls_back_to_even() -> None:
+    """Test Issue 3: FIXED values without '=' silently fall back to EVEN split.
+
+    When all Values lack an '=' character, param_map stays empty and the
+    function should fall through to the EVEN distribution fallback.
+    """
+    costs = {"Shared": 120.0, "Eng": 0.0, "Data": 0.0, "Ops": 0.0}
+    rules = [
+        {
+            "Source": "Shared",
+            "Targets": ["Eng", "Data", "Ops"],
+            "Method": "FIXED",
+            "Parameters": [
+                # Values contain no '=' at all
+                {"Type": "ALLOCATION_PERCENTAGES", "Values": ["Eng", "Data", "Ops"]}
+            ],
+        }
+    ]
+    result = _apply_split_charge_redistribution(costs, rules)
+    assert result["Shared"] == 0.0
+    # EVEN fallback: 120 / 3 = 40 each
+    assert result["Eng"] == 40.0
+    assert result["Data"] == 40.0
+    assert result["Ops"] == 40.0
+
+
+def test_redistribution_multi_rule_uses_original_costs() -> None:
+    """Test Issue 4: multiple rules each read from the original (pre-redistribution) costs.
+
+    Rule 1: "Shared Services" → ["Eng", "Data"] via EVEN ($200 → $100 each)
+    Rule 2: "Platform" → ["Eng"] via EVEN ($150 → $150 to Eng)
+
+    After rule 1, Platform's cost in `result` is still $150 (unchanged from original).
+    After rule 2, Eng gets another $150.  The snapshot ensures rule 2 reads the
+    *original* Platform cost ($150), not any post-rule-1 value.
+    """
+    costs = {
+        "Shared Services": 200.0,
+        "Platform": 150.0,
+        "Eng": 500.0,
+        "Data": 300.0,
+    }
+    rules = [
+        {
+            "Source": "Shared Services",
+            "Targets": ["Eng", "Data"],
+            "Method": "EVEN",
+            "Parameters": [],
+        },
+        {
+            "Source": "Platform",
+            "Targets": ["Eng"],
+            "Method": "EVEN",
+            "Parameters": [],
+        },
+    ]
+    result = _apply_split_charge_redistribution(costs, rules)
+
+    # Both sources should be zeroed
+    assert result["Shared Services"] == 0.0
+    assert result["Platform"] == 0.0
+
+    # Eng: 500 (original) + 100 (half of Shared Services) + 150 (all of Platform) = 750
+    assert result["Eng"] == 750.0
+
+    # Data: 300 (original) + 100 (half of Shared Services) = 400
+    assert result["Data"] == 400.0
+
+
+def test_redistribution_fixed_percentages_not_summing_to_100() -> None:
+    """Test Issue 5: partial percentages log a warning but still apply correctly.
+
+    When FIXED percentages sum to 90% instead of 100%, 10% of the source cost
+    is silently lost. The function should still distribute what it can.
+    """
+    costs = {"Shared": 200.0, "Eng": 300.0, "Data": 100.0}
+    rules = [
+        {
+            "Source": "Shared",
+            "Targets": ["Eng", "Data"],
+            "Method": "FIXED",
+            "Parameters": [
+                # Only 60% + 30% = 90% — 10% of $200 = $20 is lost
+                {
+                    "Type": "ALLOCATION_PERCENTAGES",
+                    "Values": ["Eng=60", "Data=30"],
+                }
+            ],
+        }
+    ]
+    result = _apply_split_charge_redistribution(costs, rules)
+    assert result["Shared"] == 0.0
+    # Eng gets 60% of 200 = 120; total = 300 + 120 = 420
+    assert result["Eng"] == 420.0
+    # Data gets 30% of 200 = 60; total = 100 + 60 = 160
+    assert result["Data"] == 160.0
+    # $20 (10% of Shared) is correctly lost — behaviour is intentional
+
+
+def test_redistribution_fixed_whitespace_in_values() -> None:
+    """Test Issue 6: whitespace around '=' is stripped correctly.
+
+    If AWS returns 'Eng = 70' instead of 'Eng=70', the target name must be
+    stripped to 'Eng' and the percentage to '70', not ' Eng' and ' 70'.
+    """
+    costs = {"Shared": 200.0, "Eng": 300.0, "Data": 100.0}
+    rules = [
+        {
+            "Source": "Shared",
+            "Targets": ["Eng", "Data"],
+            "Method": "FIXED",
+            "Parameters": [
+                {
+                    "Type": "ALLOCATION_PERCENTAGES",
+                    # Whitespace-padded values — should behave identically to "Eng=70"
+                    "Values": ["Eng = 70", "Data = 30"],
+                }
+            ],
+        }
+    ]
+    result = _apply_split_charge_redistribution(costs, rules)
+    assert result["Shared"] == 0.0
+    # Eng: 300 + 70% of 200 = 300 + 140 = 440
+    assert result["Eng"] == 440.0
+    # Data: 100 + 30% of 200 = 100 + 60 = 160
+    assert result["Data"] == 160.0

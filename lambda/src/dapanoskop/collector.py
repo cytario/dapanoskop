@@ -147,8 +147,9 @@ def get_cost_categories(
                 if len(keys) == 2:
                     app_tag = keys[0].removeprefix("App$")
                     cost_center = keys[1].removeprefix(f"{category_name}$")
-                    if app_tag and cost_center:
-                        mapping[app_tag] = cost_center
+                    if cost_center:
+                        workload_key = app_tag if app_tag else "Untagged"
+                        mapping[workload_key] = cost_center
         token = response.get("NextPageToken")
         if not token:
             break
@@ -160,21 +161,23 @@ def get_cost_categories(
 def get_split_charge_categories(
     ce_client: Any,
     category_name: str,
-) -> list[str]:
+) -> tuple[list[str], list[dict[str, Any]]]:
     """Detect split charge source categories by inspecting the Cost Category definition.
 
-    Returns a list of category values that are split charge sources (their costs
-    are allocated to other categories and should not be displayed directly).
+    Returns a tuple of:
+    - list of category values that are split charge sources (their costs
+      are allocated to other categories and should not be displayed directly)
+    - list of full split charge rule dicts (Source, Targets, Method, Parameters)
     """
     if not category_name:
-        return []
+        return [], []
 
     # Find the category ARN from its name
     try:
         resp = ce_client.list_cost_category_definitions()
     except Exception:
         logger.warning("Failed to list cost category definitions", exc_info=True)
-        return []
+        return [], []
 
     target_arn = None
     for defn in resp.get("CostCategoryReferences", []):
@@ -183,7 +186,7 @@ def get_split_charge_categories(
             break
 
     if not target_arn:
-        return []
+        return [], []
 
     # Get the full definition including split charge rules
     try:
@@ -192,20 +195,29 @@ def get_split_charge_categories(
         )
     except Exception:
         logger.warning("Failed to describe cost category definition", exc_info=True)
-        return []
+        return [], []
 
     cost_category = defn_resp.get("CostCategory", {})
     split_charge_rules = cost_category.get("SplitChargeRules", [])
 
-    # Extract source values from split charge rules
+    # Extract source values and full rules
     sources: set[str] = set()
+    rules: list[dict[str, Any]] = []
     for rule in split_charge_rules:
         source = rule.get("Source")
         if source:
             sources.add(source)
+            rules.append(
+                {
+                    "Source": source,
+                    "Targets": rule.get("Targets", []),
+                    "Method": rule.get("Method", "PROPORTIONAL"),
+                    "Parameters": rule.get("Parameters", []),
+                }
+            )
 
     logger.info("Split charge sources: %s", sources)
-    return sorted(sources)
+    return sorted(sources), rules
 
 
 def get_allocated_costs_by_category(
@@ -214,10 +226,11 @@ def get_allocated_costs_by_category(
     start: str,
     end: str,
 ) -> dict[str, float]:
-    """Get total allocated cost per cost category value (includes split charge allocations).
+    """Get total allocated cost per cost category value using NetAmortizedCost.
 
-    Queries CE grouped by COST_CATEGORY only (no App tag) to get the true
-    allocated totals that match the AWS Cost Category console.
+    Uses NetAmortizedCost to match the AWS Cost Category console's
+    "Total allocated cost" column. Queries CE grouped by COST_CATEGORY only
+    (no App tag) to get the true allocated totals.
     """
     if not category_name:
         return {}
@@ -226,7 +239,7 @@ def get_allocated_costs_by_category(
     kwargs: dict[str, Any] = {
         "TimePeriod": {"Start": start, "End": end},
         "Granularity": "MONTHLY",
-        "Metrics": ["UnblendedCost"],
+        "Metrics": ["NetAmortizedCost"],
         "GroupBy": [
             {"Type": "COST_CATEGORY", "Key": category_name},
         ],
@@ -241,7 +254,7 @@ def get_allocated_costs_by_category(
                     cc_value = keys[0].removeprefix(f"{category_name}$")
                     cost = float(
                         group.get("Metrics", {})
-                        .get("UnblendedCost", {})
+                        .get("NetAmortizedCost", {})
                         .get("Amount", 0)
                     )
                     totals[cc_value] = totals.get(cc_value, 0) + cost
@@ -287,7 +300,9 @@ def collect(
     logger.info("Cost category mapping: %d entries", len(cc_mapping))
 
     # Detect split charge categories and get allocated totals
-    split_charge_categories = get_split_charge_categories(ce_client, cost_category_name)
+    split_charge_categories, split_charge_rules = get_split_charge_categories(
+        ce_client, cost_category_name
+    )
     allocated_costs: dict[str, dict[str, float]] = {}
     if cost_category_name:
         for period_key, (start, end) in periods.items():
@@ -301,5 +316,6 @@ def collect(
         "raw_data": raw_data,
         "cc_mapping": cc_mapping,
         "split_charge_categories": split_charge_categories,
+        "split_charge_rules": split_charge_rules,
         "allocated_costs": allocated_costs,
     }

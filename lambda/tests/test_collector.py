@@ -11,8 +11,10 @@ from dapanoskop.collector import (
     _get_periods,
     _month_range,
     collect,
+    get_allocated_costs_by_category,
     get_cost_and_usage,
     get_cost_categories,
+    get_split_charge_categories,
 )
 
 
@@ -313,7 +315,7 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # Allocated costs: current period (COST_CATEGORY only)
+        # Allocated costs: current period (COST_CATEGORY only, NetAmortizedCost)
         {
             "ResultsByTime": [
                 {
@@ -321,14 +323,14 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["CostCenter$Engineering"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "1100.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "1100.0", "Unit": "USD"}
                             },
                         }
                     ]
                 }
             ],
         },
-        # Allocated costs: prev_month period (COST_CATEGORY only)
+        # Allocated costs: prev_month period (COST_CATEGORY only, NetAmortizedCost)
         {
             "ResultsByTime": [
                 {
@@ -336,14 +338,14 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["CostCenter$Engineering"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "900.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "900.0", "Unit": "USD"}
                             },
                         }
                     ]
                 }
             ],
         },
-        # Allocated costs: yoy period (COST_CATEGORY only)
+        # Allocated costs: yoy period (COST_CATEGORY only, NetAmortizedCost)
         {
             "ResultsByTime": [
                 {
@@ -351,7 +353,7 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["CostCenter$Engineering"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "800.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "800.0", "Unit": "USD"}
                             },
                         }
                     ]
@@ -413,8 +415,9 @@ def test_collect_integration() -> None:
     # Verify cost category mapping
     assert result["cc_mapping"] == {"web-app": "Engineering", "api": "Engineering"}
 
-    # Verify split charge categories (should be empty in this test)
+    # Verify split charge categories and rules (should be empty in this test)
     assert result["split_charge_categories"] == []
+    assert result["split_charge_rules"] == []
 
     # Verify allocated costs for all periods
     assert "current" in result["allocated_costs"]
@@ -473,3 +476,102 @@ def test_collect_with_target_month() -> None:
     third_call_time_period = calls[2][1]["TimePeriod"]
     assert third_call_time_period["Start"] == "2024-06-01"
     assert third_call_time_period["End"] == "2024-07-01"
+
+
+def test_get_split_charge_categories_returns_rules() -> None:
+    """Test that split charge rules include full Source/Targets/Method/Parameters."""
+    mock_client = MagicMock()
+
+    mock_client.list_cost_category_definitions.return_value = {
+        "CostCategoryReferences": [
+            {
+                "Name": "CostCenter",
+                "CostCategoryArn": "arn:aws:ce::123456789012:costcategory/abc-123",
+            }
+        ]
+    }
+    mock_client.describe_cost_category_definition.return_value = {
+        "CostCategory": {
+            "Name": "CostCenter",
+            "SplitChargeRules": [
+                {
+                    "Source": "Shared Services",
+                    "Targets": ["Engineering", "Data"],
+                    "Method": "PROPORTIONAL",
+                },
+                {
+                    "Source": "Platform",
+                    "Targets": ["Engineering"],
+                    "Method": "EVEN",
+                    "Parameters": [],
+                },
+            ],
+        }
+    }
+
+    sources, rules = get_split_charge_categories(mock_client, "CostCenter")
+
+    assert sources == ["Platform", "Shared Services"]
+    assert len(rules) == 2
+    assert rules[0]["Source"] == "Platform" or rules[0]["Source"] == "Shared Services"
+    # Verify all rules have required keys
+    for rule in rules:
+        assert "Source" in rule
+        assert "Targets" in rule
+        assert "Method" in rule
+        assert "Parameters" in rule
+
+
+def test_get_allocated_costs_uses_net_amortized() -> None:
+    """Verify get_allocated_costs_by_category reads NetAmortizedCost from API response."""
+    mock_client = MagicMock()
+    mock_client.get_cost_and_usage.return_value = {
+        "ResultsByTime": [
+            {
+                "Groups": [
+                    {
+                        "Keys": ["CostCenter$Engineering"],
+                        "Metrics": {
+                            "NetAmortizedCost": {"Amount": "1500.0", "Unit": "USD"},
+                        },
+                    }
+                ]
+            }
+        ],
+    }
+
+    result = get_allocated_costs_by_category(
+        mock_client, "CostCenter", "2026-01-01", "2026-02-01"
+    )
+
+    assert result == {"Engineering": 1500.0}
+    # Verify the API was called with NetAmortizedCost metric
+    call_kwargs = mock_client.get_cost_and_usage.call_args[1]
+    assert call_kwargs["Metrics"] == ["NetAmortizedCost"]
+
+
+def test_get_cost_categories_untagged_resources() -> None:
+    """Test that empty app tags map to 'Untagged' instead of being dropped."""
+    mock_client = MagicMock()
+    mock_client.get_cost_and_usage.return_value = {
+        "ResultsByTime": [
+            {
+                "Groups": [
+                    {
+                        "Keys": ["App$web-app", "CostCenter$Engineering"],
+                        "Metrics": {
+                            "UnblendedCost": {"Amount": "100.0", "Unit": "USD"}
+                        },
+                    },
+                    {
+                        "Keys": ["App$", "CostCenter$Shared"],
+                        "Metrics": {"UnblendedCost": {"Amount": "50.0", "Unit": "USD"}},
+                    },
+                ]
+            }
+        ],
+    }
+
+    mapping = get_cost_categories(mock_client, "CostCenter", "2026-01-01", "2026-02-01")
+
+    assert mapping == {"web-app": "Engineering", "Untagged": "Shared"}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 from datetime import datetime
 from typing import Any
 
@@ -12,6 +13,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from dapanoskop.categories import categorize
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_CC = "Uncategorized"
 _BYTES_PER_GB = 1_000_000_000  # 10^9 bytes per gigabyte (decimal)
@@ -136,6 +139,110 @@ def _compute_tagging_coverage(
     }
 
 
+def _apply_split_charge_redistribution(
+    category_costs: dict[str, float],
+    rules: list[dict[str, Any]],
+) -> dict[str, float]:
+    """Redistribute split charge source costs to target categories.
+
+    Applies AWS Cost Category split charge rules to redistribute source
+    category costs to their targets. Supports three methods:
+    - PROPORTIONAL: distribute proportional to existing target costs
+    - EVEN: distribute equally among targets
+    - FIXED: distribute by explicit percentage from Parameters
+
+    Returns a new dict with source costs zeroed and redistributed to targets.
+    """
+    if not rules:
+        return dict(category_costs)
+
+    # Issue 1: Snapshot original costs so each rule reads from the pre-redistribution
+    # amounts. AWS evaluates each rule against the original costs independently —
+    # without this snapshot, a chained rule (A→B, B→C) would re-redistribute
+    # the cost already moved by the first rule.
+    original_costs = dict(category_costs)
+    result = dict(category_costs)
+
+    for rule in rules:
+        source = rule["Source"]
+        # Read source amount from the original snapshot, not the mutated result
+        source_cost = original_costs.get(source, 0.0)
+        if source_cost == 0.0:
+            continue
+
+        targets = rule.get("Targets", [])
+        method = rule.get("Method", "PROPORTIONAL")
+        parameters = rule.get("Parameters", [])
+
+        if not targets:
+            continue
+
+        if method == "FIXED":
+            # Use explicit percentages from Parameters
+            param_map: dict[str, float] = {}
+            for param in parameters:
+                for val in param.get("Values", []):
+                    # Values format: ["target1=50", "target2=50"]
+                    if "=" in val:
+                        # Issue 6: strip whitespace from both sides of the = split
+                        t_name, pct_str = val.split("=", 1)
+                        t_name = t_name.strip()
+                        pct_str = pct_str.strip()
+                        # Issue 2: guard against non-numeric percentage strings
+                        try:
+                            param_map[t_name] = float(pct_str) / 100.0
+                        except ValueError:
+                            logger.warning(
+                                "Skipping malformed FIXED split charge value %r "
+                                "(non-numeric percentage)",
+                                val,
+                            )
+
+            if param_map:
+                # Issue 5: warn when percentages don't sum to 100%
+                total_fraction = sum(param_map.values())
+                if abs(total_fraction - 1.0) > 0.001:
+                    logger.warning(
+                        "FIXED split charge percentages for source %r sum to %.1f%% "
+                        "(expected 100%%). Cost difference will be lost.",
+                        source,
+                        total_fraction * 100,
+                    )
+                for target, fraction in param_map.items():
+                    result[target] = result.get(target, 0.0) + source_cost * fraction
+            else:
+                # Fallback to EVEN if parameters can't be parsed
+                share = source_cost / len(targets)
+                for target in targets:
+                    result[target] = result.get(target, 0.0) + share
+
+        elif method == "EVEN":
+            share = source_cost / len(targets)
+            for target in targets:
+                result[target] = result.get(target, 0.0) + share
+
+        else:
+            # PROPORTIONAL (default) — read target costs from the original snapshot
+            # so that prior rules don't skew the proportions
+            target_costs = {t: original_costs.get(t, 0.0) for t in targets}
+            total_target_cost = sum(target_costs.values())
+
+            if total_target_cost > 0:
+                for target in targets:
+                    fraction = target_costs[target] / total_target_cost
+                    result[target] = result.get(target, 0.0) + source_cost * fraction
+            else:
+                # Fallback to EVEN when all targets have zero cost
+                share = source_cost / len(targets)
+                for target in targets:
+                    result[target] = result.get(target, 0.0) + share
+
+        # Zero out the source
+        result[source] = 0.0
+
+    return result
+
+
 def process(
     collected: dict[str, Any],
     include_efs: bool = False,
@@ -147,6 +254,7 @@ def process(
     raw_data: dict[str, list[dict[str, Any]]] = collected["raw_data"]
     cc_mapping: dict[str, str] = collected["cc_mapping"]
     split_charge_cats: list[str] = collected.get("split_charge_categories", [])
+    split_charge_rules: list[dict[str, Any]] = collected.get("split_charge_rules", [])
     allocated_costs: dict[str, dict[str, float]] = collected.get("allocated_costs", {})
 
     # Parse all periods
@@ -170,10 +278,21 @@ def process(
         cc = cc_mapping.get(wl, _DEFAULT_CC)
         cc_groups.setdefault(cc, []).append(wl)
 
-    # Build cost center summaries
+    # Build cost center summaries — apply split charge redistribution if rules exist
     current_allocated = allocated_costs.get("current", {})
     prev_allocated = allocated_costs.get("prev_month", {})
     yoy_allocated = allocated_costs.get("yoy", {})
+
+    if split_charge_rules:
+        current_allocated = _apply_split_charge_redistribution(
+            current_allocated, split_charge_rules
+        )
+        prev_allocated = _apply_split_charge_redistribution(
+            prev_allocated, split_charge_rules
+        )
+        yoy_allocated = _apply_split_charge_redistribution(
+            yoy_allocated, split_charge_rules
+        )
 
     cost_centers = []
     for cc_name in sorted(cc_groups):
