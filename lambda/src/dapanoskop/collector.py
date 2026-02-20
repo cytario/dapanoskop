@@ -104,11 +104,13 @@ def get_cost_categories(
     category_name: str,
     start: str,
     end: str,
-) -> dict[str, str]:
+) -> tuple[str, dict[str, str]]:
     """Get Cost Category mapping: workload -> cost center name.
 
-    If category_name is empty, uses the first category returned by the API.
-    Returns a dict mapping App tag values to cost center names.
+    If category_name is empty, auto-discovers the first category returned by the API.
+    Returns a tuple of (resolved_category_name, mapping) where mapping is a dict
+    mapping App tag values to cost center names. When no categories are found,
+    returns ("", {}).
     """
     if not category_name:
         # Discover the first cost category
@@ -117,7 +119,7 @@ def get_cost_categories(
         )
         names = resp.get("CostCategoryNames", [])
         if not names:
-            return {}
+            return "", {}
         category_name = names[0]
 
     # Get the values (cost center names) for this category
@@ -155,7 +157,7 @@ def get_cost_categories(
             break
         kwargs["NextPageToken"] = token
 
-    return mapping
+    return category_name, mapping
 
 
 def get_split_charge_categories(
@@ -292,22 +294,24 @@ def collect(
         logger.info("Period %s: %d groups collected", period_key, len(groups))
         raw_data[period_key] = groups
 
-    # Collect cost category mapping
+    # Collect cost category mapping; resolved_cc_name may differ from
+    # cost_category_name when auto-discovery is used (cost_category_name == "").
     current_start, current_end = periods["current"]
-    cc_mapping = get_cost_categories(
+    resolved_cc_name, cc_mapping = get_cost_categories(
         ce_client, cost_category_name, current_start, current_end
     )
     logger.info("Cost category mapping: %d entries", len(cc_mapping))
 
-    # Detect split charge categories and get allocated totals
+    # Detect split charge categories and get allocated totals using the
+    # resolved name so auto-discovered categories are handled correctly.
     split_charge_categories, split_charge_rules = get_split_charge_categories(
-        ce_client, cost_category_name
+        ce_client, resolved_cc_name
     )
     allocated_costs: dict[str, dict[str, float]] = {}
-    if cost_category_name:
+    if resolved_cc_name:
         for period_key, (start, end) in periods.items():
             allocated_costs[period_key] = get_allocated_costs_by_category(
-                ce_client, cost_category_name, start, end
+                ce_client, resolved_cc_name, start, end
             )
 
     return {

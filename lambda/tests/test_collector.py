@@ -206,9 +206,10 @@ def test_get_cost_categories_discovers_first_category() -> None:
         ],
     }
 
-    mapping = get_cost_categories(mock_client, "", "2026-01-01", "2026-02-01")
+    name, mapping = get_cost_categories(mock_client, "", "2026-01-01", "2026-02-01")
 
-    # Should have discovered "Environment" as the first category
+    # Should have auto-discovered "Environment" as the category name
+    assert name == "Environment"
     assert mapping == {"web-app": "Production", "api": "Development"}
 
 
@@ -219,8 +220,9 @@ def test_get_cost_categories_empty() -> None:
     # get_cost_categories returns no category names
     mock_client.get_cost_categories.return_value = {"CostCategoryNames": []}
 
-    mapping = get_cost_categories(mock_client, "", "2026-01-01", "2026-02-01")
+    name, mapping = get_cost_categories(mock_client, "", "2026-01-01", "2026-02-01")
 
+    assert name == ""
     assert mapping == {}
 
 
@@ -572,6 +574,115 @@ def test_get_cost_categories_untagged_resources() -> None:
         ],
     }
 
-    mapping = get_cost_categories(mock_client, "CostCenter", "2026-01-01", "2026-02-01")
+    name, mapping = get_cost_categories(
+        mock_client, "CostCenter", "2026-01-01", "2026-02-01"
+    )
 
+    assert name == "CostCenter"
     assert mapping == {"web-app": "Engineering", "Untagged": "Shared"}
+
+
+def test_collect_auto_discovers_category_name() -> None:
+    """When cost_category_name="" is passed to collect(), the auto-discovered
+    category name must be used for split charge detection and allocated cost queries.
+    """
+    from unittest.mock import patch
+
+    mock_ce_client = MagicMock()
+
+    # Three periods of raw cost data (current, prev_month, yoy)
+    empty_period = {"ResultsByTime": [{"Groups": []}]}
+
+    # Cost category mapping query (App tag + COST_CATEGORY GroupBy)
+    cc_mapping_response = {
+        "ResultsByTime": [
+            {
+                "Groups": [
+                    {
+                        "Keys": ["App$api", "CostCenter$Platform"],
+                        "Metrics": {
+                            "UnblendedCost": {"Amount": "200.0", "Unit": "USD"}
+                        },
+                    }
+                ]
+            }
+        ],
+    }
+
+    # Allocated costs by category (COST_CATEGORY only, NetAmortizedCost)
+    allocated_response = {
+        "ResultsByTime": [
+            {
+                "Groups": [
+                    {
+                        "Keys": ["CostCenter$Platform"],
+                        "Metrics": {
+                            "NetAmortizedCost": {"Amount": "200.0", "Unit": "USD"}
+                        },
+                    }
+                ]
+            }
+        ],
+    }
+
+    # get_cost_and_usage call order:
+    # 1-3: three periods (raw cost data)
+    # 4:   cost category mapping (App + COST_CATEGORY)
+    # 5-7: allocated costs per period (COST_CATEGORY only)
+    mock_ce_client.get_cost_and_usage.side_effect = [
+        empty_period,  # current period raw data
+        empty_period,  # prev_month raw data
+        empty_period,  # yoy raw data
+        cc_mapping_response,  # cc mapping
+        allocated_response,  # allocated costs: current
+        allocated_response,  # allocated costs: prev_month
+        allocated_response,  # allocated costs: yoy
+    ]
+
+    # Auto-discovery: first call returns the list of category names;
+    # second call (with CostCategoryName kwarg) is for the mapping side-effect.
+    mock_ce_client.get_cost_categories.side_effect = [
+        {"CostCategoryNames": ["CostCenter"]},
+        {},
+    ]
+
+    # Split charge rule present on the auto-discovered category
+    mock_ce_client.list_cost_category_definitions.return_value = {
+        "CostCategoryReferences": [
+            {
+                "Name": "CostCenter",
+                "CostCategoryArn": "arn:aws:ce::123456789012:costcategory/xyz-999",
+            }
+        ]
+    }
+    mock_ce_client.describe_cost_category_definition.return_value = {
+        "CostCategory": {
+            "Name": "CostCenter",
+            "SplitChargeRules": [
+                {
+                    "Source": "Shared",
+                    "Targets": ["Platform"],
+                    "Method": "PROPORTIONAL",
+                },
+            ],
+        }
+    }
+
+    with patch("boto3.client", return_value=mock_ce_client):
+        result = collect(cost_category_name="")
+
+    # The auto-discovered name must have been forwarded to downstream calls,
+    # so allocated_costs and split_charge_categories must NOT be empty.
+    assert result["allocated_costs"] != {}, (
+        "allocated_costs should be populated when a category is auto-discovered"
+    )
+    assert "current" in result["allocated_costs"]
+    assert result["allocated_costs"]["current"] == {"Platform": 200.0}
+
+    assert result["split_charge_categories"] != [], (
+        "split_charge_categories should be populated when a category is auto-discovered"
+    )
+    assert result["split_charge_categories"] == ["Shared"]
+
+    # cc_mapping should also reflect the auto-discovered category
+    assert result["cc_mapping"] == {"api": "Platform"}
