@@ -178,17 +178,18 @@ def _apply_split_charge_redistribution(
             continue
 
         if method == "FIXED":
-            # Use explicit percentages from Parameters
+            # Parse explicit percentages from Parameters.
+            # AWS CE API returns positional values: Values[i] maps to Targets[i].
+            # E.g. Targets=["Ops","Lab","Research"], Values=["15","20","25"]
             param_map: dict[str, float] = {}
             for param in parameters:
-                for val in param.get("Values", []):
-                    # Values format: ["target1=50", "target2=50"]
-                    if "=" in val:
-                        # Issue 6: strip whitespace from both sides of the = split
+                values = param.get("Values", [])
+                if values and "=" in values[0]:
+                    # Legacy "target=percentage" format
+                    for val in values:
                         t_name, pct_str = val.split("=", 1)
                         t_name = t_name.strip()
                         pct_str = pct_str.strip()
-                        # Issue 2: guard against non-numeric percentage strings
                         try:
                             param_map[t_name] = float(pct_str) / 100.0
                         except ValueError:
@@ -197,9 +198,29 @@ def _apply_split_charge_redistribution(
                                 "(non-numeric percentage)",
                                 val,
                             )
+                else:
+                    # Positional format: Values[i] is the percentage for Targets[i]
+                    for i, val in enumerate(values):
+                        if i >= len(targets):
+                            logger.warning(
+                                "FIXED split charge has more values than targets "
+                                "for source %r, ignoring extra value %r",
+                                source,
+                                val,
+                            )
+                            break
+                        try:
+                            param_map[targets[i]] = float(val) / 100.0
+                        except ValueError:
+                            logger.warning(
+                                "Skipping malformed FIXED split charge value %r "
+                                "(non-numeric percentage) for target %r",
+                                val,
+                                targets[i],
+                            )
 
             if param_map:
-                # Issue 5: warn when percentages don't sum to 100%
+                # Warn when percentages don't sum to 100%
                 total_fraction = sum(param_map.values())
                 if abs(total_fraction - 1.0) > 0.001:
                     logger.warning(

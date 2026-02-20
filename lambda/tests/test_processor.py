@@ -911,11 +911,54 @@ def test_redistribution_fixed_malformed_value_skipped() -> None:
     assert result["Data"] == 50.0
 
 
-def test_redistribution_fixed_no_equals_falls_back_to_even() -> None:
-    """Test Issue 3: FIXED values without '=' silently fall back to EVEN split.
+def test_redistribution_fixed_positional_values() -> None:
+    """Test FIXED with positional percentages (real AWS API format).
 
-    When all Values lack an '=' character, param_map stays empty and the
-    function should fall through to the EVEN distribution fallback.
+    AWS CE API returns ALLOCATION_PERCENTAGES as positional values where
+    Values[i] corresponds to Targets[i].
+    """
+    costs = {
+        "Sagemaker": 1000.0,
+        "Px Operations": 200.0,
+        "Px Lab Services": 300.0,
+        "Px Research": 400.0,
+        "Px Image Analysis": 100.0,
+    }
+    rules = [
+        {
+            "Source": "Sagemaker",
+            "Targets": [
+                "Px Operations",
+                "Px Lab Services",
+                "Px Research",
+                "Px Image Analysis",
+            ],
+            "Method": "FIXED",
+            "Parameters": [
+                {
+                    "Type": "ALLOCATION_PERCENTAGES",
+                    "Values": ["15", "20.00", "25.00", "40"],
+                }
+            ],
+        }
+    ]
+    result = _apply_split_charge_redistribution(costs, rules)
+    assert result["Sagemaker"] == 0.0
+    # 15% of 1000 = 150
+    assert result["Px Operations"] == 350.0
+    # 20% of 1000 = 200
+    assert result["Px Lab Services"] == 500.0
+    # 25% of 1000 = 250
+    assert result["Px Research"] == 650.0
+    # 40% of 1000 = 400
+    assert result["Px Image Analysis"] == 500.0
+
+
+def test_redistribution_fixed_non_numeric_positional_falls_back_to_even() -> None:
+    """Test FIXED with non-numeric positional values falls back to EVEN.
+
+    When positional values can't be parsed as floats, param_map stays empty
+    and the function falls through to the EVEN distribution fallback.
     """
     costs = {"Shared": 120.0, "Eng": 0.0, "Data": 0.0, "Ops": 0.0}
     rules = [
@@ -924,8 +967,7 @@ def test_redistribution_fixed_no_equals_falls_back_to_even() -> None:
             "Targets": ["Eng", "Data", "Ops"],
             "Method": "FIXED",
             "Parameters": [
-                # Values contain no '=' at all
-                {"Type": "ALLOCATION_PERCENTAGES", "Values": ["Eng", "Data", "Ops"]}
+                {"Type": "ALLOCATION_PERCENTAGES", "Values": ["abc", "def", "ghi"]}
             ],
         }
     ]
