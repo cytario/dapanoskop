@@ -21,7 +21,7 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v4
         with:
@@ -56,7 +56,7 @@ jobs:
       run:
         working-directory: lambda
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: astral-sh/setup-uv@v6
 
@@ -94,7 +94,7 @@ jobs:
       run:
         working-directory: terraform
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: opentofu/setup-opentofu@v1
         with:
