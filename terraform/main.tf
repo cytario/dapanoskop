@@ -40,8 +40,11 @@ module "hosting" {
 module "auth" {
   source = "./modules/auth"
 
-  cognito_user_pool_id      = var.cognito_user_pool_id
-  callback_urls             = [module.hosting.cloudfront_url]
+  cognito_user_pool_id = var.cognito_user_pool_id
+  callback_urls = compact([
+    module.hosting.cloudfront_url,
+    var.domain_name != "" ? "https://${var.domain_name}/" : "",
+  ])
   cognito_domain_prefix     = var.cognito_domain_prefix
   cognito_mfa_configuration = var.cognito_mfa_configuration
   saml_provider_name        = var.saml_provider_name
