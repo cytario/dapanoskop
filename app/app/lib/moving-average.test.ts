@@ -91,4 +91,25 @@ describe("computeMovingAverage", () => {
     const result = computeMovingAverage(points, []);
     expect(result).toEqual([null, null, 0]);
   });
+
+  it("uses _total field when available instead of summing CC values", () => {
+    const points: TrendPoint[] = [
+      { period: "2025-01", A: 100, _total: 500 },
+      { period: "2025-02", A: 200, _total: 600 },
+      { period: "2025-03", A: 300, _total: 700 },
+    ];
+    // MA at index 2: (500 + 600 + 700) / 3 = 600
+    const result = computeMovingAverage(points, ["A"]);
+    expect(result).toEqual([null, null, 600]);
+  });
+
+  it("falls back to summing CC values when _total is absent", () => {
+    const points: TrendPoint[] = [
+      { period: "2025-01", A: 100 },
+      { period: "2025-02", A: 200 },
+      { period: "2025-03", A: 300 },
+    ];
+    const result = computeMovingAverage(points, ["A"]);
+    expect(result).toEqual([null, null, 200]);
+  });
 });

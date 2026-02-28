@@ -13,25 +13,14 @@ export function GlobalSummary({
   isMtd,
   mtdComparison,
 }: GlobalSummaryProps) {
-  const activeCenters = summary.cost_centers.filter(
-    (cc) => !cc.is_split_charge,
-  );
-  const totalCurrent = activeCenters.reduce(
-    (sum, cc) => sum + cc.current_cost_usd,
-    0,
-  );
-  const totalPrev = activeCenters.reduce(
-    (sum, cc) => sum + cc.prev_month_cost_usd,
-    0,
-  );
-  const totalYoy = activeCenters.reduce((sum, cc) => sum + cc.yoy_cost_usd, 0);
+  const { totals } = summary;
+  const totalCurrent = totals.current_cost_usd;
+  const totalPrev = totals.prev_month_cost_usd;
+  const totalYoy = totals.yoy_cost_usd;
 
-  // MTD like-for-like comparison: sum prior_partial_cost_usd from mtd_comparison
   const mtdPriorTotal =
-    isMtd && mtdComparison
-      ? mtdComparison.cost_centers
-          .filter((mc) => !mc.is_split_charge)
-          .reduce((sum, mc) => sum + mc.prior_partial_cost_usd, 0)
+    isMtd && totals.mtd_prior_partial_cost_usd != null
+      ? totals.mtd_prior_partial_cost_usd
       : null;
 
   const momPrevious = mtdPriorTotal !== null ? mtdPriorTotal : totalPrev;
@@ -63,7 +52,7 @@ export function GlobalSummary({
               unavailable
               unavailableText="N/A (MTD)"
             />
-          ) : totalYoy > 0 ? (
+          ) : totalYoy != null ? (
             <DeltaIndicator current={totalCurrent} previous={totalYoy} />
           ) : (
             <DeltaIndicator current={0} previous={0} unavailable />

@@ -72,7 +72,7 @@ def _enrich_with_storage_lens(
             processed["summary"]["storage_lens"] = {
                 "total_bytes": metrics["total_bytes"],
                 "object_count": metrics["object_count"],
-                "timestamp": metrics["timestamp"],
+                "storage_lens_date": metrics["timestamp"],
                 "config_id": metrics["config_id"],
                 "org_id": metrics["org_id"],
             }
@@ -184,7 +184,7 @@ def _handle_backfill(
             )
 
             # Enrich with S3 Storage Lens data if configured
-            if storage_lens_config_id is not None:
+            if storage_lens_config_id:
                 _enrich_with_storage_lens(
                     processed, storage_lens_config_id, year, month
                 )
@@ -262,6 +262,20 @@ def _build_prev_complete_collected(collected: dict[str, Any]) -> dict[str, Any]:
     period_labels = collected["period_labels"]
     allocated_costs = collected.get("allocated_costs", {})
     periods_raw = collected.get("periods", {})
+    # Remap per-period CC mappings: prev_complete→current, prev_month stays,
+    # yoy_prev_complete→yoy.
+    cc_mappings_src: dict[str, dict[str, str]] = collected.get("cc_mappings", {})
+    cc_mappings_remapped: dict[str, dict[str, str]] = {}
+    if cc_mappings_src:
+        cc_mappings_remapped["current"] = cc_mappings_src.get(
+            "prev_complete", collected.get("cc_mapping", {})
+        )
+        cc_mappings_remapped["prev_month"] = cc_mappings_src.get(
+            "prev_month", collected.get("cc_mapping", {})
+        )
+        cc_mappings_remapped["yoy"] = cc_mappings_src.get(
+            "yoy_prev_complete", collected.get("cc_mapping", {})
+        )
 
     return {
         "now": collected["now"],
@@ -282,6 +296,7 @@ def _build_prev_complete_collected(collected: dict[str, Any]) -> dict[str, Any]:
             "yoy": raw_data.get("yoy_prev_complete", []),
         },
         "cc_mapping": collected.get("cc_mapping", {}),
+        "cc_mappings": cc_mappings_remapped,
         "split_charge_categories": collected.get("split_charge_categories", []),
         "split_charge_rules": collected.get("split_charge_rules", []),
         "allocated_costs": {
@@ -329,23 +344,42 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         logger.info("Starting data collection (bucket=%s)", bucket)
         collected = collect(cost_category_name=cost_category_name)
 
+        mtd_period = None
+        written_periods: list[str] = []
+
         # --- Write MTD period (current in-progress month) ---
-        logger.info("Processing MTD period data")
-        processed_mtd = process(
-            collected, include_efs=include_efs, include_ebs=include_ebs, is_mtd=True
-        )
+        # On the 1st of the month, _get_periods() omits "current" because
+        # the MTD window has zero width. Skip MTD processing in that case.
+        has_mtd = "current" in collected["raw_data"]
+        if has_mtd:
+            # Guard: skip writing when CE returned no cost groups for MTD
+            if not collected["raw_data"]["current"]:
+                logger.warning(
+                    "Skipping MTD period (no cost data returned by Cost Explorer)"
+                )
+            else:
+                logger.info("Processing MTD period data")
+                processed_mtd = process(
+                    collected,
+                    include_efs=include_efs,
+                    include_ebs=include_ebs,
+                    is_mtd=True,
+                )
 
-        if storage_lens_config_id is not None:
-            period_label = processed_mtd["summary"]["period"]
-            p_year, p_month = int(period_label[:4]), int(period_label[5:7])
-            _enrich_with_storage_lens(
-                processed_mtd, storage_lens_config_id, p_year, p_month
-            )
+                if storage_lens_config_id:
+                    period_label = processed_mtd["summary"]["period"]
+                    p_year, p_month = int(period_label[:4]), int(period_label[5:7])
+                    _enrich_with_storage_lens(
+                        processed_mtd, storage_lens_config_id, p_year, p_month
+                    )
 
-        logger.info("Writing MTD period to S3")
-        write_to_s3(processed_mtd, bucket, update_index_file=False)
-        mtd_period = processed_mtd["summary"]["period"]
-        logger.info("MTD period written: %s", mtd_period)
+                logger.info("Writing MTD period to S3")
+                write_to_s3(processed_mtd, bucket, update_index_file=False)
+                mtd_period = processed_mtd["summary"]["period"]
+                written_periods.append(mtd_period)
+                logger.info("MTD period written: %s", mtd_period)
+        else:
+            logger.info("1st of month — no MTD period to write")
 
         # --- Write most recently completed month ---
         # Build a collected-like dict for the prev_complete period using the
@@ -361,7 +395,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 is_mtd=False,
             )
 
-            if storage_lens_config_id is not None:
+            if storage_lens_config_id:
                 pc_year = int(prev_complete_label[:4])
                 pc_month = int(prev_complete_label[5:7])
                 _enrich_with_storage_lens(
@@ -370,16 +404,19 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
             logger.info("Writing prev_complete period to S3")
             write_to_s3(processed_prev, bucket, update_index_file=False)
+            written_periods.append(prev_complete_label)
             logger.info("prev_complete period written: %s", prev_complete_label)
 
-        # Update index once after both writes
-        logger.info("Updating index.json")
-        update_index(bucket)
+        # Update index once after all writes
+        if written_periods:
+            logger.info("Updating index.json")
+            update_index(bucket)
 
-        logger.info("Pipeline completed: MTD=%s", mtd_period)
+        result_period = mtd_period or prev_complete_label or "none"
+        logger.info("Pipeline completed: periods written=%s", written_periods)
         return {
             "statusCode": 200,
-            "body": json.dumps({"message": "ok", "period": mtd_period}),
+            "body": json.dumps({"message": "ok", "period": result_period}),
         }
     except Exception:
         logger.exception("Pipeline failed")

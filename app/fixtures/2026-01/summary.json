@@ -6,6 +6,11 @@
     "prev_month": "2025-12",
     "yoy": "2025-01"
   },
+  "totals": {
+    "current_cost_usd": 23500.0,
+    "prev_month_cost_usd": 22200.0,
+    "yoy_cost_usd": 17000.0
+  },
   "storage_config": {
     "include_efs": false,
     "include_ebs": false

@@ -16,10 +16,15 @@ export function computeMovingAverage(
 
     let sum = 0;
     for (let j = i - window + 1; j <= i; j++) {
-      const total = costCenterNames.reduce(
-        (acc, name) => acc + (Number(points[j][name]) || 0),
-        0,
-      );
+      const pt = points[j];
+      // Use pre-computed _total if available; fall back to summing CC values
+      const total =
+        typeof pt._total === "number"
+          ? pt._total
+          : costCenterNames.reduce(
+              (acc, name) => acc + (Number(pt[name]) || 0),
+              0,
+            );
       sum += total;
     }
     return sum / window;

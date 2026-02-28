@@ -119,12 +119,20 @@ def _get_periods(
     pm2_year = prev_year if prev_month > 1 else prev_year - 1
     pm2_start, pm2_end = _month_range(pm2_year, pm2_month)
 
+    # Year-over-year for the prev_complete month
+    yoy_pc_start, yoy_pc_end = _month_range(prev_year - 1, prev_month)
+
+    # On the 1st of the month, mtd_start == mtd_end (zero-width window).
+    # Skip the MTD period entirely and only produce prev_complete.
+    if mtd_start == mtd_end:
+        return {
+            "prev_complete": (prev_complete_start, prev_complete_end),
+            "prev_month": (pm2_start, pm2_end),
+            "yoy_prev_complete": (yoy_pc_start, yoy_pc_end),
+        }
+
     # Year-over-year (same month last year) — based on current in-progress month
     yoy_start, yoy_end = _month_range(year - 1, month)
-
-    # Year-over-year for the prev_complete month (different from yoy when
-    # the current MTD month != prev_complete month, which is always)
-    yoy_pc_start, yoy_pc_end = _month_range(prev_year - 1, prev_month)
 
     # Prior partial period for like-for-like MTD comparison
     prior_partial_start, prior_partial_end = _get_prior_partial_period(
@@ -156,7 +164,7 @@ def get_cost_and_usage(
     kwargs: dict[str, Any] = {
         "TimePeriod": {"Start": start, "End": end},
         "Granularity": "MONTHLY",
-        "Metrics": ["UnblendedCost", "UsageQuantity"],
+        "Metrics": ["NetAmortizedCost", "UsageQuantity"],
         "GroupBy": [
             {"Type": "TAG", "Key": "App"},
             {"Type": "DIMENSION", "Key": "USAGE_TYPE"},
@@ -211,7 +219,7 @@ def get_cost_categories(
     kwargs: dict[str, Any] = {
         "TimePeriod": {"Start": start, "End": end},
         "Granularity": "MONTHLY",
-        "Metrics": ["UnblendedCost"],
+        "Metrics": ["NetAmortizedCost"],
         "GroupBy": [
             {"Type": "TAG", "Key": "App"},
             {"Type": "COST_CATEGORY", "Key": category_name},
@@ -251,18 +259,25 @@ def get_split_charge_categories(
     if not category_name:
         return [], []
 
-    # Find the category ARN from its name
+    # Find the category ARN from its name (paginated)
     try:
-        resp = ce_client.list_cost_category_definitions()
+        target_arn = None
+        list_kwargs: dict[str, Any] = {}
+        while True:
+            resp = ce_client.list_cost_category_definitions(**list_kwargs)
+            for defn in resp.get("CostCategoryReferences", []):
+                if defn.get("Name") == category_name:
+                    target_arn = defn["CostCategoryArn"]
+                    break
+            if target_arn is not None:
+                break
+            token = resp.get("NextToken")
+            if not token:
+                break
+            list_kwargs["NextToken"] = token
     except Exception:
         logger.warning("Failed to list cost category definitions", exc_info=True)
         return [], []
-
-    target_arn = None
-    for defn in resp.get("CostCategoryReferences", []):
-        if defn.get("Name") == category_name:
-            target_arn = defn["CostCategoryArn"]
-            break
 
     if not target_arn:
         return [], []
@@ -385,13 +400,47 @@ def collect(
         logger.info("Period %s: %d groups collected", period_key, len(groups))
         raw_data[period_key] = groups
 
-    # Collect cost category mapping; resolved_cc_name may differ from
-    # cost_category_name when auto-discovery is used (cost_category_name == "").
-    current_start, current_end = periods["current"]
-    resolved_cc_name, cc_mapping = get_cost_categories(
-        ce_client, cost_category_name, current_start, current_end
+    # Collect cost category mappings per period.
+    # Discover the category name once from the primary period (current if available,
+    # otherwise prev_complete for 1st-of-month runs), then query each period
+    # independently so that workload-to-cost-center assignments reflect the CC
+    # rules that were active during that period.
+    discovery_key = "current" if "current" in periods else "prev_complete"
+    discovery_start, discovery_end = periods[discovery_key]
+    resolved_cc_name, discovery_cc_mapping = get_cost_categories(
+        ce_client, cost_category_name, discovery_start, discovery_end
     )
-    logger.info("Cost category mapping: %d entries", len(cc_mapping))
+    logger.info(
+        "Cost category mapping (%s): %d entries",
+        discovery_key,
+        len(discovery_cc_mapping),
+    )
+
+    # Query mapping for every period except prev_month_partial (partial window
+    # within the prior month; used only for MTD comparison aggregates, not CC
+    # assignment) and the discovery period (already queried above).
+    cc_mappings: dict[str, dict[str, str]] = {discovery_key: discovery_cc_mapping}
+    if resolved_cc_name:
+        for period_key, (start, end) in periods.items():
+            if period_key in (discovery_key, "prev_month_partial"):
+                continue
+            _, period_mapping = get_cost_categories(
+                ce_client, resolved_cc_name, start, end
+            )
+            logger.info(
+                "Cost category mapping (%s): %d entries",
+                period_key,
+                len(period_mapping),
+            )
+            cc_mappings[period_key] = period_mapping
+    else:
+        # No CC configured — fill all periods with the empty mapping
+        for period_key in periods:
+            if period_key not in cc_mappings:
+                cc_mappings[period_key] = {}
+
+    # For backward compatibility, expose discovery period's mapping as cc_mapping
+    cc_mapping = discovery_cc_mapping
 
     # Detect split charge categories and get allocated totals using the
     # resolved name so auto-discovered categories are handled correctly.
@@ -424,6 +473,7 @@ def collect(
         "period_labels": period_labels,
         "raw_data": raw_data,
         "cc_mapping": cc_mapping,
+        "cc_mappings": cc_mappings,
         "split_charge_categories": split_charge_categories,
         "split_charge_rules": split_charge_rules,
         "allocated_costs": allocated_costs,

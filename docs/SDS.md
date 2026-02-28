@@ -5,7 +5,7 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.28 (Draft)                               |
+| Version             | 0.29 (Draft)                               |
 | Date                | 2026-02-28                                 |
 
 ---
@@ -176,6 +176,8 @@ Refs: SRS-DP-450102
 The Report Renderer fetches `{year}-{month}/summary.json` for the selected reporting period using the AWS S3 SDK `GetObjectCommand` with temporary credentials from C-1.3. In local dev mode (auth bypass), it falls back to a plain HTTP fetch from the local dev server. It renders the 1-page cost report (global summary bar, cost center cards, storage metric cards). Period discovery in production reads `index.json` from S3; in local dev mode, it probes up to 36 months of candidate periods in parallel via `Promise.allSettled` to identify available summary.json files without requiring an index file.
 
 **MTD default selection**: After reading `index.json`, the Report Renderer identifies the default reporting period as the most recently completed month. The first entry in `index.json` (the current month) is the MTD period and is detected by inspecting the `is_mtd` field of its summary.json, or by comparing the period string to the current calendar month. The default period is set to the first entry in `index.json` whose `is_mtd` flag is `false` (i.e., the most recently completed month). The MTD period is selectable but not the default, consistent with SRS-DP-310501. When the MTD period is selected, the Report Renderer reads the `is_mtd` field from the fetched summary.json and passes it as a prop to layout components, which conditionally render the MTD indicator banner (SRS-DP-310219).
+
+**GlobalSummary data source**: The `GlobalSummary` component receives the `totals` object from the fetched summary.json as a prop and uses `totals.current_cost_usd`, `totals.prev_month_cost_usd`, `totals.yoy_cost_usd`, and (for MTD) `totals.mtd_prior_partial_cost_usd` to render the three global metric cards. It does not sum cost center values.
 Refs: SRS-DP-310201, SRS-DP-310211, SRS-DP-310219, SRS-DP-430102, SRS-DP-310501
 
 **[SDS-DP-010202] Render Cost Center Cards**
@@ -257,12 +259,13 @@ Refs: SRS-DP-310207, SRS-DP-310208, SRS-DP-310217
 **[SDS-DP-010221] Render Like-for-Like MTD Change Annotations**
 The Report Renderer conditionally renders like-for-like MTD change annotations when the selected period is the MTD period (i.e., when the fetched `summary.json` has `is_mtd: true`) and when the `mtd_comparison` field is present. The annotations replace the standard MoM change display across all components that show per-cost-center or per-workload change figures (global summary bar, cost center cards, workload table rows). The rendering logic is as follows:
 
-- **Annotation source**: The `prior_partial_cost_usd` value for each cost center and workload is read from `summary.json.mtd_comparison.cost_centers[*]` and its `.workloads[*]` arrays, matched by `name` field.
-- **Delta computation**: `delta_usd` = `current_cost_usd` − `prior_partial_cost_usd`; `delta_pct` = `delta_usd / prior_partial_cost_usd × 100` (if `prior_partial_cost_usd` > 0, otherwise displayed as "N/A").
+- **Global summary bar annotation source**: The `GlobalSummary` component reads `totals.current_cost_usd` (current MTD total) and `totals.mtd_prior_partial_cost_usd` (prior partial period total) from the `totals` object (SDS-DP-040002) to compute the global-level like-for-like delta. This is independent of cost center definitions and split charge rules.
+- **Per-cost-center and per-workload annotation source**: The `prior_partial_cost_usd` value for each cost center and workload is read from `summary.json.mtd_comparison.cost_centers[*]` and its `.workloads[*]` arrays, matched by `name` field.
+- **Delta computation**: `delta_usd` = `current_cost_usd` − `prior_partial_cost_usd`; `delta_pct` = `delta_usd / prior_partial_cost_usd × 100` (if `prior_partial_cost_usd` > 0, otherwise displayed as "N/A"). For the global bar: `delta_usd` = `totals.current_cost_usd` − `totals.mtd_prior_partial_cost_usd`.
 - **Display format**: Same combined format as standard MoM (e.g., "+$800 (+5.6%)"), using the same color-coded direction indicators (SRS-DP-310210).
 - **Comparison label**: A helper `formatPartialPeriodLabel(start: string, endExclusive: string): string` constructs a human-readable label from `mtd_comparison.prior_partial_start` and `mtd_comparison.prior_partial_end_exclusive` (e.g., `"Jan 1–7"` when start=`"2026-01-01"` and end_exclusive=`"2026-01-08"`). This label is rendered as a tooltip or inline annotation (e.g., "vs. Jan 1–7").
 - **YoY suppression**: When `is_mtd` is `true`, the YoY change column/row is replaced with "N/A (MTD)" to avoid displaying a full-year comparison against a partial current period.
-- **Fallback**: If `mtd_comparison` is absent from the fetched summary.json (e.g., data was written by an older pipeline version), the component falls back to the standard full-month MoM display using `prev_month_cost_usd`, consistent with prior SRS-DP-310219 behavior.
+- **Fallback**: If `mtd_comparison` is absent from the fetched summary.json (e.g., data was written by an older pipeline version), the component falls back to the standard full-month MoM display using `prev_month_cost_usd` for cost centers/workloads and `totals.prev_month_cost_usd` for the global bar, consistent with prior SRS-DP-310219 behavior.
 
 The `is_mtd` flag and the `mtd_comparison` object are passed as props down the component tree from the top-level page component (which fetches summary.json) to `GlobalSummary`, `CostCenterCard`, and `WorkloadTable`.
 Refs: SRS-DP-310219, SRS-DP-310220
@@ -382,7 +385,11 @@ The Data Processor computes total storage volume from S3 `TimedStorage-*` usage 
 Refs: SRS-DP-420104
 
 **[SDS-DP-020204] Write Summary JSON with Storage Lens Data and MTD Comparison**
-The Data Processor writes `{year}-{month}/summary.json` containing pre-computed aggregates for the 1-page report: cost center totals (current, prev month, YoY), workload breakdown per cost center (sorted by cost descending, with MoM/YoY), storage metrics (total cost, cost/TB, hot tier %), a `collected_at` ISO 8601 timestamp, and optionally a `storage_lens` object containing organization-wide storage data from C-2.3 when Storage Lens integration is configured. The `storage_lens` object includes: `total_bytes` and `storage_lens_date` (timestamp from CloudWatch metric). Cost centers with `is_split_charge: true` are included in the `cost_centers` array but excluded from global summary calculations. When `is_mtd` is `true`, the processor additionally writes an `mtd_comparison` object (SDS-DP-020211) containing cost center and workload totals for the prior month's equivalent partial period, plus the `prior_partial_start` and `prior_partial_end_exclusive` date strings that define the comparison range. The `mtd_comparison` field is omitted from completed-month summary.json files.
+The Data Processor writes `{year}-{month}/summary.json` containing pre-computed aggregates for the 1-page report: a `totals` object (see below), cost center totals (current, prev month, YoY), workload breakdown per cost center (sorted by cost descending, with MoM/YoY), storage metrics (total cost, cost/TB, hot tier %), a `collected_at` ISO 8601 timestamp, and optionally a `storage_lens` object containing organization-wide storage data from C-2.3 when Storage Lens integration is configured. The `storage_lens` object includes: `total_bytes` and `storage_lens_date` (timestamp from CloudWatch metric). Cost centers with `is_split_charge: true` are included in the `cost_centers` array but excluded from global summary calculations.
+
+The processor computes the `totals` object by summing `UnblendedCost` workload-level data across all cost centers for each period, independent of cost category allocation and split charge rules: `totals.current_cost_usd` = sum of all workload costs for `current`; `totals.prev_month_cost_usd` = sum for `prev_month`; `totals.yoy_cost_usd` = sum for `yoy`. When `is_mtd` is `true`, `totals.mtd_prior_partial_cost_usd` = sum of all workload costs for the prior partial period (SDS-DP-020210); otherwise it is `null`. This computation uses the workload-level `UnblendedCost` data already collected by C-2.1 — no additional AWS API calls are required.
+
+When `is_mtd` is `true`, the processor additionally writes an `mtd_comparison` object (SDS-DP-020211) containing cost center and workload totals for the prior month's equivalent partial period, plus the `prior_partial_start` and `prior_partial_end_exclusive` date strings that define the comparison range. The `mtd_comparison` field is omitted from completed-month summary.json files.
 Refs: SRS-DP-430101, SRS-DP-510002, SRS-DP-420108, SRS-DP-420110
 
 **[SDS-DP-020205] Write Workload Parquet**
@@ -584,6 +591,8 @@ Refs: SRS-DP-430101, SRS-DP-430102, SRS-DP-430103, SRS-DP-420109
 
 The `is_mtd` field indicates whether the reporting period is the current in-progress calendar month. When `true`, the SPA displays an MTD indicator and labels the period "MTD" in the period selector. When `false` (or absent), the period is a completed month and is labeled with its abbreviated month name.
 
+The `totals` object contains pre-computed global cost figures derived from raw workload costs across all cost centers. These values are computed from `UnblendedCost` workload-level data, summing all workloads regardless of cost category assignment, split charge rules, or cost center name changes. This makes the global dashboard figures (Total Spend, MoM delta, YoY delta) stable and self-consistent: `current_cost_usd` is the sum of all workload costs for the current period; `prev_month_cost_usd` is the sum for the previous month; `yoy_cost_usd` is the sum for the year-ago equivalent period; `mtd_prior_partial_cost_usd` is the sum for the prior month's equivalent partial period (populated only when `is_mtd` is `true`, otherwise `null`). The `GlobalSummary` component reads exclusively from this object for its three metric cards — it does not sum cost center values.
+
 The `mtd_comparison` field is present only when `is_mtd` is `true`. It contains pre-computed cost center and workload totals for the prior month's equivalent partial period (same number of days into the prior month as the MTD window covers in the current month), enabling the SPA to render like-for-like change annotations without additional API calls. The `prior_partial_start` and `prior_partial_end_exclusive` fields (ISO 8601 date strings) record the exact date range queried so the SPA can construct human-readable comparison labels.
 
 ```json
@@ -595,6 +604,12 @@ The `mtd_comparison` field is present only when `is_mtd` is `true`. It contains 
     "current": "2026-02",
     "prev_month": "2026-01",
     "yoy": "2025-02"
+  },
+  "totals": {
+    "current_cost_usd": 16500.00,
+    "prev_month_cost_usd": 15200.00,
+    "yoy_cost_usd": 12000.00,
+    "mtd_prior_partial_cost_usd": 3350.00
   },
   "storage_config": { "include_efs": true, "include_ebs": false },
   "storage_metrics": {
@@ -1376,3 +1391,4 @@ How should Dapanoskop obtain actual storage volume data (in bytes) to supplement
 | 0.26    | 2026-02-28 | —      | Update SDS-DP-010208 to reflect cytario design system token alignment: trend line color updated from pink-700 (`#be185d`) to cytario rose-700 token (`#be123c`); chart bar color palette updated from generic Tailwind colors to cytario brand tokens (purple-600 `#6b2695`, teal-600 `#2a9b9c`, cyan-600 `#0891b2`, emerald-600 `#059669`, amber-600 `#d97706`, rose-600 `#e11d48`); note that all color values are hardcoded hex literals because Recharts cannot consume CSS custom properties |
 | 0.27    | 2026-02-28 | —      | Update cost trend chart design (SDS-DP-010208): change default period window from 12 to 13 months (`"13m"` state, `filterPointsByRange` slices last 13 points); update time range toggle threshold and labels ("13 Months" / "All Time"); add MTD bar reduced-opacity rendering (`opacity={0.45}` on `Bar` elements for the `is_mtd` period); add collapsible legend (hidden by default, toggled via show/hide button); update §6.1 data flow note (up to 13 parallel S3 requests); update §7.9.3 dataset assumption |
 | 0.28    | 2026-02-28 | —      | Bug fix documentation (SDS-DP-020202): correct the YoY allocation gating introduced in v0.25 — replace the single `yoy_alloc_covers_known_cc` gate with a two-signal approach: (1) `yoy_alloc_covers_known_cc` (any real CC key present in `yoy_allocated`) and (2) `yoy_no_cc_amount` (the `"No cost category"` sentinel value, `None` when absent). The `$0` treatment for absent cost centers now applies only when `yoy_alloc_covers_known_cc` is `True` AND `yoy_no_cc_amount is None` — meaning the CC definition covers 100% of spend with no uncategorized residual. When a `"No cost category"` sentinel is present, the `Uncategorized` cost center uses that sentinel value directly and other absent CCs fall back to workload sums; this prevents the v0.25 regression where legitimate uncategorized costs were incorrectly zeroed when any real CC key appeared in `yoy_allocated` alongside a sentinel key |
+| 0.29    | 2026-02-28 | —      | Add pre-computed `totals` object to summary.json schema (SDS-DP-040002): `current_cost_usd`, `prev_month_cost_usd`, `yoy_cost_usd`, `mtd_prior_partial_cost_usd` (null for non-MTD periods) — computed from raw workload costs independent of cost category allocation and split charge rules; update SDS-DP-020204 to document processor computes and writes `totals`; update SDS-DP-010201 to document `GlobalSummary` reads from `totals` object; update SDS-DP-010221 to document global bar uses `totals.current_cost_usd` / `totals.mtd_prior_partial_cost_usd` for MTD like-for-like delta |

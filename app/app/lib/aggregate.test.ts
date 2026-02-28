@@ -56,7 +56,7 @@ describe("aggregateUsageTypes", () => {
     expect(result[0].yoy).toBe(60);
   });
 
-  test("handles rows with only current period (prev=0, yoy=0)", () => {
+  test("handles rows with only current period (prev=null, yoy=null)", () => {
     const rows: UsageTypeCostRow[] = [
       makeRow({ usage_type: "S3-Requests", period: CURRENT, cost_usd: 250 }),
     ];
@@ -64,8 +64,8 @@ describe("aggregateUsageTypes", () => {
     const result = aggregateUsageTypes(rows, CURRENT, PREV, YOY);
     expect(result).toHaveLength(1);
     expect(result[0].current).toBe(250);
-    expect(result[0].prev).toBe(0);
-    expect(result[0].yoy).toBe(0);
+    expect(result[0].prev).toBeNull();
+    expect(result[0].yoy).toBeNull();
   });
 
   test("sorts by current cost descending", () => {

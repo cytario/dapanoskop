@@ -104,30 +104,30 @@ describe("formatPartialPeriodLabel", () => {
 });
 
 describe("formatBytes", () => {
-  test("TB range", () => {
-    // 5 TB (binary: 5 * 2^40)
-    expect(formatBytes(5 * 1_099_511_627_776)).toBe("5.0 TB");
+  test("TiB range", () => {
+    // 5 TiB (binary: 5 * 2^40)
+    expect(formatBytes(5 * 1_099_511_627_776)).toBe("5.0 TiB");
   });
 
-  test("GB range", () => {
-    // 512 GB (binary: 512 * 2^30)
-    expect(formatBytes(512 * 1_073_741_824)).toBe("512.0 GB");
+  test("GiB range", () => {
+    // 512 GiB (binary: 512 * 2^30)
+    expect(formatBytes(512 * 1_073_741_824)).toBe("512.0 GiB");
   });
 
-  test("exact boundary at 1 TB", () => {
-    expect(formatBytes(1_099_511_627_776)).toBe("1.0 TB");
+  test("exact boundary at 1 TiB", () => {
+    expect(formatBytes(1_099_511_627_776)).toBe("1.0 TiB");
   });
 
   test("0 bytes", () => {
-    expect(formatBytes(0)).toBe("0.0 GB");
+    expect(formatBytes(0)).toBe("0.0 GiB");
   });
 
-  test("PB range", () => {
-    // Real AWS Storage Lens value: 1.5 PB
-    expect(formatBytes(1_649_188_949_133_511)).toBe("1.5 PB");
+  test("PiB range", () => {
+    // Real AWS Storage Lens value: 1.5 PiB
+    expect(formatBytes(1_649_188_949_133_511)).toBe("1.5 PiB");
   });
 
-  test("exact boundary at 1 PB", () => {
-    expect(formatBytes(1_125_899_906_842_624)).toBe("1.0 PB");
+  test("exact boundary at 1 PiB", () => {
+    expect(formatBytes(1_125_899_906_842_624)).toBe("1.0 PiB");
   });
 });

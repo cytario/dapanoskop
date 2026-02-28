@@ -65,8 +65,8 @@ export function StorageOverview({
         className="h-full"
         label={
           <>
-            Cost / TB{" "}
-            <InfoTooltip text="Total storage cost divided by the total volume of data stored, measured in terabytes (TB). Lower values indicate better storage cost efficiency." />
+            Cost / TiB{" "}
+            <InfoTooltip text="Total storage cost divided by the total volume of data stored, measured in tebibytes (TiB). Lower values indicate better storage cost efficiency." />
           </>
         }
         value={formatUsd(metrics.cost_per_tb_usd)}

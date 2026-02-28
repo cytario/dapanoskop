@@ -155,7 +155,9 @@ export default function WorkloadDetail() {
     };
   }, [period, name]);
 
-  // Find workload in summary
+  // Find workload in summary. If duplicate workload names exist across cost
+  // centers, this picks the first match — acceptable since App tag values are
+  // unique identifiers and duplicates would indicate a data issue upstream.
   const workload = summary?.cost_centers
     .flatMap((cc) => cc.workloads.map((wl) => ({ ...wl, costCenter: cc.name })))
     .find((wl) => wl.name === name);
@@ -211,7 +213,7 @@ export default function WorkloadDetail() {
               <MetricCard
                 label="vs Last Year"
                 value={
-                  workload.yoy_cost_usd > 0 ? (
+                  workload.yoy_cost_usd != null ? (
                     <DeltaIndicator
                       current={workload.current_cost_usd}
                       previous={workload.yoy_cost_usd}

@@ -20,6 +20,11 @@ const fakeSummary: CostSummary = {
   collected_at: "2026-02-08T03:00:00Z",
   period: "2026-01",
   periods: { current: "2026-01", prev_month: "2025-12", yoy: "2025-01" },
+  totals: {
+    current_cost_usd: 0,
+    prev_month_cost_usd: 0,
+    yoy_cost_usd: 0,
+  },
   storage_config: { include_efs: true, include_ebs: false },
   storage_metrics: {
     total_cost_usd: 1234.56,

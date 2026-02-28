@@ -16,11 +16,18 @@ const mockFetchSummary = vi.mocked(fetchSummary);
 function makeSummary(
   period: string,
   costs: Record<string, number>,
+  totalOverride?: number,
 ): CostSummary {
+  const ccSum = Object.values(costs).reduce((s, v) => s + v, 0);
   return {
     collected_at: "2026-01-01T00:00:00Z",
     period,
     periods: { current: period, prev_month: "", yoy: "" },
+    totals: {
+      current_cost_usd: totalOverride ?? ccSum,
+      prev_month_cost_usd: 0,
+      yoy_cost_usd: 0,
+    },
     storage_config: { include_efs: false, include_ebs: false },
     storage_metrics: {
       total_cost_usd: 0,
@@ -114,6 +121,23 @@ describe("useTrendData", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.error).toBe("Failed to load trend data.");
+  });
+
+  it("populates _total from summary.totals rather than summing CC values", async () => {
+    mockDiscoverPeriods.mockResolvedValue(["2025-12"]);
+    // Total override (25000) differs from CC sum (14000 + 6800 = 20800)
+    mockFetchSummary.mockResolvedValue(
+      makeSummary(
+        "2025-12",
+        { Engineering: 14000, "Data Science": 6800 },
+        25000,
+      ),
+    );
+
+    const { result } = renderHook(() => useTrendData());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.points[0]._total).toBe(25000);
   });
 
   it("handles empty periods list", async () => {

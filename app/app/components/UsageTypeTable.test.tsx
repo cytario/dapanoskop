@@ -65,9 +65,9 @@ describe("UsageTypeTable", () => {
     expect(container.textContent).toContain("$1,234.56");
   });
 
-  it("renders N/A when previous period cost is zero", () => {
+  it("renders N/A when previous period data is missing", () => {
     const rows = [makeRow({ period: currentPeriod, cost_usd: 100 })];
-    // No prev period row => prev aggregates to 0 => N/A
+    // No prev period row => prev aggregates to null => N/A
     const { container } = render(
       <UsageTypeTable
         rows={rows}
@@ -82,6 +82,26 @@ describe("UsageTypeTable", () => {
     const vsLastYear = cells[4]?.textContent;
     expect(vsLastMonth).toBe("N/A");
     expect(vsLastYear).toBe("N/A");
+  });
+
+  it("renders delta (not N/A) when previous period cost is zero", () => {
+    const rows = [
+      makeRow({ period: currentPeriod, cost_usd: 100 }),
+      makeRow({ period: prevPeriod, cost_usd: 0 }),
+    ];
+    const { container } = render(
+      <UsageTypeTable
+        rows={rows}
+        currentPeriod={currentPeriod}
+        prevPeriod={prevPeriod}
+        yoyPeriod={yoyPeriod}
+      />,
+    );
+    const cells = container.querySelectorAll("td");
+    const vsLastMonth = cells[3]?.textContent;
+    // Zero cost previous period is valid data — should show delta, not N/A
+    expect(vsLastMonth).not.toBe("N/A");
+    expect(vsLastMonth).toContain("+$100.00");
   });
 
   it("renders CostChange when previous period data exists", () => {

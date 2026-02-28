@@ -4,8 +4,8 @@ export interface AggregatedUsageTypeRow {
   usage_type: string;
   category: string;
   current: number;
-  prev: number;
-  yoy: number;
+  prev: number | null;
+  yoy: number | null;
 }
 
 /**
@@ -30,14 +30,15 @@ export function aggregateUsageTypes(
         usage_type: row.usage_type,
         category: row.category,
         current: 0,
-        prev: 0,
-        yoy: 0,
+        prev: null,
+        yoy: null,
       };
       byUsageType.set(row.usage_type, agg);
     }
     if (row.period === currentPeriod) agg.current += row.cost_usd;
-    else if (row.period === prevPeriod) agg.prev += row.cost_usd;
-    else if (row.period === yoyPeriod) agg.yoy += row.cost_usd;
+    else if (row.period === prevPeriod)
+      agg.prev = (agg.prev ?? 0) + row.cost_usd;
+    else if (row.period === yoyPeriod) agg.yoy = (agg.yoy ?? 0) + row.cost_usd;
   }
 
   return [...byUsageType.values()].sort((a, b) => b.current - a.current);

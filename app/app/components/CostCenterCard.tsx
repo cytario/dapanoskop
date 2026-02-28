@@ -62,7 +62,9 @@ export function CostCenterCard({
           ((topMover.wl.current_cost_usd - topMover.prev) / topMover.prev) *
           100
         ).toFixed(1)
-      : "0.0";
+      : topMover && topMover.wl.current_cost_usd > 0
+        ? "New"
+        : "0.0";
 
   const momLabel =
     isMtd && mtdComparison
@@ -127,7 +129,7 @@ export function CostCenterCard({
                 unavailableText="YoY N/A (MTD)"
                 label=""
               />
-            ) : costCenter.yoy_cost_usd > 0 ? (
+            ) : costCenter.yoy_cost_usd != null ? (
               <DeltaIndicator
                 current={costCenter.current_cost_usd}
                 previous={costCenter.yoy_cost_usd}
@@ -148,7 +150,8 @@ export function CostCenterCard({
           {topMover && (
             <>
               {" "}
-              · Top mover: {topMover.name} ({topMoverPct}%{" "}
+              · Top mover: {topMover.name} (
+              {topMoverPct === "New" ? "New" : `${topMoverPct}%`}{" "}
               {isMtd && mtdComparison ? "partial" : "MoM"})
             </>
           )}

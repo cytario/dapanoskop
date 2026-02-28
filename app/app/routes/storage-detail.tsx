@@ -168,14 +168,15 @@ export default function StorageDetail() {
         }
 
         try {
-          const result = await conn.query(`
+          const stmt = await conn.prepare(`
             SELECT usage_type, SUM(usage_quantity) as gb_months, SUM(cost_usd) as cost_usd
             FROM read_parquet(${parquetSource})
             WHERE usage_type LIKE '%TimedStorage%'
-            AND period = '${period}'
+            AND period = ?
             GROUP BY usage_type
             ORDER BY gb_months DESC
           `);
+          const result = await stmt.query(period);
 
           const rows: TierRow[] = [];
           for (let i = 0; i < result.numRows; i++) {
@@ -273,7 +274,7 @@ export default function StorageDetail() {
               value={`${storageMetrics.hot_tier_percentage.toFixed(1)}%`}
             />
             <MetricCard
-              label="Cost / TB"
+              label="Cost / TiB"
               value={formatUsd(storageMetrics.cost_per_tb_usd)}
             />
           </div>

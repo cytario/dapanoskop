@@ -1,3 +1,10 @@
+export interface Totals {
+  current_cost_usd: number;
+  prev_month_cost_usd: number;
+  yoy_cost_usd: number;
+  mtd_prior_partial_cost_usd?: number;
+}
+
 /** Matches SDS-DP-040002 summary.json schema */
 export interface CostSummary {
   collected_at: string;
@@ -9,6 +16,7 @@ export interface CostSummary {
   };
   is_mtd?: boolean;
   mtd_comparison?: MtdComparison;
+  totals: Totals;
   storage_config: {
     include_efs: boolean;
     include_ebs: boolean;
@@ -40,7 +48,7 @@ export interface MtdWorkload {
 export interface StorageLens {
   total_bytes: number;
   object_count: number;
-  timestamp: string;
+  storage_lens_date: string;
   config_id: string;
 }
 
@@ -57,7 +65,7 @@ export interface CostCenter {
   name: string;
   current_cost_usd: number;
   prev_month_cost_usd: number;
-  yoy_cost_usd: number;
+  yoy_cost_usd?: number;
   workloads: Workload[];
   is_split_charge?: boolean;
 }
@@ -66,7 +74,7 @@ export interface Workload {
   name: string;
   current_cost_usd: number;
   prev_month_cost_usd: number;
-  yoy_cost_usd: number;
+  yoy_cost_usd?: number;
 }
 
 export interface TaggingCoverage {

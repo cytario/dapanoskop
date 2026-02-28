@@ -147,9 +147,9 @@ describe("CostCenterCard", () => {
       ],
     };
     const { container } = renderCard(newWorkloadCC);
-    // Should show top mover with 0.0% (division by zero case)
+    // Should show top mover with "New" when prev is 0 and current > 0
     expect(container.textContent).toContain("Top mover:");
-    expect(container.textContent).toContain("0.0% MoM");
+    expect(container.textContent).toContain("New MoM");
   });
 
   it("shows MTD like-for-like comparison label when isMtd with mtdComparison", () => {

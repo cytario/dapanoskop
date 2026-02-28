@@ -77,9 +77,9 @@ export function formatPartialPeriodLabel(
 
 export function formatBytes(bytes: number): string {
   const pb = bytes / 1_125_899_906_842_624; // 2^50
-  if (pb >= 1) return `${pb.toFixed(1)} PB`;
+  if (pb >= 1) return `${pb.toFixed(1)} PiB`;
   const tb = bytes / 1_099_511_627_776; // 2^40
-  if (tb >= 1) return `${tb.toFixed(1)} TB`;
+  if (tb >= 1) return `${tb.toFixed(1)} TiB`;
   const gb = bytes / 1_073_741_824; // 2^30
-  return `${gb.toFixed(1)} GB`;
+  return `${gb.toFixed(1)} GiB`;
 }

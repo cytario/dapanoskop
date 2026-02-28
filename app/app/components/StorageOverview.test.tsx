@@ -25,11 +25,11 @@ describe("StorageOverview", () => {
     expect(container.textContent).toContain("$1,234.56");
   });
 
-  it("renders the cost per TB card", () => {
+  it("renders the cost per TiB card", () => {
     const { container } = renderWithRouter(
       <StorageOverview metrics={metrics} period="2026-01" />,
     );
-    expect(container.textContent).toContain("Cost / TB");
+    expect(container.textContent).toContain("Cost / TiB");
     expect(container.textContent).toContain("$23.33");
   });
 
@@ -54,7 +54,7 @@ describe("StorageOverview", () => {
     );
     expect(labels).toContain("Total cost of S3 storage for this period.");
     expect(labels).toContain(
-      "Total storage cost divided by the total volume of data stored, measured in terabytes (TB). Lower values indicate better storage cost efficiency.",
+      "Total storage cost divided by the total volume of data stored, measured in tebibytes (TiB). Lower values indicate better storage cost efficiency.",
     );
     expect(labels).toContain(
       "Percentage of stored data in frequently accessed tiers (e.g., S3 Standard, EFS Standard). High values may indicate optimization opportunities via lifecycle policies.",
@@ -116,13 +116,13 @@ describe("StorageOverview", () => {
   it("renders Total Stored card when storage_lens_total_bytes is present", () => {
     const metricsWithLens: StorageMetrics = {
       ...metrics,
-      storage_lens_total_bytes: 5 * 1_099_511_627_776, // 5 TB (binary)
+      storage_lens_total_bytes: 5 * 1_099_511_627_776, // 5 TiB (binary)
     };
     const { container } = renderWithRouter(
       <StorageOverview metrics={metricsWithLens} period="2026-01" />,
     );
     expect(container.textContent).toContain("Total Stored");
-    expect(container.textContent).toContain("5.0 TB");
+    expect(container.textContent).toContain("5.0 TiB");
   });
 
   it("does not render Total Stored card when storage_lens_total_bytes is absent", () => {
@@ -141,7 +141,7 @@ describe("StorageOverview", () => {
       <StorageOverview metrics={metricsWithLens} period="2026-01" />,
     );
     const tooltipButtons = container.querySelectorAll("button[aria-label]");
-    // Should have 4 tooltip triggers now (Storage Cost, Total Stored, Cost/TB, Hot Tier)
+    // Should have 4 tooltip triggers now (Storage Cost, Total Stored, Cost/TiB, Hot Tier)
     expect(tooltipButtons.length).toBe(4);
     const labels = Array.from(tooltipButtons).map((b) =>
       b.getAttribute("aria-label"),
@@ -163,7 +163,7 @@ describe("StorageOverview", () => {
   it("renders Total Stored card as a link to storage-detail when storage_lens_total_bytes is present", () => {
     const metricsWithLens: StorageMetrics = {
       ...metrics,
-      storage_lens_total_bytes: 5 * 1_099_511_627_776, // 5 TB (binary)
+      storage_lens_total_bytes: 5 * 1_099_511_627_776, // 5 TiB (binary)
     };
     const { container } = renderWithRouter(
       <StorageOverview metrics={metricsWithLens} period="2026-01" />,
@@ -173,6 +173,6 @@ describe("StorageOverview", () => {
     );
     expect(link).toBeTruthy();
     expect(link?.textContent).toContain("Total Stored");
-    expect(link?.textContent).toContain("5.0 TB");
+    expect(link?.textContent).toContain("5.0 TiB");
   });
 });

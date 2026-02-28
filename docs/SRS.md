@@ -5,7 +5,7 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.19 (Draft)                               |
+| Version             | 0.20 (Draft)                               |
 | Date                | 2026-02-28                                 |
 
 ---
@@ -140,14 +140,14 @@ This is the primary screen of the application. It presents a single-page cost re
 ##### Global Summary
 
 **[SRS-DP-310211] Display Global Cost Summary**
-The system displays a summary bar at the top of the report showing three metrics: total spend across all cost centers for the current period, the MoM change (absolute and percentage combined), and the YoY change (absolute and percentage combined). On viewports narrower than 640px (Tailwind `sm` breakpoint), the three metrics stack vertically in a single column.
+The system displays a summary bar at the top of the report showing three metrics: total spend for the current period, the MoM change (absolute and percentage combined), and the YoY change (absolute and percentage combined). On viewports narrower than 640px (Tailwind `sm` breakpoint), the three metrics stack vertically in a single column. The total spend and comparison deltas are sourced from the pre-computed `totals` object in summary.json (see SDS-DP-040002), which is computed from raw workload costs independent of cost category allocation, split charge rules, and cost category renames. This ensures the global totals remain stable across cost category configuration changes and correctly account for 100% of spend regardless of how cost centers are defined.
 Refs: URS-DP-10301, URS-DP-10302, URS-DP-30104
 
 | No | Element | Data type | Value range | Other relevant information |
 |----|---------|-----------|-------------|---------------------------|
-| 1  | Total spend | Currency (USD) | ≥ 0 | Sum of all cost centers, formatted with 2 decimal places |
-| 2  | MoM change | Currency + Percentage | Any | Combined display: "+$1,300 (+5.9%)" |
-| 3  | YoY change | Currency + Percentage | Any | Shows "N/A" if prior year data unavailable |
+| 1  | Total spend | Currency (USD) | ≥ 0 | Pre-computed from raw workload costs (`totals.current_cost_usd`), formatted with 2 decimal places |
+| 2  | MoM change | Currency + Percentage | Any | Derived from `totals.current_cost_usd` and `totals.prev_month_cost_usd`; combined display: "+$1,300 (+5.9%)" |
+| 3  | YoY change | Currency + Percentage | Any | Derived from `totals.current_cost_usd` and `totals.yoy_cost_usd`; shows "N/A" if prior year data unavailable |
 
 ##### Cost Trend Chart
 
@@ -698,3 +698,4 @@ Refs: URS-DP-10101
 | 0.17    | 2026-02-28 | —      | Add empty CE response skip requirement (SRS-DP-420111): pipeline must not write data for a month when CE returns zero result groups, preserving existing historical data for periods beyond CE retention window |
 | 0.18    | 2026-02-28 | —      | Bug fix documentation: update SRS-DP-420102 to clarify that each selectable period's YoY comparison must use the correct year-ago period for that specific period (not a shared offset year-ago period) — fixes previously ambiguous wording that implied a single shared YoY period sufficed for both the MTD and completed-month entries |
 | 0.19    | 2026-02-28 | —      | Update cost trend chart defaults and behaviors (SRS-DP-310214): change default period window from 12 months to 13 months to enable visual YoY comparison of the last completed month; update time range toggle options accordingly ("13 Months" / "All Time"); add MTD bar visual distinction (reduced opacity); add collapsible legend (hidden by default) |
+| 0.20    | 2026-02-28 | —      | Update global cost summary data source (SRS-DP-310211): total spend and MoM/YoY deltas are now sourced from pre-computed `totals` object in summary.json (computed from raw workload costs, independent of cost category allocation and split charge rules) rather than summed from cost center values |

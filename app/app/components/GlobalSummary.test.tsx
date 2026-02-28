@@ -8,6 +8,11 @@ function makeSummary(overrides?: Partial<CostSummary>): CostSummary {
     collected_at: "2026-01-08T03:00:00Z",
     period: "2026-01",
     periods: { current: "2026-01", prev_month: "2025-12", yoy: "2025-01" },
+    totals: {
+      current_cost_usd: 20000,
+      prev_month_cost_usd: 19000,
+      yoy_cost_usd: 14500,
+    },
     storage_config: { include_efs: true, include_ebs: false },
     storage_metrics: {
       total_cost_usd: 100,
@@ -42,10 +47,9 @@ function makeSummary(overrides?: Partial<CostSummary>): CostSummary {
 }
 
 describe("GlobalSummary", () => {
-  it("renders total spend", () => {
+  it("renders total spend from totals", () => {
     const summary = makeSummary();
     render(<GlobalSummary summary={summary} />);
-    // Total = 15000 + 5000 = 20000
     expect(screen.getByText("$20,000.00")).toBeInTheDocument();
   });
 
@@ -62,7 +66,14 @@ describe("GlobalSummary", () => {
   });
 
   it("shows MTD like-for-like label when isMtd with mtdComparison", () => {
-    const summary = makeSummary();
+    const summary = makeSummary({
+      totals: {
+        current_cost_usd: 20000,
+        prev_month_cost_usd: 19000,
+        yoy_cost_usd: 14500,
+        mtd_prior_partial_cost_usd: 5500,
+      },
+    });
     const mtdComparison: MtdComparison = {
       prior_partial_start: "2025-12-01",
       prior_partial_end_exclusive: "2025-12-08",
@@ -91,23 +102,19 @@ describe("GlobalSummary", () => {
     expect(container.textContent).not.toContain("vs Last Month");
   });
 
-  it("uses MTD partial costs for comparison", () => {
-    const summary = makeSummary();
+  it("uses MTD partial costs from totals for comparison", () => {
+    const summary = makeSummary({
+      totals: {
+        current_cost_usd: 20000,
+        prev_month_cost_usd: 19000,
+        yoy_cost_usd: 14500,
+        mtd_prior_partial_cost_usd: 13000,
+      },
+    });
     const mtdComparison: MtdComparison = {
       prior_partial_start: "2025-12-01",
       prior_partial_end_exclusive: "2025-12-08",
-      cost_centers: [
-        {
-          name: "Engineering",
-          prior_partial_cost_usd: 10000,
-          workloads: [],
-        },
-        {
-          name: "Marketing",
-          prior_partial_cost_usd: 3000,
-          workloads: [],
-        },
-      ],
+      cost_centers: [],
     };
     const { container } = render(
       <GlobalSummary
@@ -116,7 +123,7 @@ describe("GlobalSummary", () => {
         mtdComparison={mtdComparison}
       />,
     );
-    // Total current = 20000, MTD prior = 13000, delta = +7000
+    // Total current = 20000, MTD prior from totals = 13000, delta = +7000
     expect(container.textContent).toContain("+$7,000");
   });
 
@@ -128,17 +135,36 @@ describe("GlobalSummary", () => {
     expect(container.textContent).toContain("N/A (MTD)");
   });
 
-  it("falls back to standard MoM when isMtd but no mtdComparison", () => {
+  it("falls back to standard MoM when isMtd but no mtd_prior_partial_cost_usd", () => {
     const summary = makeSummary();
     const { container } = render(
       <GlobalSummary summary={summary} isMtd={true} />,
     );
-    // Uses prev_month total: 14200 + 4800 = 19000, delta = 20000 - 19000 = +1000
+    // No mtd_prior_partial_cost_usd in totals, uses prev_month: 19000, delta = 20000 - 19000 = +1000
     expect(container.textContent).toContain("+$1,000");
   });
 
-  it("excludes split charge cost centers from totals", () => {
+  it("treats zero-cost YoY as valid data, not unavailable", () => {
     const summary = makeSummary({
+      totals: {
+        current_cost_usd: 15000,
+        prev_month_cost_usd: 14200,
+        yoy_cost_usd: 0,
+      },
+    });
+    const { container } = render(<GlobalSummary summary={summary} />);
+    // YoY of $0 is valid — should show a delta, not "N/A"
+    expect(container.textContent).toContain("vs Last Year");
+    expect(container.textContent).not.toContain("N/A");
+  });
+
+  it("uses totals independent of cost center values", () => {
+    const summary = makeSummary({
+      totals: {
+        current_cost_usd: 25000,
+        prev_month_cost_usd: 22000,
+        yoy_cost_usd: 18000,
+      },
       cost_centers: [
         {
           name: "Engineering",
@@ -157,8 +183,10 @@ describe("GlobalSummary", () => {
         },
       ],
     });
-    render(<GlobalSummary summary={summary} />);
-    // Should only include Engineering ($15000), not Split Charges
-    expect(screen.getByText("$15,000.00")).toBeInTheDocument();
+    const { container } = render(<GlobalSummary summary={summary} />);
+    // Should use totals ($25,000), not sum of cost centers
+    expect(container.textContent).toContain("$25,000.00");
+    expect(container.textContent).not.toContain("$15,000.00");
+    expect(container.textContent).not.toContain("$17,000.00");
   });
 });

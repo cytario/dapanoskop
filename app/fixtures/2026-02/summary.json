@@ -7,6 +7,12 @@
     "prev_month": "2025-12",
     "yoy": "2025-02"
   },
+  "totals": {
+    "current_cost_usd": 22200.0,
+    "prev_month_cost_usd": 22200.0,
+    "yoy_cost_usd": 17750.0,
+    "mtd_prior_partial_cost_usd": 20800.0
+  },
   "storage_config": {
     "include_efs": false,
     "include_ebs": false

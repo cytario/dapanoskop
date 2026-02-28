@@ -18,7 +18,7 @@ def _make_group(app: str, usage_type: str, cost: float, quantity: float) -> dict
     return {
         "Keys": [f"App${app}", usage_type],
         "Metrics": {
-            "UnblendedCost": {"Amount": str(cost), "Unit": "USD"},
+            "NetAmortizedCost": {"Amount": str(cost), "Unit": "USD"},
             "UsageQuantity": {"Amount": str(quantity), "Unit": "N/A"},
         },
     }
@@ -436,7 +436,7 @@ def test_parse_groups_empty_keys() -> None:
         {
             "Keys": [],
             "Metrics": {
-                "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
                 "UsageQuantity": {"Amount": "10", "Unit": "N/A"},
             },
         }
@@ -456,7 +456,7 @@ def test_parse_groups_single_key() -> None:
         {
             "Keys": ["App$web-app"],
             "Metrics": {
-                "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
                 "UsageQuantity": {"Amount": "10", "Unit": "N/A"},
             },
         }
@@ -475,7 +475,7 @@ def test_parse_groups_missing_keys_field() -> None:
     groups = [
         {
             "Metrics": {
-                "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
                 "UsageQuantity": {"Amount": "10", "Unit": "N/A"},
             },
         }

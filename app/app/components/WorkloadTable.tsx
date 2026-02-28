@@ -78,7 +78,7 @@ export function WorkloadTable({
                     unavailable
                     unavailableText="N/A (MTD)"
                   />
-                ) : wl.yoy_cost_usd > 0 ? (
+                ) : wl.yoy_cost_usd != null ? (
                   <DeltaIndicator
                     current={wl.current_cost_usd}
                     previous={wl.yoy_cost_usd}

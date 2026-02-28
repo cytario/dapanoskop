@@ -52,15 +52,18 @@ def test_get_periods_mid_month() -> None:
 
 
 def test_get_periods_first_of_month() -> None:
-    """On Mar 1, current (MTD) is March, prev_complete is February."""
+    """On Mar 1, MTD window has zero width — skip current, only prev_complete."""
     now = datetime(2026, 3, 1, 6, 0, 0, tzinfo=timezone.utc)
     periods = _get_periods(now)
 
-    assert periods["current"][0] == "2026-03-01"
-    assert periods["current"][1] == "2026-03-01"  # today = start, empty range
+    # No MTD period on the 1st (zero-width window)
+    assert "current" not in periods
+    assert "yoy" not in periods
+    assert "prev_month_partial" not in periods
+    # Only prev_complete related periods
     assert periods["prev_complete"][0] == "2026-02-01"
     assert periods["prev_month"][0] == "2026-01-01"
-    assert periods["yoy"][0] == "2025-03-01"
+    assert periods["yoy_prev_complete"][0] == "2025-02-01"
 
 
 def test_get_periods_january() -> None:
@@ -79,15 +82,18 @@ def test_get_periods_january() -> None:
 
 
 def test_get_periods_january_first() -> None:
-    """On Jan 1, current (MTD) is January with a zero-length window, prev_complete is December."""
+    """On Jan 1, MTD window has zero width — skip current, only prev_complete."""
     now = datetime(2026, 1, 1, 6, 0, 0, tzinfo=timezone.utc)
     periods = _get_periods(now)
 
-    assert periods["current"][0] == "2026-01-01"
-    assert periods["current"][1] == "2026-01-01"  # empty range
+    # No MTD period on the 1st (zero-width window)
+    assert "current" not in periods
+    assert "yoy" not in periods
+    assert "prev_month_partial" not in periods
+    # Only prev_complete related periods
     assert periods["prev_complete"][0] == "2025-12-01"
     assert periods["prev_month"][0] == "2025-11-01"
-    assert periods["yoy"][0] == "2025-01-01"
+    assert periods["yoy_prev_complete"][0] == "2024-12-01"
 
 
 def test_get_periods_with_target_month() -> None:
@@ -178,7 +184,7 @@ def test_get_cost_and_usage_pagination_logic() -> None:
                         {
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "100.0", "Unit": "USD"},
+                                "NetAmortizedCost": {"Amount": "100.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "744.0", "Unit": "N/A"},
                             },
                         }
@@ -194,7 +200,7 @@ def test_get_cost_and_usage_pagination_logic() -> None:
                         {
                             "Keys": ["App$api", "BoxUsage:t3.medium"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "50.0", "Unit": "USD"},
+                                "NetAmortizedCost": {"Amount": "50.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "372.0", "Unit": "N/A"},
                             },
                         }
@@ -267,12 +273,14 @@ def test_get_cost_categories_discovers_first_category() -> None:
                     {
                         "Keys": ["App$web-app", "Environment$Production"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "100.0", "Unit": "USD"}
+                            "NetAmortizedCost": {"Amount": "100.0", "Unit": "USD"}
                         },
                     },
                     {
                         "Keys": ["App$api", "Environment$Development"],
-                        "Metrics": {"UnblendedCost": {"Amount": "50.0", "Unit": "USD"}},
+                        "Metrics": {
+                            "NetAmortizedCost": {"Amount": "50.0", "Unit": "USD"}
+                        },
                     },
                 ]
             }
@@ -306,20 +314,14 @@ def test_collect_integration() -> None:
     # Mock the entire boto3.client call to return a mock CE client
     mock_ce_client = MagicMock()
 
-    # In MTD mode (no target), collect() queries:
-    # 1: current (MTD)
-    # 2: prev_complete
-    # 3: prev_month
-    # 4: yoy
-    # 5: yoy_prev_complete
-    # 6: prev_month_partial
-    # 7: cost category mapping (App tag + COST_CATEGORY)
-    # 8: allocated costs: current
-    # 9: allocated costs: prev_complete
-    # 10: allocated costs: prev_month
-    # 11: allocated costs: yoy
-    # 12: allocated costs: yoy_prev_complete
-    # 13: allocated costs: prev_month_partial
+    # In MTD mode (no target), collect() queries (H1: per-period CC mappings):
+    # 1-6:  raw cost data: current, prev_complete, prev_month, yoy, yoy_prev_complete, prev_month_partial
+    # 7:    CC mapping: current (App tag + COST_CATEGORY)
+    # 8:    CC mapping: prev_complete
+    # 9:    CC mapping: prev_month
+    # 10:   CC mapping: yoy
+    # 11:   CC mapping: yoy_prev_complete
+    # 12-17: allocated costs: current, prev_complete, prev_month, yoy, yoy_prev_complete, prev_month_partial
     mock_ce_client.get_cost_and_usage.side_effect = [
         # 1: current (MTD) — two groups
         {
@@ -329,14 +331,14 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "1000.0", "Unit": "USD"},
+                                "NetAmortizedCost": {"Amount": "1000.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "744.0", "Unit": "Hrs"},
                             },
                         },
                         {
                             "Keys": ["App$api", "TimedStorage-ByteHrs"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "100.0", "Unit": "USD"},
+                                "NetAmortizedCost": {"Amount": "100.0", "Unit": "USD"},
                                 "UsageQuantity": {
                                     "Amount": "1000000.0",
                                     "Unit": "GB-Mo",
@@ -355,7 +357,7 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "950.0", "Unit": "USD"},
+                                "NetAmortizedCost": {"Amount": "950.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "744.0", "Unit": "Hrs"},
                             },
                         }
@@ -371,7 +373,7 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "900.0", "Unit": "USD"},
+                                "NetAmortizedCost": {"Amount": "900.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "720.0", "Unit": "Hrs"},
                             },
                         }
@@ -387,7 +389,7 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "800.0", "Unit": "USD"},
+                                "NetAmortizedCost": {"Amount": "800.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "700.0", "Unit": "Hrs"},
                             },
                         }
@@ -403,7 +405,7 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "750.0", "Unit": "USD"},
+                                "NetAmortizedCost": {"Amount": "750.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "680.0", "Unit": "Hrs"},
                             },
                         }
@@ -419,7 +421,7 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "250.0", "Unit": "USD"},
+                                "NetAmortizedCost": {"Amount": "250.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "200.0", "Unit": "Hrs"},
                             },
                         }
@@ -427,7 +429,7 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # 7: cost category mapping query (App tag + COST_CATEGORY)
+        # 7: CC mapping: current (App tag + COST_CATEGORY)
         {
             "ResultsByTime": [
                 {
@@ -435,20 +437,80 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["App$web-app", "CostCenter$Engineering"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "1000.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "1000.0", "Unit": "USD"}
                             },
                         },
                         {
                             "Keys": ["App$api", "CostCenter$Engineering"],
                             "Metrics": {
-                                "UnblendedCost": {"Amount": "100.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "100.0", "Unit": "USD"}
                             },
                         },
                     ]
                 }
             ],
         },
-        # 8: allocated costs: current
+        # 8: CC mapping: prev_complete
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["App$web-app", "CostCenter$Engineering"],
+                            "Metrics": {
+                                "NetAmortizedCost": {"Amount": "950.0", "Unit": "USD"}
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # 9: CC mapping: prev_month
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["App$web-app", "CostCenter$Engineering"],
+                            "Metrics": {
+                                "NetAmortizedCost": {"Amount": "900.0", "Unit": "USD"}
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # 10: CC mapping: yoy
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["App$web-app", "CostCenter$Engineering"],
+                            "Metrics": {
+                                "NetAmortizedCost": {"Amount": "800.0", "Unit": "USD"}
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # 11: CC mapping: yoy_prev_complete
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["App$web-app", "CostCenter$Engineering"],
+                            "Metrics": {
+                                "NetAmortizedCost": {"Amount": "750.0", "Unit": "USD"}
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # 12: allocated costs: current
         {
             "ResultsByTime": [
                 {
@@ -540,10 +602,16 @@ def test_collect_integration() -> None:
         },
     ]
 
-    # Mock get_cost_categories response
+    # Mock get_cost_categories response.
+    # H1: Per-period CC mapping queries — one call per non-partial period.
+    # Call 1: discovery with CostCategoryName=CostCenter (no auto-discovery needed)
+    # Calls 2-5: per-period mapping for prev_complete, prev_month, yoy, yoy_prev_complete
     mock_ce_client.get_cost_categories.side_effect = [
-        {"CostCategoryNames": ["CostCenter"]},
-        {},
+        {},  # current: with explicit CostCategoryName (returns values, not names)
+        {},  # prev_complete
+        {},  # prev_month
+        {},  # yoy
+        {},  # yoy_prev_complete
     ]
 
     # Mock list_cost_category_definitions for split charge detection
@@ -601,8 +669,17 @@ def test_collect_integration() -> None:
     assert len(result["raw_data"]["yoy_prev_complete"]) == 1
     assert len(result["raw_data"]["prev_month_partial"]) == 1
 
-    # Verify cost category mapping
+    # Verify cost category mapping (backward-compat key = current period mapping)
     assert result["cc_mapping"] == {"web-app": "Engineering", "api": "Engineering"}
+    # Verify per-period mappings are present (H1)
+    assert "cc_mappings" in result
+    assert "current" in result["cc_mappings"]
+    assert "prev_complete" in result["cc_mappings"]
+    assert "prev_month" in result["cc_mappings"]
+    assert "yoy" in result["cc_mappings"]
+    assert "yoy_prev_complete" in result["cc_mappings"]
+    # prev_month_partial is not included in cc_mappings
+    assert "prev_month_partial" not in result["cc_mappings"]
 
     # Verify split charge categories and rules (should be empty in this test)
     assert result["split_charge_categories"] == []
@@ -620,9 +697,9 @@ def test_collect_integration() -> None:
     assert result["allocated_costs"]["yoy_prev_complete"] == {"Engineering": 750.0}
     assert result["allocated_costs"]["prev_month_partial"] == {"Engineering": 250.0}
 
-    # Verify get_cost_and_usage was called 13 times:
-    # 6 periods + 1 for cost category mapping + 6 for allocated costs
-    assert mock_ce_client.get_cost_and_usage.call_count == 13
+    # Verify get_cost_and_usage was called 17 times (H1: per-period CC mappings):
+    # 6 periods + 5 for CC mappings (current + 4 non-partial periods) + 6 for allocated costs
+    assert mock_ce_client.get_cost_and_usage.call_count == 17
 
 
 def test_collect_with_target_month() -> None:
@@ -763,12 +840,14 @@ def test_get_cost_categories_untagged_resources() -> None:
                     {
                         "Keys": ["App$web-app", "CostCenter$Engineering"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "100.0", "Unit": "USD"}
+                            "NetAmortizedCost": {"Amount": "100.0", "Unit": "USD"}
                         },
                     },
                     {
                         "Keys": ["App$", "CostCenter$Shared"],
-                        "Metrics": {"UnblendedCost": {"Amount": "50.0", "Unit": "USD"}},
+                        "Metrics": {
+                            "NetAmortizedCost": {"Amount": "50.0", "Unit": "USD"}
+                        },
                     },
                 ]
             }
@@ -802,7 +881,7 @@ def test_collect_auto_discovers_category_name() -> None:
                     {
                         "Keys": ["App$api", "CostCenter$Platform"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "200.0", "Unit": "USD"}
+                            "NetAmortizedCost": {"Amount": "200.0", "Unit": "USD"}
                         },
                     }
                 ]
@@ -826,10 +905,11 @@ def test_collect_auto_discovers_category_name() -> None:
         ],
     }
 
-    # get_cost_and_usage call order in MTD mode:
+    # get_cost_and_usage call order in MTD mode (H1: per-period CC mappings):
     # 1-6:  six periods (raw cost data: current, prev_complete, prev_month, yoy, yoy_prev_complete, prev_month_partial)
-    # 7:    cost category mapping (App + COST_CATEGORY)
-    # 8-13: allocated costs per period (current, prev_complete, prev_month, yoy, yoy_prev_complete, prev_month_partial)
+    # 7:    CC mapping: current (App + COST_CATEGORY)
+    # 8-11: CC mappings: prev_complete, prev_month, yoy, yoy_prev_complete
+    # 12-17: allocated costs per period
     mock_ce_client.get_cost_and_usage.side_effect = [
         empty_period,  # current (MTD) raw data
         empty_period,  # prev_complete raw data
@@ -837,7 +917,11 @@ def test_collect_auto_discovers_category_name() -> None:
         empty_period,  # yoy raw data
         empty_period,  # yoy_prev_complete raw data
         empty_period,  # prev_month_partial raw data
-        cc_mapping_response,  # cc mapping
+        cc_mapping_response,  # CC mapping: current
+        empty_period,  # CC mapping: prev_complete
+        empty_period,  # CC mapping: prev_month
+        empty_period,  # CC mapping: yoy
+        empty_period,  # CC mapping: yoy_prev_complete
         allocated_response,  # allocated costs: current
         allocated_response,  # allocated costs: prev_complete
         allocated_response,  # allocated costs: prev_month
@@ -847,10 +931,15 @@ def test_collect_auto_discovers_category_name() -> None:
     ]
 
     # Auto-discovery: first call returns the list of category names;
-    # second call (with CostCategoryName kwarg) is for the mapping side-effect.
+    # second call (with CostCategoryName kwarg) is for the current mapping query.
+    # Subsequent calls (4 more) are for per-period mappings.
     mock_ce_client.get_cost_categories.side_effect = [
         {"CostCategoryNames": ["CostCenter"]},
-        {},
+        {},  # current period get_cost_categories values call
+        {},  # prev_complete
+        {},  # prev_month
+        {},  # yoy
+        {},  # yoy_prev_complete
     ]
 
     # Split charge rule present on the auto-discovered category

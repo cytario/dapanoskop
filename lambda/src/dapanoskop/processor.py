@@ -33,7 +33,7 @@ def _parse_groups(
         app_tag = keys[0].removeprefix("App$")
         usage_type = keys[1]
         metrics = group.get("Metrics", {})
-        cost = float(metrics.get("UnblendedCost", {}).get("Amount", 0))
+        cost = float(metrics.get("NetAmortizedCost", {}).get("Amount", 0))
         quantity = float(metrics.get("UsageQuantity", {}).get("Amount", 0))
         rows.append(
             {
@@ -56,8 +56,8 @@ def _compute_storage_metrics(
     """Compute storage volume and hot tier metrics from usage data.
 
     Note: AWS Cost Explorer returns UsageQuantity for TimedStorage-* in GB-Months,
-    which represents the average GB stored during the billing period.
-    We convert GB-Months to bytes: GB-Months * 2^30 = average bytes stored (binary).
+    which represents the average GiB (binary gibibytes, 2^30 bytes) stored during
+    the billing period. We convert GB-Months to bytes: GB-Months * 2^30.
     """
     total_cost = 0.0
     prev_total_cost = 0.0
@@ -324,11 +324,7 @@ def _compute_mtd_comparison(
 
         comparison_centers.append(cc_entry)
 
-    comparison_centers.sort(
-        key=lambda c: c["prior_partial_cost_usd"],
-        reverse=True,  # type: ignore[return-value]
-    )
-
+    # Note: caller re-sorts to align with parent cost_centers order.
     return {
         "prior_partial_start": prior_partial_start,
         "prior_partial_end_exclusive": prior_partial_end_exclusive,
@@ -355,9 +351,16 @@ def process(
     period_labels: dict[str, str] = collected["period_labels"]
     raw_data: dict[str, list[dict[str, Any]]] = collected["raw_data"]
     cc_mapping: dict[str, str] = collected["cc_mapping"]
+    # Per-period CC mappings (H1 fix); falls back to cc_mapping for all periods
+    # when not present (backward compat with tests that don't provide cc_mappings).
+    cc_mappings: dict[str, dict[str, str]] = collected.get("cc_mappings", {})
     split_charge_cats: list[str] = collected.get("split_charge_categories", [])
     split_charge_rules: list[dict[str, Any]] = collected.get("split_charge_rules", [])
     allocated_costs: dict[str, dict[str, float]] = collected.get("allocated_costs", {})
+
+    def _period_cc_mapping(period_key: str) -> dict[str, str]:
+        """Return the CC mapping for a given period, falling back to cc_mapping."""
+        return cc_mappings.get(period_key, cc_mapping)
 
     # Parse primary periods (exclude prev_month_partial — handled separately)
     primary_keys = ["current", "prev_month", "yoy"]
@@ -377,12 +380,42 @@ def process(
     prev_costs = _aggregate_workloads(prev_rows)
     yoy_costs = _aggregate_workloads(yoy_rows)
 
-    # Group workloads into cost centers
+    # Group workloads into cost centers using the current period's mapping.
+    # This determines the CC structure (which CCs exist and which workloads belong
+    # to them). All workloads seen in any period are included so drill-down rows
+    # are complete.
+    current_mapping = _period_cc_mapping("current")
     all_workloads = set(current_costs) | set(prev_costs) | set(yoy_costs)
+    partial_costs: dict[str, float] | None = None
+    if is_mtd and "prev_month_partial" in raw_data:
+        partial_costs = _aggregate_workloads(
+            _parse_groups(raw_data["prev_month_partial"])
+        )
+        all_workloads |= set(partial_costs)
     cc_groups: dict[str, list[str]] = {}
     for wl in all_workloads:
-        cc = cc_mapping.get(wl, _DEFAULT_CC)
+        cc = current_mapping.get(wl, _DEFAULT_CC)
         cc_groups.setdefault(cc, []).append(wl)
+
+    # Pre-aggregate per-period CC costs using period-specific mappings (H1 fix).
+    # For each period, sum workload costs into CCs using that period's mapping so
+    # that a workload that moved between CCs across periods is counted in the correct
+    # CC for each period (rather than always applying the current mapping).
+    def _aggregate_by_cc(
+        workload_costs: dict[str, float],
+        mapping: dict[str, str],
+    ) -> dict[str, float]:
+        cc_totals: dict[str, float] = {}
+        for wl, cost in workload_costs.items():
+            cc = mapping.get(wl, _DEFAULT_CC)
+            cc_totals[cc] = cc_totals.get(cc, 0.0) + cost
+        return cc_totals
+
+    prev_mapping = _period_cc_mapping("prev_month")
+    yoy_mapping = _period_cc_mapping("yoy")
+
+    workload_cc_prev = _aggregate_by_cc(prev_costs, prev_mapping)
+    workload_cc_yoy = _aggregate_by_cc(yoy_costs, yoy_mapping)
 
     # Build cost center summaries — apply split charge redistribution to current and
     # prev_month periods only (not yoy).
@@ -459,7 +492,9 @@ def process(
         if prev_allocated and cc_name in prev_allocated:
             cc_prev = round(prev_allocated[cc_name], 2)
         else:
-            cc_prev = round(sum(w["prev_month_cost_usd"] for w in workloads), 2)
+            # Use per-period CC aggregate (H1): workloads that mapped to this CC
+            # in the prev_month period, regardless of current period assignment.
+            cc_prev = round(workload_cc_prev.get(cc_name, 0.0), 2)
 
         if yoy_allocated and cc_name in yoy_allocated:
             cc_yoy = round(yoy_allocated[cc_name], 2)
@@ -475,7 +510,9 @@ def process(
             # total by CC rules — use 0 to avoid double-counting (Bug 2).
             cc_yoy = 0.0
         else:
-            cc_yoy = round(sum(w["yoy_cost_usd"] for w in workloads), 2)
+            # Use per-period CC aggregate (H1): workloads that mapped to this CC
+            # in the yoy period, regardless of current period assignment.
+            cc_yoy = round(workload_cc_yoy.get(cc_name, 0.0), 2)
 
         # Split charge categories have their cost redistributed to others;
         # show them with zero cost to avoid double-counting.
@@ -561,11 +598,23 @@ def process(
         k: v for k, v in period_labels.items() if k in ("current", "prev_month", "yoy")
     }
 
+    # Totals computed directly from raw workload costs — independent of CC allocation
+    # and split charge rules. These provide headline numbers immune to CC renames,
+    # split charge rule changes, and allocation logic.
+    totals: dict[str, Any] = {
+        "current_cost_usd": round(sum(current_costs.values()), 2),
+        "prev_month_cost_usd": round(sum(prev_costs.values()), 2),
+        "yoy_cost_usd": round(sum(yoy_costs.values()), 2),
+    }
+    if partial_costs is not None:
+        totals["mtd_prior_partial_cost_usd"] = round(sum(partial_costs.values()), 2)
+
     summary: dict[str, Any] = {
         "collected_at": now.isoformat(),
         "period": period_labels["current"],
         "is_mtd": is_mtd,
         "periods": summary_period_labels,
+        "totals": totals,
         "storage_config": {"include_efs": include_efs, "include_ebs": include_ebs},
         "storage_metrics": storage_metrics,
         "cost_centers": cost_centers,
@@ -587,6 +636,12 @@ def process(
             cc_mapping,
             split_charge_cats,
             split_charge_rules,
+        )
+        # Align mtd_comparison.cost_centers order with the parent cost_centers
+        # (sorted by current_cost_usd descending) for consistent UI rendering.
+        cc_order = {cc["name"]: i for i, cc in enumerate(cost_centers)}
+        mtd_comparison["cost_centers"].sort(
+            key=lambda c: cc_order.get(c["name"], len(cc_order))
         )
         summary["mtd_comparison"] = mtd_comparison
 

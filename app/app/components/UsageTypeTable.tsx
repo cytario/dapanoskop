@@ -71,14 +71,14 @@ export function UsageTypeTable({
               </span>
             </Cell>
             <Cell>
-              {row.prev > 0 ? (
+              {row.prev != null ? (
                 <DeltaIndicator current={row.current} previous={row.prev} />
               ) : (
                 <DeltaIndicator current={0} previous={0} unavailable />
               )}
             </Cell>
             <Cell>
-              {row.yoy > 0 ? (
+              {row.yoy != null ? (
                 <DeltaIndicator current={row.current} previous={row.yoy} />
               ) : (
                 <DeltaIndicator current={0} previous={0} unavailable />

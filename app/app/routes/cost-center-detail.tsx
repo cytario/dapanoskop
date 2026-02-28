@@ -4,7 +4,7 @@ import { MetricCard, DeltaIndicator, Banner, Card } from "@cytario/design";
 import type { CostSummary } from "~/types/cost-data";
 import { discoverPeriods, fetchSummary } from "~/lib/data";
 import { initAuth, isAuthenticated, login, logout } from "~/lib/auth";
-import { formatUsd } from "~/lib/format";
+import { formatUsd, formatPartialPeriodLabel } from "~/lib/format";
 import { WorkloadTable } from "~/components/WorkloadTable";
 import { Header } from "~/components/Header";
 import { Footer } from "~/components/Footer";
@@ -34,6 +34,10 @@ export default function CostCenterDetail() {
   const [trendLoading, setTrendLoading] = useState(true);
   const [trendError, setTrendError] = useState<string | null>(null);
 
+  // Determine current month for MTD label and period default
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
   // Auth check
   useEffect(() => {
     async function checkAuth() {
@@ -59,10 +63,15 @@ export default function CostCenterDetail() {
         if (cancelled) return;
         if (discovered.length > 0) {
           setPeriods(discovered);
+          // Skip the MTD period (current month) as default — users can still select it.
+          const defaultPeriod =
+            discovered[0] === currentMonth && discovered.length > 1
+              ? discovered[1]
+              : discovered[0];
           const initial =
             urlPeriod && discovered.includes(urlPeriod)
               ? urlPeriod
-              : discovered[0];
+              : defaultPeriod;
           setSelectedPeriod(initial);
         } else {
           setError("No cost data available.");
@@ -76,7 +85,7 @@ export default function CostCenterDetail() {
     return () => {
       cancelled = true;
     };
-  }, [authenticated, urlPeriod]);
+  }, [authenticated, urlPeriod, currentMonth]);
 
   // Load summary for selected period
   useEffect(() => {
@@ -148,9 +157,21 @@ export default function CostCenterDetail() {
   // Find cost center in summary
   const costCenter = summary?.cost_centers.find((cc) => cc.name === name);
 
-  // Determine current month for MTD label
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  // MTD detection and like-for-like comparison
+  const isMtd = summary?.is_mtd;
+  const mtdComparison = summary?.mtd_comparison;
+  const mtdCostCenter =
+    isMtd && mtdComparison && costCenter
+      ? mtdComparison.cost_centers.find((mc) => mc.name === costCenter.name)
+      : undefined;
+  const momPrevious =
+    mtdCostCenter !== undefined
+      ? mtdCostCenter.prior_partial_cost_usd
+      : (costCenter?.prev_month_cost_usd ?? 0);
+  const momLabel =
+    isMtd && mtdComparison
+      ? `vs ${formatPartialPeriodLabel(mtdComparison.prior_partial_start, mtdComparison.prior_partial_end_exclusive)}`
+      : "vs Last Month";
 
   if (!authenticated && !loading) {
     return null; // Will redirect via login()
@@ -204,18 +225,25 @@ export default function CostCenterDetail() {
                 value={formatUsd(costCenter.current_cost_usd)}
               />
               <MetricCard
-                label="vs Last Month"
+                label={momLabel}
                 value={
                   <DeltaIndicator
                     current={costCenter.current_cost_usd}
-                    previous={costCenter.prev_month_cost_usd}
+                    previous={momPrevious}
                   />
                 }
               />
               <MetricCard
                 label="vs Last Year"
                 value={
-                  costCenter.yoy_cost_usd > 0 ? (
+                  isMtd ? (
+                    <DeltaIndicator
+                      current={0}
+                      previous={0}
+                      unavailable
+                      unavailableText="N/A (MTD)"
+                    />
+                  ) : costCenter.yoy_cost_usd != null ? (
                     <DeltaIndicator
                       current={costCenter.current_cost_usd}
                       previous={costCenter.yoy_cost_usd}
@@ -242,6 +270,8 @@ export default function CostCenterDetail() {
               <WorkloadTable
                 workloads={costCenter.workloads}
                 period={selectedPeriod}
+                isMtd={isMtd}
+                mtdCostCenter={mtdCostCenter}
               />
             </Card>
           </>

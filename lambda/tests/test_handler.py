@@ -35,7 +35,7 @@ def test_handler_integration(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "1000", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "1000", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "744", "Unit": "Hrs"},
                         },
                     }
@@ -44,7 +44,7 @@ def test_handler_integration(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "900", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "900", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "720", "Unit": "Hrs"},
                         },
                     }
@@ -124,7 +124,7 @@ def test_handler_backfill_mode(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -211,7 +211,7 @@ def test_handler_backfill_skip_existing(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -279,7 +279,7 @@ def test_handler_backfill_force_reprocess(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -343,7 +343,7 @@ def test_handler_backfill_partial_failure(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -404,7 +404,7 @@ def test_handler_backfill_s3_write_failure(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -492,7 +492,7 @@ def test_handler_enriches_with_storage_lens(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -558,7 +558,7 @@ def test_handler_continues_when_storage_lens_fails(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -675,7 +675,7 @@ def test_handler_backfill_skips_unavailable_months(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -745,7 +745,7 @@ def test_handler_storage_lens_recalculates_cost_per_tb(
                     {
                         "Keys": ["App$web-app", "TimedStorage-ByteHrs"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "200", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "200", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "5000", "Unit": "GB-Mo"},
                         },
                     },
@@ -753,7 +753,7 @@ def test_handler_storage_lens_recalculates_cost_per_tb(
                     {
                         "Keys": ["App$web-app", "Requests-Tier1"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "30", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "30", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "1000000", "Unit": "Requests"},
                         },
                     },
@@ -839,7 +839,7 @@ def test_handler_backfill_index_survives_failures(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -901,7 +901,7 @@ def test_handler_backfill_skips_empty_ce_response(
                 {
                     "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                     "Metrics": {
-                        "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                        "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
                         "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                     },
                 }
@@ -1042,7 +1042,7 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "800", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "800", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "200", "Unit": "Hrs"},
                         },
                     }
@@ -1051,7 +1051,7 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "1000", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "1000", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "744", "Unit": "Hrs"},
                         },
                     }
@@ -1060,7 +1060,7 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "900", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "900", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "720", "Unit": "Hrs"},
                         },
                     }
@@ -1070,7 +1070,7 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "850", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "850", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "700", "Unit": "Hrs"},
                         },
                     }
@@ -1079,7 +1079,7 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
-                            "UnblendedCost": {"Amount": "250", "Unit": "USD"},
+                            "NetAmortizedCost": {"Amount": "250", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "60", "Unit": "Hrs"},
                         },
                     }
@@ -1143,3 +1143,157 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
     index_data = json.loads(index_obj["Body"].read())
     assert "2026-02" in index_data["periods"]
     assert "2026-01" in index_data["periods"]
+
+
+@mock_aws
+def test_handler_normal_mode_first_of_month(
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On the 1st of the month, no MTD period is written — only prev_complete."""
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket=s3_bucket_env)
+
+    from datetime import datetime, timezone
+
+    from dapanoskop import handler as handler_module
+
+    def mock_collect(cost_category_name: str = "") -> dict:
+        # On the 1st, _get_periods() omits "current", "yoy", "prev_month_partial"
+        return {
+            "now": datetime(2026, 3, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "is_mtd": True,
+            "periods": {
+                "prev_complete": ("2026-02-01", "2026-03-01"),
+                "prev_month": ("2026-01-01", "2026-02-01"),
+                "yoy_prev_complete": ("2025-02-01", "2025-03-01"),
+            },
+            "period_labels": {
+                "prev_complete": "2026-02",
+                "prev_month": "2026-01",
+                "yoy_prev_complete": "2025-02",
+            },
+            "raw_data": {
+                "prev_complete": [
+                    {
+                        "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                        "Metrics": {
+                            "NetAmortizedCost": {"Amount": "1000", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "744", "Unit": "Hrs"},
+                        },
+                    }
+                ],
+                "prev_month": [
+                    {
+                        "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                        "Metrics": {
+                            "NetAmortizedCost": {"Amount": "900", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "720", "Unit": "Hrs"},
+                        },
+                    }
+                ],
+                "yoy_prev_complete": [],
+            },
+            "cc_mapping": {"web-app": "Engineering"},
+        }
+
+    monkeypatch.setattr(handler_module, "collect", mock_collect)
+
+    from dapanoskop.handler import handler
+
+    result = handler({}, None)
+    assert result["statusCode"] == 200
+    body = json.loads(result["body"])
+    # No MTD period, so result uses prev_complete label
+    assert body["period"] == "2026-02"
+
+    objects = s3.list_objects_v2(Bucket=s3_bucket_env)
+    keys = [obj["Key"] for obj in objects.get("Contents", [])]
+
+    # Only prev_complete period should be written
+    assert "2026-02/summary.json" in keys
+    # No MTD period (March) should be written
+    assert not any(k.startswith("2026-03/") for k in keys)
+    # Index should still be updated
+    assert "index.json" in keys
+
+    # Verify prev_complete summary
+    summary_obj = s3.get_object(Bucket=s3_bucket_env, Key="2026-02/summary.json")
+    summary = json.loads(summary_obj["Body"].read())
+    assert summary["period"] == "2026-02"
+    assert summary["is_mtd"] is False
+
+
+@mock_aws
+def test_handler_normal_mode_skips_empty_mtd(
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Normal daily run skips writing MTD when CE returns empty groups."""
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket=s3_bucket_env)
+
+    from datetime import datetime, timezone
+
+    from dapanoskop import handler as handler_module
+
+    def mock_collect(cost_category_name: str = "") -> dict:
+        return {
+            "now": datetime(2026, 2, 8, 6, 0, 0, tzinfo=timezone.utc),
+            "is_mtd": True,
+            "periods": {
+                "current": ("2026-02-01", "2026-02-08"),
+                "prev_complete": ("2026-01-01", "2026-02-01"),
+                "prev_month": ("2025-12-01", "2026-01-01"),
+                "yoy": ("2025-02-01", "2025-02-08"),
+                "yoy_prev_complete": ("2025-01-01", "2025-02-01"),
+                "prev_month_partial": ("2026-01-01", "2026-01-08"),
+            },
+            "period_labels": {
+                "current": "2026-02",
+                "prev_complete": "2026-01",
+                "prev_month": "2025-12",
+                "yoy": "2025-02",
+                "yoy_prev_complete": "2025-01",
+                "prev_month_partial": "2026-01",
+            },
+            "raw_data": {
+                # Empty current — CE returned no cost groups
+                "current": [],
+                "prev_complete": [
+                    {
+                        "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                        "Metrics": {
+                            "NetAmortizedCost": {"Amount": "1000", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "744", "Unit": "Hrs"},
+                        },
+                    }
+                ],
+                "prev_month": [
+                    {
+                        "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                        "Metrics": {
+                            "NetAmortizedCost": {"Amount": "900", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "720", "Unit": "Hrs"},
+                        },
+                    }
+                ],
+                "yoy": [],
+                "yoy_prev_complete": [],
+                "prev_month_partial": [],
+            },
+            "cc_mapping": {"web-app": "Engineering"},
+        }
+
+    monkeypatch.setattr(handler_module, "collect", mock_collect)
+
+    from dapanoskop.handler import handler
+
+    result = handler({}, None)
+    assert result["statusCode"] == 200
+
+    objects = s3.list_objects_v2(Bucket=s3_bucket_env)
+    keys = [obj["Key"] for obj in objects.get("Contents", [])]
+
+    # MTD period should NOT be written (empty CE response)
+    assert not any(k.startswith("2026-02/summary") for k in keys)
+    # prev_complete should still be written
+    assert "2026-01/summary.json" in keys

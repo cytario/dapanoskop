@@ -40,6 +40,7 @@ interface TooltipPayloadEntry {
   value: number;
   color: string;
   dataKey: string;
+  payload?: Record<string, unknown>;
 }
 
 function CustomTooltip({
@@ -57,7 +58,12 @@ function CustomTooltip({
   const barEntries = payload.filter((e) => e.dataKey !== "_movingAvg");
   const maEntry = payload.find((e) => e.dataKey === "_movingAvg");
 
-  const total = barEntries.reduce((sum, entry) => sum + entry.value, 0);
+  // Use pre-computed _total from the data point if available
+  const dataPoint = payload[0]?.payload;
+  const total =
+    typeof dataPoint?._total === "number"
+      ? dataPoint._total
+      : barEntries.reduce((sum, entry) => sum + entry.value, 0);
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">

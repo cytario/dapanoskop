@@ -62,6 +62,14 @@ export function useTrendData(): TrendData {
             );
           }
 
+          // Use pre-computed total from backend; fall back to sum of CC values
+          point._total =
+            summary.totals?.current_cost_usd ??
+            summary.cost_centers.reduce(
+              (sum, cc) => sum + cc.current_cost_usd,
+              0,
+            );
+
           pts.push(point);
         }
 
