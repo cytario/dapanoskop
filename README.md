@@ -131,7 +131,14 @@ Parameters:
 - `months` (integer, optional): Number of historical months to process (default: 13)
 - `force` (boolean, optional): Reprocess months that already exist in S3 (default: false)
 
-Backfill processes months sequentially, skips existing data unless forced, and returns a status report showing which months succeeded, failed, or were skipped. This is idempotent and safe to run multiple times. See [lambda/BACKFILL.md](lambda/BACKFILL.md) for detailed usage examples.
+Backfill processes months sequentially, skips existing data unless forced, and returns a status report showing which months succeeded, failed, or were skipped. This is idempotent and safe to run multiple times.
+
+**Data protection during backfill**: The pipeline safely handles periods that are no longer available in AWS Cost Explorer in two ways:
+
+- **`DataUnavailableException`**: If Cost Explorer raises this exception for a period (e.g., a month older than CE's retention window), the month is logged and added to the `skipped` list — no data is written.
+- **Empty response**: If Cost Explorer returns a valid response with zero cost groups for the primary period, the month is also skipped rather than overwriting any existing data with zeroed values. This protects historical records collected before a period aged out of CE's retention window.
+
+See [lambda/BACKFILL.md](lambda/BACKFILL.md) for detailed usage examples.
 
 ## Configuration
 

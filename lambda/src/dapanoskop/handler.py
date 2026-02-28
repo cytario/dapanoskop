@@ -166,6 +166,18 @@ def _handle_backfill(
                 target_month=month,
             )
 
+            # Guard: skip periods where CE returned no cost groups at all.
+            # This happens for very recent months (data not yet available) or
+            # accounts with no activity. force=True does not override this check
+            # because the data simply isn't there to process.
+            if not collected["raw_data"].get("current"):
+                logger.warning(
+                    "Skipping %s (no cost data returned by Cost Explorer)",
+                    period_label,
+                )
+                skipped.append(period_label)
+                continue
+
             logger.info("Processing data for %s", period_label)
             processed = process(
                 collected, include_efs=include_efs, include_ebs=include_ebs

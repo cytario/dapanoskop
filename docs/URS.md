@@ -5,8 +5,8 @@
 | Document ID         | URS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.13 (Draft)                               |
-| Date                | 2026-02-27                                 |
+| Version             | 0.14 (Draft)                               |
+| Date                | 2026-02-28                                 |
 
 ---
 
@@ -255,6 +255,9 @@ A user authenticates their identity before accessing any cost data. All authenti
 **[URS-DP-20401] Trust Cost Data Accuracy**
 A Budget Owner trusts that the cost figures shown in Dapanoskop match the actual AWS billing data, without manual reconciliation.
 
+**[URS-DP-20402] Protect Existing Cost Data During Re-collection**
+A DevOps engineer re-runs the data collection pipeline (including forced backfill) with confidence that previously collected data for periods that are no longer available in AWS Cost Explorer will not be destroyed or replaced with empty figures. When Cost Explorer returns no cost data for a historical period — whether due to the period falling outside CE's retention window or a transient API anomaly — the pipeline must leave any existing data for that period unchanged rather than overwriting it with zeroed values.
+
 #### 3.2.5 Traceability Requirements
 
 Not applicable — non-regulated software.
@@ -305,3 +308,4 @@ A Budget Owner accesses and reviews the cost report on a mobile device (phone or
 | 0.11    | 2026-02-16 | —      | Replace S3 Inventory with S3 Storage Lens (URS-DP-10106, 10312 updates); defer per-bucket storage investigation (URS-DP-10313 note added) |
 | 0.12    | 2026-02-27 | —      | Add month-to-date cost data requirement (URS-DP-10314); add MTD definition (§1.4); add MTD user request to Macro-Step 3 |
 | 0.13    | 2026-02-27 | —      | Add like-for-like MTD partial-month comparison requirement (URS-DP-10315) |
+| 0.14    | 2026-02-28 | —      | Add data protection integrity requirement for empty CE responses during re-collection (URS-DP-20402) |

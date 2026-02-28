@@ -874,6 +874,134 @@ def test_handler_backfill_index_survives_failures(
 
 
 @mock_aws
+def test_handler_backfill_skips_empty_ce_response(
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Backfill skips a period when CE returns empty groups (no cost data)."""
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket=s3_bucket_env)
+
+    from datetime import datetime, timezone
+
+    from dapanoskop import handler as handler_module
+
+    call_count = [0]
+
+    def mock_collect(
+        cost_category_name: str = "",
+        target_year: int | None = None,
+        target_month: int | None = None,
+    ) -> dict:
+        call_count[0] += 1
+        # 2025-12 returns empty groups (no cost data yet available)
+        current_groups = (
+            []
+            if (target_year == 2025 and target_month == 12)
+            else [
+                {
+                    "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                    "Metrics": {
+                        "UnblendedCost": {"Amount": "100", "Unit": "USD"},
+                        "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
+                    },
+                }
+            ]
+        )
+        return {
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "period_labels": {
+                "current": f"{target_year:04d}-{target_month:02d}"
+                if target_year and target_month
+                else "2026-01",
+                "prev_month": "2025-12",
+                "yoy": "2025-01",
+            },
+            "raw_data": {
+                "current": current_groups,
+                "prev_month": [],
+                "yoy": [],
+            },
+            "cc_mapping": {},
+        }
+
+    monkeypatch.setattr(handler_module, "collect", mock_collect)
+
+    from dapanoskop.handler import handler
+
+    # 2026-01 succeeds; 2025-12 has empty CE response; 2025-11 succeeds
+    event = {"backfill": True, "months": 3}
+    result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    body = json.loads(result["body"])
+    assert body["message"] == "backfill_complete"
+    assert len(body["succeeded"]) == 2
+    assert "2026-01" in body["succeeded"]
+    assert "2025-11" in body["succeeded"]
+    assert len(body["skipped"]) == 1
+    assert "2025-12" in body["skipped"]
+    assert len(body["failed"]) == 0
+
+    # Verify that the skipped period has no files in S3
+    objects = s3.list_objects_v2(Bucket=s3_bucket_env)
+    keys = [obj["Key"] for obj in objects.get("Contents", [])]
+    assert not any(k.startswith("2025-12/") for k in keys)
+
+
+@mock_aws
+def test_handler_backfill_empty_ce_response_skipped_even_with_force(
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """force=True does not override the empty CE response guard.
+
+    force overrides the S3 existence check (allowing reprocessing), but when
+    CE returns zero groups there is no data to process regardless of force.
+    """
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket=s3_bucket_env)
+
+    from datetime import datetime, timezone
+
+    from dapanoskop import handler as handler_module
+
+    def mock_collect(
+        cost_category_name: str = "",
+        target_year: int | None = None,
+        target_month: int | None = None,
+    ) -> dict:
+        return {
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "period_labels": {
+                "current": f"{target_year:04d}-{target_month:02d}"
+                if target_year and target_month
+                else "2026-01",
+                "prev_month": "2025-12",
+                "yoy": "2025-01",
+            },
+            # CE returned nothing for this period
+            "raw_data": {
+                "current": [],
+                "prev_month": [],
+                "yoy": [],
+            },
+            "cc_mapping": {},
+        }
+
+    monkeypatch.setattr(handler_module, "collect", mock_collect)
+
+    from dapanoskop.handler import handler
+
+    event = {"backfill": True, "months": 1, "force": True}
+    result = handler(event, None)
+
+    assert result["statusCode"] == 200
+    body = json.loads(result["body"])
+    assert len(body["skipped"]) == 1
+    assert len(body["succeeded"]) == 0
+    assert len(body["failed"]) == 0
+
+
+@mock_aws
 def test_handler_normal_mode_writes_mtd_and_prev_complete(
     s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

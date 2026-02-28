@@ -5,7 +5,7 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.16 (Draft)                               |
+| Version             | 0.17 (Draft)                               |
 | Date                | 2026-02-28                                 |
 
 ---
@@ -484,6 +484,10 @@ Refs: URS-DP-10305, URS-DP-10401
 The system supports a backfill mode that collects cost data for all available historical months in Cost Explorer (up to 13 months). Backfill processes months sequentially, skips months for which data already exists in the data store (unless forced), and updates the period index once upon completion. The backfill returns a per-month status report indicating which months succeeded, failed, or were skipped.
 Refs: URS-DP-10105
 
+**[SRS-DP-420111] Skip Write When CE Returns Empty Cost Data**
+When the Cost Explorer `GetCostAndUsage` API returns a response with zero result groups for the primary period of a given month (i.e., `ResultsByTime[0].Groups` is empty and no exception was raised), the system must not write any data files for that month. The month is reported as skipped in the backfill status response. This requirement applies to both backfill mode and the normal daily run. The intent is to preserve any previously collected data for periods that have aged out of Cost Explorer's retention window, preventing valid historical records from being overwritten with zero-cost summaries. A `DataUnavailableException` raised by the CE API is already treated as a skip; this requirement addresses the silent empty-response case.
+Refs: URS-DP-20402, URS-DP-10105
+
 **[SRS-DP-420108] Query S3 Storage Lens for Actual Storage Volume**
 When S3 Storage Lens integration is configured (via optional `storage_lens_config_id` variable), the system queries S3 Storage Lens CloudWatch metrics to obtain the actual total storage volume (in bytes) across the organization. The system auto-discovers the first available organization-level Storage Lens configuration if no config ID is provided (by calling `s3control:ListStorageLensConfigurations` and `s3control:GetStorageLensConfiguration`), then queries the CloudWatch `AWS/S3/Storage-Lens` namespace for the `StorageBytes` metric (statistic: `Average`) for the reporting period. If Storage Lens data is unavailable or not configured, this step is skipped and storage metrics rely solely on Cost Explorer usage quantities.
 Refs: URS-DP-10106, URS-DP-10312
@@ -690,3 +694,4 @@ Refs: URS-DP-10101
 | 0.14    | 2026-02-27 | —      | Add MTD as a supported feature: reverse completed-months-only constraint in SRS-DP-420102 (pipeline now collects current in-progress month on every daily run); update SRS-DP-310501 to document MTD as always-present first entry in period selector with visual distinction; add SRS-DP-420109 (daily MTD refresh); add SRS-DP-310219 (MTD visual distinction in period selector and report); add MTD definition (§1.4) |
 | 0.15    | 2026-02-27 | —      | Add like-for-like MTD partial-month comparison: add SRS-DP-420110 (pipeline query for prior month equivalent partial period); update SRS-DP-310219 (remove MoM note now covered separately); add SRS-DP-310220 (like-for-like MTD change annotations in UI, no YoY for MTD) |
 | 0.16    | 2026-02-28 | —      | Clarify MTD period-strip label (SRS-DP-310219 update): the MTD entry displays the month abbreviation with an appended "MTD" badge (e.g., "Feb '26 MTD") rather than replacing the abbreviation entirely, giving users both the month context and an in-progress indicator |
+| 0.17    | 2026-02-28 | —      | Add empty CE response skip requirement (SRS-DP-420111): pipeline must not write data for a month when CE returns zero result groups, preserving existing historical data for periods beyond CE retention window |
