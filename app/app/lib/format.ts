@@ -50,6 +50,31 @@ export function formatPeriodLabel(period: string): string {
   return date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
 }
 
+/**
+ * Formats a partial period date range into a human-readable label.
+ * e.g. ("2026-01-01", "2026-01-08") => "Jan 1–7"
+ * e.g. ("2025-12-01", "2026-01-01") => "Dec 1–31"
+ */
+export function formatPartialPeriodLabel(
+  start: string,
+  endExclusive: string,
+): string {
+  const startDate = new Date(start + "T00:00:00");
+  const endDate = new Date(endExclusive + "T00:00:00");
+  // endExclusive is exclusive, so the last included day is endDate - 1 day
+  const lastDay = new Date(endDate);
+  lastDay.setDate(lastDay.getDate() - 1);
+
+  const month = startDate.toLocaleDateString("en-US", { month: "short" });
+  const startDay = startDate.getDate();
+  const endDay = lastDay.getDate();
+
+  if (startDay === endDay) {
+    return `${month} ${startDay}`;
+  }
+  return `${month} ${startDay}\u2013${endDay}`;
+}
+
 export function formatBytes(bytes: number): string {
   const pb = bytes / 1_125_899_906_842_624; // 2^50
   if (pb >= 1) return `${pb.toFixed(1)} PB`;

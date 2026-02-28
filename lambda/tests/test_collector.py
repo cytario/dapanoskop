@@ -9,6 +9,7 @@ from moto import mock_aws
 
 from dapanoskop.collector import (
     _get_periods,
+    _get_prior_partial_period,
     _month_range,
     collect,
     get_allocated_costs_by_category,
@@ -31,47 +32,66 @@ def test_month_range_december() -> None:
 
 
 def test_get_periods_mid_month() -> None:
-    """On Feb 10, current period should be January."""
+    """On Feb 10, current period (MTD) should be February, prev_complete is January."""
     now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
     periods = _get_periods(now)
 
-    assert periods["current"][0] == "2026-01-01"
+    # current = in-progress MTD month (Feb 2026, end = today exclusive)
+    assert periods["current"][0] == "2026-02-01"
+    assert periods["current"][1] == "2026-02-10"
+    # prev_complete = most recently completed month (Jan 2026)
+    assert periods["prev_complete"][0] == "2026-01-01"
+    assert periods["prev_complete"][1] == "2026-02-01"
+    # prev_month = the month before prev_complete (Dec 2025)
     assert periods["prev_month"][0] == "2025-12-01"
-    assert periods["yoy"][0] == "2025-01-01"
+    # yoy = same as current month, prior year (Feb 2025)
+    assert periods["yoy"][0] == "2025-02-01"
+    # prev_month_partial = same days into prior month (Jan 1–10)
+    assert periods["prev_month_partial"][0] == "2026-01-01"
+    assert periods["prev_month_partial"][1] == "2026-01-10"
 
 
 def test_get_periods_first_of_month() -> None:
-    """On Mar 1, current period should be February (previous complete month)."""
+    """On Mar 1, current (MTD) is March, prev_complete is February."""
     now = datetime(2026, 3, 1, 6, 0, 0, tzinfo=timezone.utc)
     periods = _get_periods(now)
 
-    assert periods["current"][0] == "2026-02-01"
+    assert periods["current"][0] == "2026-03-01"
+    assert periods["current"][1] == "2026-03-01"  # today = start, empty range
+    assert periods["prev_complete"][0] == "2026-02-01"
     assert periods["prev_month"][0] == "2026-01-01"
-    assert periods["yoy"][0] == "2025-02-01"
+    assert periods["yoy"][0] == "2025-03-01"
 
 
 def test_get_periods_january() -> None:
-    """On Jan 15, current period should be December of previous year."""
+    """On Jan 15, current (MTD) is January, prev_complete is December."""
     now = datetime(2026, 1, 15, 6, 0, 0, tzinfo=timezone.utc)
     periods = _get_periods(now)
 
-    assert periods["current"][0] == "2025-12-01"
+    assert periods["current"][0] == "2026-01-01"
+    assert periods["current"][1] == "2026-01-15"
+    assert periods["prev_complete"][0] == "2025-12-01"
     assert periods["prev_month"][0] == "2025-11-01"
-    assert periods["yoy"][0] == "2024-12-01"
+    assert periods["yoy"][0] == "2025-01-01"
+    # prev_month_partial: Jan 1–15 in prior month = Dec 1–15
+    assert periods["prev_month_partial"][0] == "2025-12-01"
+    assert periods["prev_month_partial"][1] == "2025-12-15"
 
 
 def test_get_periods_january_first() -> None:
-    """On Jan 1, current period should be December of previous year."""
+    """On Jan 1, current (MTD) is January with a zero-length window, prev_complete is December."""
     now = datetime(2026, 1, 1, 6, 0, 0, tzinfo=timezone.utc)
     periods = _get_periods(now)
 
-    assert periods["current"][0] == "2025-12-01"
+    assert periods["current"][0] == "2026-01-01"
+    assert periods["current"][1] == "2026-01-01"  # empty range
+    assert periods["prev_complete"][0] == "2025-12-01"
     assert periods["prev_month"][0] == "2025-11-01"
-    assert periods["yoy"][0] == "2024-12-01"
+    assert periods["yoy"][0] == "2025-01-01"
 
 
 def test_get_periods_with_target_month() -> None:
-    """Explicit target month overrides now parameter."""
+    """Explicit target month overrides now parameter (backfill mode)."""
     now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
     # Request data for March 2025
     periods = _get_periods(now, target_year=2025, target_month=3)
@@ -79,16 +99,69 @@ def test_get_periods_with_target_month() -> None:
     assert periods["current"][0] == "2025-03-01"
     assert periods["prev_month"][0] == "2025-02-01"
     assert periods["yoy"][0] == "2024-03-01"
+    # Backfill mode should NOT include MTD-specific keys
+    assert "prev_complete" not in periods
+    assert "prev_month_partial" not in periods
 
 
 def test_get_periods_with_target_january() -> None:
-    """Target January handles year rollover correctly."""
+    """Target January handles year rollover correctly (backfill mode)."""
     now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
     periods = _get_periods(now, target_year=2025, target_month=1)
 
     assert periods["current"][0] == "2025-01-01"
     assert periods["prev_month"][0] == "2024-12-01"
     assert periods["yoy"][0] == "2024-01-01"
+    assert "prev_complete" not in periods
+    assert "prev_month_partial" not in periods
+
+
+def test_get_prior_partial_period_normal() -> None:
+    """Prior partial period for a normal mid-month MTD window."""
+    # Feb 8 MTD: Feb 1 – Feb 8 → Jan 1 – Jan 8
+    start, end = _get_prior_partial_period("2026-02-01", "2026-02-08")
+    assert start == "2026-01-01"
+    assert end == "2026-01-08"
+
+
+def test_get_prior_partial_period_january() -> None:
+    """Prior partial period when current month is January (year rollover)."""
+    # Jan 15 MTD: Jan 1 – Jan 15 → Dec 1 – Dec 15
+    start, end = _get_prior_partial_period("2026-01-01", "2026-01-15")
+    assert start == "2025-12-01"
+    assert end == "2025-12-15"
+
+
+def test_get_prior_partial_period_clamp_short_prior_month() -> None:
+    """Prior partial period is clamped when prior month is shorter than MTD window."""
+    # March 30 MTD: Mar 1 – Mar 30 (29 days) → Feb 1 – Mar 1 (clamped, Feb has 28 days in 2026)
+    start, end = _get_prior_partial_period("2026-03-01", "2026-03-30")
+    assert start == "2026-02-01"
+    assert end == "2026-03-01"  # clamped to start of current month
+
+
+def test_get_prior_partial_period_clamp_leap_year() -> None:
+    """Prior partial period NOT clamped when prior month (Feb 2024 leap) is long enough.
+
+    March 29 MTD = 28 days. Feb 2024 has 29 days. Feb 1 + 28 days = Feb 29, valid.
+    But March 30 MTD = 29 days → Feb 1 + 29 days = Mar 1, which exceeds Feb; clamped.
+    """
+    # March 29 MTD (28 days) in 2024: Feb 2024 has 29 days → NOT clamped
+    start, end = _get_prior_partial_period("2024-03-01", "2024-03-29")
+    assert start == "2024-02-01"
+    assert end == "2024-02-29"  # valid: Feb 2024 has 29 days, not clamped
+
+    # March 30 MTD (29 days) in 2024: Feb 1 + 29 days = Mar 1 → clamped
+    start2, end2 = _get_prior_partial_period("2024-03-01", "2024-03-30")
+    assert start2 == "2024-02-01"
+    assert end2 == "2024-03-01"  # clamped to start of current month
+
+
+def test_get_prior_partial_period_full_month_does_not_clamp() -> None:
+    """Prior partial period for 15 days into March uses Feb 1–15 without clamping."""
+    start, end = _get_prior_partial_period("2026-03-01", "2026-03-15")
+    assert start == "2026-02-01"
+    assert end == "2026-02-15"
 
 
 def test_get_cost_and_usage_pagination_logic() -> None:
@@ -227,18 +300,26 @@ def test_get_cost_categories_empty() -> None:
 
 
 def test_collect_integration() -> None:
-    """Test collect() end-to-end with mocked boto3 client."""
+    """Test collect() end-to-end with mocked boto3 client (MTD mode)."""
     from unittest.mock import patch
 
     # Mock the entire boto3.client call to return a mock CE client
     mock_ce_client = MagicMock()
 
-    # Mock get_cost_and_usage responses:
-    # 1-3: three periods (current, prev_month, yoy) with App tag + USAGE_TYPE
-    # 4: cost category mapping with App tag + COST_CATEGORY
-    # 5-7: allocated costs by category (current, prev_month, yoy) with COST_CATEGORY only
+    # In MTD mode (no target), collect() queries:
+    # 1: current (MTD)
+    # 2: prev_complete
+    # 3: prev_month
+    # 4: yoy
+    # 5: prev_month_partial
+    # 6: cost category mapping (App tag + COST_CATEGORY)
+    # 7: allocated costs: current
+    # 8: allocated costs: prev_complete
+    # 9: allocated costs: prev_month
+    # 10: allocated costs: yoy
+    # 11: allocated costs: prev_month_partial
     mock_ce_client.get_cost_and_usage.side_effect = [
-        # Current month
+        # 1: current (MTD) — two groups
         {
             "ResultsByTime": [
                 {
@@ -264,7 +345,23 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # Previous month
+        # 2: prev_complete — one group
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                            "Metrics": {
+                                "UnblendedCost": {"Amount": "950.0", "Unit": "USD"},
+                                "UsageQuantity": {"Amount": "744.0", "Unit": "Hrs"},
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # 3: prev_month — one group
         {
             "ResultsByTime": [
                 {
@@ -280,7 +377,7 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # YoY month
+        # 4: yoy — one group
         {
             "ResultsByTime": [
                 {
@@ -296,7 +393,23 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # Cost category mapping query (App tag + COST_CATEGORY)
+        # 5: prev_month_partial — one group
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                            "Metrics": {
+                                "UnblendedCost": {"Amount": "250.0", "Unit": "USD"},
+                                "UsageQuantity": {"Amount": "200.0", "Unit": "Hrs"},
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # 6: cost category mapping query (App tag + COST_CATEGORY)
         {
             "ResultsByTime": [
                 {
@@ -317,7 +430,7 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # Allocated costs: current period (COST_CATEGORY only, NetAmortizedCost)
+        # 7: allocated costs: current
         {
             "ResultsByTime": [
                 {
@@ -332,7 +445,22 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # Allocated costs: prev_month period (COST_CATEGORY only, NetAmortizedCost)
+        # 8: allocated costs: prev_complete
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["CostCenter$Engineering"],
+                            "Metrics": {
+                                "NetAmortizedCost": {"Amount": "950.0", "Unit": "USD"}
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # 9: allocated costs: prev_month
         {
             "ResultsByTime": [
                 {
@@ -347,7 +475,7 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # Allocated costs: yoy period (COST_CATEGORY only, NetAmortizedCost)
+        # 10: allocated costs: yoy
         {
             "ResultsByTime": [
                 {
@@ -356,6 +484,21 @@ def test_collect_integration() -> None:
                             "Keys": ["CostCenter$Engineering"],
                             "Metrics": {
                                 "NetAmortizedCost": {"Amount": "800.0", "Unit": "USD"}
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # 11: allocated costs: prev_month_partial
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["CostCenter$Engineering"],
+                            "Metrics": {
+                                "NetAmortizedCost": {"Amount": "250.0", "Unit": "USD"}
                             },
                         }
                     ]
@@ -393,26 +536,34 @@ def test_collect_integration() -> None:
 
     # Verify structure of returned data
     assert "now" in result
+    assert "is_mtd" in result
+    assert result["is_mtd"] is True
     assert "period_labels" in result
     assert "raw_data" in result
     assert "cc_mapping" in result
     assert "split_charge_categories" in result
     assert "allocated_costs" in result
 
-    # Verify period labels
+    # Verify period labels (MTD mode includes extra keys)
     assert "current" in result["period_labels"]
+    assert "prev_complete" in result["period_labels"]
     assert "prev_month" in result["period_labels"]
     assert "yoy" in result["period_labels"]
+    assert "prev_month_partial" in result["period_labels"]
 
-    # Verify raw_data contains all three periods
+    # Verify raw_data contains all five periods
     assert "current" in result["raw_data"]
+    assert "prev_complete" in result["raw_data"]
     assert "prev_month" in result["raw_data"]
     assert "yoy" in result["raw_data"]
+    assert "prev_month_partial" in result["raw_data"]
 
     # Verify data was collected
     assert len(result["raw_data"]["current"]) == 2
+    assert len(result["raw_data"]["prev_complete"]) == 1
     assert len(result["raw_data"]["prev_month"]) == 1
     assert len(result["raw_data"]["yoy"]) == 1
+    assert len(result["raw_data"]["prev_month_partial"]) == 1
 
     # Verify cost category mapping
     assert result["cc_mapping"] == {"web-app": "Engineering", "api": "Engineering"}
@@ -421,24 +572,28 @@ def test_collect_integration() -> None:
     assert result["split_charge_categories"] == []
     assert result["split_charge_rules"] == []
 
-    # Verify allocated costs for all periods
+    # Verify allocated costs: current, prev_complete, prev_month, yoy, prev_month_partial
     assert "current" in result["allocated_costs"]
+    assert "prev_complete" in result["allocated_costs"]
     assert "prev_month" in result["allocated_costs"]
     assert "yoy" in result["allocated_costs"]
+    assert "prev_month_partial" in result["allocated_costs"]
     assert result["allocated_costs"]["current"] == {"Engineering": 1100.0}
+    assert result["allocated_costs"]["prev_complete"] == {"Engineering": 950.0}
+    assert result["allocated_costs"]["prev_month_partial"] == {"Engineering": 250.0}
 
-    # Verify get_cost_and_usage was called 7 times:
-    # 3 periods + 1 for cost category mapping + 3 for allocated costs
-    assert mock_ce_client.get_cost_and_usage.call_count == 7
+    # Verify get_cost_and_usage was called 11 times:
+    # 5 periods + 1 for cost category mapping + 5 for allocated costs
+    assert mock_ce_client.get_cost_and_usage.call_count == 11
 
 
 def test_collect_with_target_month() -> None:
-    """Test collect() with explicit target_month generates correct date ranges."""
+    """Test collect() with explicit target_month generates correct date ranges (backfill mode)."""
     from unittest.mock import patch
 
     mock_ce_client = MagicMock()
 
-    # Mock empty responses for get_cost_and_usage (3 periods only, no allocated costs since no category)
+    # In backfill mode (target provided), only 3 periods are queried (no MTD extras)
     mock_ce_client.get_cost_and_usage.return_value = {"ResultsByTime": [{"Groups": []}]}
     mock_ce_client.get_cost_categories.return_value = {"CostCategoryNames": []}
     # Mock split charge detection calls (won't be called since category_name is empty, but safe to mock)
@@ -456,10 +611,15 @@ def test_collect_with_target_month() -> None:
             target_month=6,
         )
 
-    # Verify period labels reflect the target month
+    # Verify is_mtd is False in backfill mode
+    assert result["is_mtd"] is False
+
+    # Verify period labels reflect the target month (no MTD-specific keys)
     assert result["period_labels"]["current"] == "2025-06"
     assert result["period_labels"]["prev_month"] == "2025-05"
     assert result["period_labels"]["yoy"] == "2024-06"
+    assert "prev_complete" not in result["period_labels"]
+    assert "prev_month_partial" not in result["period_labels"]
 
     # Verify get_cost_and_usage was called with correct date ranges
     calls = mock_ce_client.get_cost_and_usage.call_args_list
@@ -478,6 +638,9 @@ def test_collect_with_target_month() -> None:
     third_call_time_period = calls[2][1]["TimePeriod"]
     assert third_call_time_period["Start"] == "2024-06-01"
     assert third_call_time_period["End"] == "2024-07-01"
+
+    # Only 3 CE calls (no category, no allocated costs)
+    assert mock_ce_client.get_cost_and_usage.call_count == 3
 
 
 def test_get_split_charge_categories_returns_rules() -> None:
@@ -625,18 +788,22 @@ def test_collect_auto_discovers_category_name() -> None:
         ],
     }
 
-    # get_cost_and_usage call order:
-    # 1-3: three periods (raw cost data)
-    # 4:   cost category mapping (App + COST_CATEGORY)
-    # 5-7: allocated costs per period (COST_CATEGORY only)
+    # get_cost_and_usage call order in MTD mode:
+    # 1-5:  five periods (raw cost data: current, prev_complete, prev_month, yoy, prev_month_partial)
+    # 6:    cost category mapping (App + COST_CATEGORY)
+    # 7-11: allocated costs per period (current, prev_complete, prev_month, yoy, prev_month_partial)
     mock_ce_client.get_cost_and_usage.side_effect = [
-        empty_period,  # current period raw data
+        empty_period,  # current (MTD) raw data
+        empty_period,  # prev_complete raw data
         empty_period,  # prev_month raw data
         empty_period,  # yoy raw data
+        empty_period,  # prev_month_partial raw data
         cc_mapping_response,  # cc mapping
         allocated_response,  # allocated costs: current
+        allocated_response,  # allocated costs: prev_complete
         allocated_response,  # allocated costs: prev_month
         allocated_response,  # allocated costs: yoy
+        allocated_response,  # allocated costs: prev_month_partial
     ]
 
     # Auto-discovery: first call returns the list of category names;

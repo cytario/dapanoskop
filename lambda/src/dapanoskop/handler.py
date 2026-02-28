@@ -236,6 +236,49 @@ def _handle_backfill(
     }
 
 
+def _build_prev_complete_collected(collected: dict[str, Any]) -> dict[str, Any]:
+    """Build a process()-compatible collected dict for the prev_complete period.
+
+    Remaps the keys from the MTD-era collected dict so that:
+      - "prev_complete" becomes "current"
+      - "prev_month" (the month before prev_complete) stays as "prev_month"
+      - "yoy" stays as "yoy"
+    Strips MTD-specific keys (prev_month_partial, is_mtd).
+    """
+    raw_data = collected["raw_data"]
+    period_labels = collected["period_labels"]
+    allocated_costs = collected.get("allocated_costs", {})
+    periods_raw = collected.get("periods", {})
+
+    return {
+        "now": collected["now"],
+        "is_mtd": False,
+        "periods": {
+            "current": periods_raw.get("prev_complete", ("", "")),
+            "prev_month": periods_raw.get("prev_month", ("", "")),
+            "yoy": periods_raw.get("yoy", ("", "")),
+        },
+        "period_labels": {
+            "current": period_labels.get("prev_complete", ""),
+            "prev_month": period_labels.get("prev_month", ""),
+            "yoy": period_labels.get("yoy", ""),
+        },
+        "raw_data": {
+            "current": raw_data.get("prev_complete", []),
+            "prev_month": raw_data.get("prev_month", []),
+            "yoy": raw_data.get("yoy", []),
+        },
+        "cc_mapping": collected.get("cc_mapping", {}),
+        "split_charge_categories": collected.get("split_charge_categories", []),
+        "split_charge_rules": collected.get("split_charge_rules", []),
+        "allocated_costs": {
+            "current": allocated_costs.get("prev_complete", {}),
+            "prev_month": allocated_costs.get("prev_month", {}),
+            "yoy": allocated_costs.get("yoy", {}),
+        },
+    }
+
+
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Lambda handler for cost data collection and processing.
 
@@ -268,30 +311,62 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             storage_lens_config_id,
         )
 
-    # Normal mode: process current month
+    # Normal mode: collect MTD period + most recently completed month
     try:
         logger.info("Starting data collection (bucket=%s)", bucket)
         collected = collect(cost_category_name=cost_category_name)
 
-        logger.info("Processing collected data")
-        processed = process(collected, include_efs=include_efs, include_ebs=include_ebs)
+        # --- Write MTD period (current in-progress month) ---
+        logger.info("Processing MTD period data")
+        processed_mtd = process(
+            collected, include_efs=include_efs, include_ebs=include_ebs, is_mtd=True
+        )
 
-        # Enrich with S3 Storage Lens data if configured
         if storage_lens_config_id is not None:
-            period_label = processed["summary"]["period"]
+            period_label = processed_mtd["summary"]["period"]
             p_year, p_month = int(period_label[:4]), int(period_label[5:7])
             _enrich_with_storage_lens(
-                processed, storage_lens_config_id, p_year, p_month
+                processed_mtd, storage_lens_config_id, p_year, p_month
             )
 
-        logger.info("Writing to S3")
-        write_to_s3(processed, bucket)
+        logger.info("Writing MTD period to S3")
+        write_to_s3(processed_mtd, bucket, update_index_file=False)
+        mtd_period = processed_mtd["summary"]["period"]
+        logger.info("MTD period written: %s", mtd_period)
 
-        period = processed["summary"]["period"]
-        logger.info("Pipeline completed for period %s", period)
+        # --- Write most recently completed month ---
+        # Build a collected-like dict for the prev_complete period using the
+        # data already fetched (prev_complete + prev_month + yoy).
+        prev_complete_label = collected["period_labels"].get("prev_complete")
+        if prev_complete_label:
+            logger.info("Processing prev_complete period: %s", prev_complete_label)
+            prev_collected = _build_prev_complete_collected(collected)
+            processed_prev = process(
+                prev_collected,
+                include_efs=include_efs,
+                include_ebs=include_ebs,
+                is_mtd=False,
+            )
+
+            if storage_lens_config_id is not None:
+                pc_year = int(prev_complete_label[:4])
+                pc_month = int(prev_complete_label[5:7])
+                _enrich_with_storage_lens(
+                    processed_prev, storage_lens_config_id, pc_year, pc_month
+                )
+
+            logger.info("Writing prev_complete period to S3")
+            write_to_s3(processed_prev, bucket, update_index_file=False)
+            logger.info("prev_complete period written: %s", prev_complete_label)
+
+        # Update index once after both writes
+        logger.info("Updating index.json")
+        update_index(bucket)
+
+        logger.info("Pipeline completed: MTD=%s", mtd_period)
         return {
             "statusCode": 200,
-            "body": json.dumps({"message": "ok", "period": period}),
+            "body": json.dumps({"message": "ok", "period": mtd_period}),
         }
     except Exception:
         logger.exception("Pipeline failed")

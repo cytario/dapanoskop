@@ -871,3 +871,131 @@ def test_handler_backfill_index_survives_failures(
     index_data = json.loads(index_obj["Body"].read())
     assert len(index_data["periods"]) == 1
     assert "2026-01" in index_data["periods"]
+
+
+@mock_aws
+def test_handler_normal_mode_writes_mtd_and_prev_complete(
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Normal daily run writes TWO periods: MTD (current) + most recently completed month.
+
+    The MTD summary.json has is_mtd=true and mtd_comparison.
+    The prev_complete summary.json has is_mtd=false and no mtd_comparison.
+    """
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket=s3_bucket_env)
+
+    from datetime import datetime, timezone
+
+    from dapanoskop import handler as handler_module
+
+    def mock_collect(cost_category_name: str = "") -> dict:
+        return {
+            "now": datetime(2026, 2, 8, 6, 0, 0, tzinfo=timezone.utc),
+            "is_mtd": True,
+            "periods": {
+                "current": ("2026-02-01", "2026-02-08"),
+                "prev_complete": ("2026-01-01", "2026-02-01"),
+                "prev_month": ("2025-12-01", "2026-01-01"),
+                "yoy": ("2025-02-01", "2025-02-08"),
+                "prev_month_partial": ("2026-01-01", "2026-01-08"),
+            },
+            "period_labels": {
+                "current": "2026-02",
+                "prev_complete": "2026-01",
+                "prev_month": "2025-12",
+                "yoy": "2025-02",
+                "prev_month_partial": "2026-01",
+            },
+            "raw_data": {
+                "current": [
+                    {
+                        "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                        "Metrics": {
+                            "UnblendedCost": {"Amount": "800", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "200", "Unit": "Hrs"},
+                        },
+                    }
+                ],
+                "prev_complete": [
+                    {
+                        "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                        "Metrics": {
+                            "UnblendedCost": {"Amount": "1000", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "744", "Unit": "Hrs"},
+                        },
+                    }
+                ],
+                "prev_month": [
+                    {
+                        "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                        "Metrics": {
+                            "UnblendedCost": {"Amount": "900", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "720", "Unit": "Hrs"},
+                        },
+                    }
+                ],
+                "yoy": [],
+                "prev_month_partial": [
+                    {
+                        "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                        "Metrics": {
+                            "UnblendedCost": {"Amount": "250", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "60", "Unit": "Hrs"},
+                        },
+                    }
+                ],
+            },
+            "cc_mapping": {"web-app": "Engineering"},
+        }
+
+    monkeypatch.setattr(handler_module, "collect", mock_collect)
+
+    from dapanoskop.handler import handler
+
+    result = handler({}, None)
+    assert result["statusCode"] == 200
+    body = json.loads(result["body"])
+    assert body["period"] == "2026-02"
+
+    # Verify both periods' files were written to S3
+    objects = s3.list_objects_v2(Bucket=s3_bucket_env)
+    keys = [obj["Key"] for obj in objects.get("Contents", [])]
+
+    # MTD period (2026-02)
+    assert "2026-02/summary.json" in keys
+    assert "2026-02/cost-by-workload.parquet" in keys
+    assert "2026-02/cost-by-usage-type.parquet" in keys
+
+    # prev_complete period (2026-01)
+    assert "2026-01/summary.json" in keys
+    assert "2026-01/cost-by-workload.parquet" in keys
+    assert "2026-01/cost-by-usage-type.parquet" in keys
+
+    # index.json should list both
+    assert "index.json" in keys
+
+    # Verify MTD summary.json content
+    mtd_summary_obj = s3.get_object(Bucket=s3_bucket_env, Key="2026-02/summary.json")
+    mtd_summary = json.loads(mtd_summary_obj["Body"].read())
+    assert mtd_summary["period"] == "2026-02"
+    assert mtd_summary["is_mtd"] is True
+    assert "mtd_comparison" in mtd_summary
+    assert mtd_summary["mtd_comparison"]["prior_partial_start"] == "2026-01-01"
+    assert mtd_summary["mtd_comparison"]["prior_partial_end_exclusive"] == "2026-01-08"
+    eng_cmp = mtd_summary["mtd_comparison"]["cost_centers"][0]
+    assert eng_cmp["name"] == "Engineering"
+    assert eng_cmp["prior_partial_cost_usd"] == 250.0
+
+    # Verify prev_complete summary.json content
+    prev_summary_obj = s3.get_object(Bucket=s3_bucket_env, Key="2026-01/summary.json")
+    prev_summary = json.loads(prev_summary_obj["Body"].read())
+    assert prev_summary["period"] == "2026-01"
+    assert prev_summary["is_mtd"] is False
+    assert "mtd_comparison" not in prev_summary
+
+    # Verify index.json contains both periods
+    index_obj = s3.get_object(Bucket=s3_bucket_env, Key="index.json")
+    index_data = json.loads(index_obj["Body"].read())
+    assert "2026-02" in index_data["periods"]
+    assert "2026-01" in index_data["periods"]

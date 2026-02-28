@@ -7,6 +7,8 @@ export interface CostSummary {
     prev_month: string;
     yoy: string;
   };
+  is_mtd?: boolean;
+  mtd_comparison?: MtdComparison;
   storage_config: {
     include_efs: boolean;
     include_ebs: boolean;
@@ -15,6 +17,24 @@ export interface CostSummary {
   storage_lens?: StorageLens;
   cost_centers: CostCenter[];
   tagging_coverage: TaggingCoverage;
+}
+
+export interface MtdComparison {
+  prior_partial_start: string;
+  prior_partial_end_exclusive: string;
+  cost_centers: MtdCostCenter[];
+}
+
+export interface MtdCostCenter {
+  name: string;
+  prior_partial_cost_usd: number;
+  workloads: MtdWorkload[];
+  is_split_charge?: boolean;
+}
+
+export interface MtdWorkload {
+  name: string;
+  prior_partial_cost_usd: number;
 }
 
 export interface StorageLens {

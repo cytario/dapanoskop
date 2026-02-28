@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import boto3
@@ -22,45 +22,114 @@ def _month_range(year: int, month: int) -> tuple[str, str]:
     return start, end
 
 
+def _get_prior_partial_period(
+    mtd_start: str,
+    mtd_end_exclusive: str,
+) -> tuple[str, str]:
+    """Compute the prior month's equivalent partial period for like-for-like MTD comparison.
+
+    Given the MTD window [mtd_start, mtd_end_exclusive), returns the date range
+    covering the same number of days in the prior calendar month.
+
+    The end date is clamped to the first day of the current month (i.e., the last
+    valid day of the prior month + 1) when the prior month is shorter than the MTD
+    window (e.g., today is March 30 and the prior month is February with 28 days).
+
+    Args:
+        mtd_start: Start date string "YYYY-MM-DD" (first day of current month).
+        mtd_end_exclusive: Exclusive end date string "YYYY-MM-DD" (today).
+
+    Returns:
+        Tuple of (prior_partial_start, prior_partial_end_exclusive) as date strings.
+    """
+    start_date = date.fromisoformat(mtd_start)
+    end_date = date.fromisoformat(mtd_end_exclusive)
+    mtd_days = (end_date - start_date).days
+
+    # First day of the prior month
+    if start_date.month == 1:
+        prior_month_start = date(start_date.year - 1, 12, 1)
+    else:
+        prior_month_start = date(start_date.year, start_date.month - 1, 1)
+
+    prior_partial_end = prior_month_start + timedelta(days=mtd_days)
+
+    # Clamp to the boundary of the prior month (= first day of current month = mtd_start)
+    if prior_partial_end > start_date:
+        prior_partial_end = start_date
+
+    return prior_month_start.isoformat(), prior_partial_end.isoformat()
+
+
 def _get_periods(
     now: datetime,
     target_year: int | None = None,
     target_month: int | None = None,
 ) -> dict[str, tuple[str, str]]:
-    """Compute the three reporting periods.
+    """Compute reporting periods.
 
     Returns dict with keys: current, prev_month, yoy.
     Each value is (start_date, end_date) for CE API.
 
-    If target_year and target_month are provided, use that as the target period.
-    Otherwise, "current" is the most recent complete month (i.e., the previous calendar month).
-    The pipeline runs at 06:00 UTC daily, so by the 1st the previous month is complete.
+    If target_year and target_month are provided (backfill), use that as the
+    target period ("current" is the specified completed month).
+
+    Otherwise (normal daily run), "current" is the current in-progress calendar
+    month (MTD period: [first_day_of_current_month, today)), and "prev_complete"
+    is the most recently completed calendar month. "prev_month_partial" is the
+    prior month's equivalent partial period for like-for-like MTD comparison.
     """
     if target_year is not None and target_month is not None:
-        # Use explicit target month
-        prev_year = target_year
-        prev_month = target_month
-    else:
-        # Default: use previous complete month relative to now
-        year, month = now.year, now.month
-        prev_year = year if month > 1 else year - 1
-        prev_month = month - 1 if month > 1 else 12
+        # Backfill mode: use explicit target month as a completed period
+        cur_year = target_year
+        cur_month = target_month
 
-    current_start, current_end = _month_range(prev_year, prev_month)
+        current_start, current_end = _month_range(cur_year, cur_month)
 
-    # Previous month relative to current period
-    pm_month = prev_month - 1 if prev_month > 1 else 12
-    pm_year = prev_year if prev_month > 1 else prev_year - 1
-    pm_start, pm_end = _month_range(pm_year, pm_month)
+        # Previous month relative to target
+        pm_month = cur_month - 1 if cur_month > 1 else 12
+        pm_year = cur_year if cur_month > 1 else cur_year - 1
+        pm_start, pm_end = _month_range(pm_year, pm_month)
 
-    # Year-over-year
-    yoy_year = prev_year - 1
-    yoy_start, yoy_end = _month_range(yoy_year, prev_month)
+        # Year-over-year
+        yoy_start, yoy_end = _month_range(cur_year - 1, cur_month)
+
+        return {
+            "current": (current_start, current_end),
+            "prev_month": (pm_start, pm_end),
+            "yoy": (yoy_start, yoy_end),
+        }
+
+    # Normal daily run: current in-progress month as MTD period
+    year, month = now.year, now.month
+    today_str = now.strftime("%Y-%m-%d")
+    mtd_start = f"{year:04d}-{month:02d}-01"
+    mtd_end = today_str  # CE end is exclusive; today is not yet complete
+
+    # Most recently completed calendar month
+    prev_year = year if month > 1 else year - 1
+    prev_month = month - 1 if month > 1 else 12
+    prev_complete_start, prev_complete_end = _month_range(prev_year, prev_month)
+
+    # Month before the most recently completed month (for prev_month comparison)
+    pm2_month = prev_month - 1 if prev_month > 1 else 12
+    pm2_year = prev_year if prev_month > 1 else prev_year - 1
+    pm2_start, pm2_end = _month_range(pm2_year, pm2_month)
+
+    # Year-over-year (same month last year) — based on current in-progress month
+    yoy_start, yoy_end = _month_range(year - 1, month)
+
+    # Prior partial period for like-for-like MTD comparison
+    prior_partial_start, prior_partial_end = _get_prior_partial_period(
+        mtd_start, mtd_end
+    )
 
     return {
-        "current": (current_start, current_end),
-        "prev_month": (pm_start, pm_end),
+        "current": (mtd_start, mtd_end),
+        "prev_complete": (prev_complete_start, prev_complete_end),
+        "prev_month": (pm2_start, pm2_end),
         "yoy": (yoy_start, yoy_end),
+        "prev_month_partial": (prior_partial_start, prior_partial_end),
     }
 
 
@@ -279,7 +348,17 @@ def collect(
         cost_category_name: AWS Cost Category name for workload grouping
         target_year: Optional target year for backfill (uses current if not provided)
         target_month: Optional target month for backfill (uses current if not provided)
+
+    When called without target_year/target_month (normal daily run), the result
+    includes is_mtd=True and additional keys:
+      - raw_data["current"]: current in-progress month (MTD period)
+      - raw_data["prev_complete"]: most recently completed calendar month
+      - raw_data["prev_month_partial"]: prior partial period for like-for-like comparison
+      - period_labels["prev_complete"]: label for the completed month
+      - period_labels["prev_month_partial"]: label for the prior partial period
     """
+    is_mtd = target_year is None and target_month is None
+
     ce_client = boto3.client("ce")
     now = datetime.now(timezone.utc)
     periods = _get_periods(now, target_year, target_month)
@@ -287,7 +366,9 @@ def collect(
     period_labels = {k: _period_label(v[0]) for k, v in periods.items()}
     logger.info("Collecting data for periods: %s", period_labels)
 
-    # Collect cost data for all three periods
+    # Collect cost data for all periods
+    # For the prior_month_partial period, only collect when is_mtd (it's a partial date
+    # range within the prior month and not meaningful for completed backfill months).
     raw_data: dict[str, list[dict[str, Any]]] = {}
     for period_key, (start, end) in periods.items():
         groups = get_cost_and_usage(ce_client, start, end)
@@ -310,12 +391,26 @@ def collect(
     allocated_costs: dict[str, dict[str, float]] = {}
     if resolved_cc_name:
         for period_key, (start, end) in periods.items():
+            # Skip prior partial period for allocated costs — the partial period
+            # is only used for MTD comparison aggregates, not for cost center totals.
+            if period_key == "prev_month_partial":
+                continue
             allocated_costs[period_key] = get_allocated_costs_by_category(
                 ce_client, resolved_cc_name, start, end
             )
 
+        # For the MTD prior partial period, also collect category-level allocated costs
+        # so the processor can build mtd_comparison cost center totals.
+        if is_mtd and "prev_month_partial" in periods:
+            partial_start, partial_end = periods["prev_month_partial"]
+            allocated_costs["prev_month_partial"] = get_allocated_costs_by_category(
+                ce_client, resolved_cc_name, partial_start, partial_end
+            )
+
     return {
         "now": now,
+        "is_mtd": is_mtd,
+        "periods": periods,
         "period_labels": period_labels,
         "raw_data": raw_data,
         "cc_mapping": cc_mapping,

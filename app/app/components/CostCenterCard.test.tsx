@@ -2,12 +2,20 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, it, expect } from "vitest";
 import { CostCenterCard } from "./CostCenterCard";
-import type { CostCenter } from "~/types/cost-data";
+import type { CostCenter, MtdComparison } from "~/types/cost-data";
 
-function renderCard(costCenter: CostCenter) {
+function renderCard(
+  costCenter: CostCenter,
+  opts?: { isMtd?: boolean; mtdComparison?: MtdComparison },
+) {
   return render(
     <MemoryRouter>
-      <CostCenterCard costCenter={costCenter} period="2026-01" />
+      <CostCenterCard
+        costCenter={costCenter}
+        period="2026-01"
+        isMtd={opts?.isMtd}
+        mtdComparison={opts?.mtdComparison}
+      />
     </MemoryRouter>,
   );
 }
@@ -141,5 +149,62 @@ describe("CostCenterCard", () => {
     // Should show top mover with 0.0% (division by zero case)
     expect(container.textContent).toContain("Top mover:");
     expect(container.textContent).toContain("0.0% MoM");
+  });
+
+  it("shows MTD like-for-like comparison label when isMtd with mtdComparison", () => {
+    const mtdComparison: MtdComparison = {
+      prior_partial_start: "2025-12-01",
+      prior_partial_end_exclusive: "2025-12-08",
+      cost_centers: [
+        {
+          name: "Engineering",
+          prior_partial_cost_usd: 4200,
+          workloads: [
+            { name: "data-pipeline", prior_partial_cost_usd: 2000 },
+            { name: "web-app", prior_partial_cost_usd: 1500 },
+          ],
+        },
+      ],
+    };
+    const { container } = renderCard(costCenter, {
+      isMtd: true,
+      mtdComparison,
+    });
+    // Should show "vs Dec 1-7" label instead of "MoM"
+    expect(container.textContent).toContain("vs Dec 1\u20137");
+  });
+
+  it("suppresses YoY and shows N/A (MTD) when isMtd", () => {
+    const { container } = renderCard(costCenter, { isMtd: true });
+    expect(container.textContent).toContain("YoY N/A (MTD)");
+  });
+
+  it("uses MTD partial cost for comparison when mtdComparison provided", () => {
+    const mtdComparison: MtdComparison = {
+      prior_partial_start: "2025-12-01",
+      prior_partial_end_exclusive: "2025-12-08",
+      cost_centers: [
+        {
+          name: "Engineering",
+          prior_partial_cost_usd: 10000,
+          workloads: [
+            { name: "data-pipeline", prior_partial_cost_usd: 4000 },
+            { name: "web-app", prior_partial_cost_usd: 2500 },
+          ],
+        },
+      ],
+    };
+    const { container } = renderCard(costCenter, {
+      isMtd: true,
+      mtdComparison,
+    });
+    // Cost center: current=$15000, MTD prior=$10000, delta=+$5000
+    expect(container.textContent).toContain("+$5,000.00");
+  });
+
+  it("falls back to standard MoM when isMtd but no mtdComparison", () => {
+    const { container } = renderCard(costCenter, { isMtd: true });
+    // Should use prev_month_cost_usd ($14200): delta = $15000-$14200 = +$800
+    expect(container.textContent).toContain("+$800.00");
   });
 });

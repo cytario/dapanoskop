@@ -3,6 +3,7 @@ import {
   formatUsd,
   formatChange,
   formatPeriodLabel,
+  formatPartialPeriodLabel,
   formatBytes,
 } from "./format";
 
@@ -75,6 +76,30 @@ describe("formatPeriodLabel", () => {
 
   test("formats 2025-12 as Dec 25", () => {
     expect(formatPeriodLabel("2025-12")).toBe("Dec 25");
+  });
+});
+
+describe("formatPartialPeriodLabel", () => {
+  test("formats a week-long range within same month", () => {
+    expect(formatPartialPeriodLabel("2026-01-01", "2026-01-08")).toBe(
+      "Jan 1\u20137",
+    );
+  });
+
+  test("formats a single day range", () => {
+    expect(formatPartialPeriodLabel("2026-03-15", "2026-03-16")).toBe("Mar 15");
+  });
+
+  test("formats a full month range", () => {
+    expect(formatPartialPeriodLabel("2026-02-01", "2026-03-01")).toBe(
+      "Feb 1\u201328",
+    );
+  });
+
+  test("formats mid-month range", () => {
+    expect(formatPartialPeriodLabel("2025-12-01", "2025-12-15")).toBe(
+      "Dec 1\u201314",
+    );
   });
 });
 

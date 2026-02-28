@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
-import type { CostSummary } from "~/types/cost-data";
+import type { CostSummary, MtdComparison } from "~/types/cost-data";
 import { discoverPeriods, fetchSummary } from "~/lib/data";
+import { formatPartialPeriodLabel } from "~/lib/format";
 import {
   initAuth,
   isAuthenticated,
@@ -37,6 +38,10 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Determine current month for MTD label and period default
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
   // Auth check
   useEffect(() => {
     async function checkAuth() {
@@ -64,11 +69,16 @@ export default function Home() {
         const discovered = await discoverPeriods();
         if (discovered.length > 0) {
           setPeriods(discovered);
-          // Use period from URL if valid, otherwise default to most recent
+          // Use period from URL if valid, otherwise default to most recent completed month.
+          // Skip the MTD period (current month) as default — users can still select it.
+          const defaultPeriod =
+            discovered[0] === currentMonth && discovered.length > 1
+              ? discovered[1]
+              : discovered[0];
           const initial =
             urlPeriod && discovered.includes(urlPeriod)
               ? urlPeriod
-              : discovered[0];
+              : defaultPeriod;
           setSelectedPeriod(initial);
         } else {
           setError("No cost data available.");
@@ -79,7 +89,7 @@ export default function Home() {
       setLoading(false);
     }
     loadPeriods();
-  }, [authenticated, urlPeriod]);
+  }, [authenticated, urlPeriod, currentMonth]);
 
   // Load summary for selected period
   useEffect(() => {
@@ -97,10 +107,6 @@ export default function Home() {
     }
     loadSummary();
   }, [selectedPeriod]);
-
-  // Determine current month for MTD label
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
   if (!authenticated && !loading) {
     return (
@@ -156,8 +162,20 @@ export default function Home() {
 
         {summary && !loading && (
           <>
+            {/* MTD Banner */}
+            {summary.is_mtd && (
+              <MtdBanner
+                collectedAt={summary.collected_at}
+                mtdComparison={summary.mtd_comparison}
+              />
+            )}
+
             {/* Global Summary */}
-            <GlobalSummary summary={summary} />
+            <GlobalSummary
+              summary={summary}
+              isMtd={summary.is_mtd}
+              mtdComparison={summary.mtd_comparison}
+            />
 
             {/* Cost Trend Chart */}
             <CostTrendSection />
@@ -179,6 +197,8 @@ export default function Home() {
                   key={cc.name}
                   costCenter={cc}
                   period={selectedPeriod}
+                  isMtd={summary.is_mtd}
+                  mtdComparison={summary.mtd_comparison}
                 />
               ))}
             </div>
@@ -188,6 +208,30 @@ export default function Home() {
 
       {/* Footer */}
       <Footer />
+    </div>
+  );
+}
+
+function MtdBanner({
+  collectedAt,
+  mtdComparison,
+}: {
+  collectedAt: string;
+  mtdComparison?: MtdComparison;
+}) {
+  const date = new Date(collectedAt);
+  const throughDate = date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+  const comparisonNote = mtdComparison
+    ? ` Comparisons are against ${formatPartialPeriodLabel(mtdComparison.prior_partial_start, mtdComparison.prior_partial_end_exclusive)} of the prior month.`
+    : "";
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+      <span className="font-medium">Month-to-date</span> — data through{" "}
+      {throughDate}. Figures will change as the month progresses.
+      {comparisonNote}
     </div>
   );
 }

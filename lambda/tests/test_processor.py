@@ -1079,3 +1079,163 @@ def test_redistribution_fixed_whitespace_in_values() -> None:
     assert result["Eng"] == 440.0
     # Data: 100 + 30% of 200 = 100 + 60 = 160
     assert result["Data"] == 160.0
+
+
+# --- MTD processing tests ---
+
+
+def _make_mtd_collected(
+    current_groups: list[dict],
+    prev_complete_groups: list[dict],
+    prev_month_groups: list[dict],
+    yoy_groups: list[dict],
+    prev_month_partial_groups: list[dict],
+    cc_mapping: dict[str, str] | None = None,
+    prior_partial_dates: tuple[str, str] = ("2026-01-01", "2026-01-08"),
+) -> dict:
+    """Build a collected dict simulating normal daily (MTD) run output."""
+    return {
+        "now": datetime(2026, 2, 8, 6, 0, 0, tzinfo=timezone.utc),
+        "is_mtd": True,
+        "periods": {
+            "current": ("2026-02-01", "2026-02-08"),
+            "prev_complete": ("2026-01-01", "2026-02-01"),
+            "prev_month": ("2025-12-01", "2026-01-01"),
+            "yoy": ("2025-02-01", "2025-02-08"),
+            "prev_month_partial": prior_partial_dates,
+        },
+        "period_labels": {
+            "current": "2026-02",
+            "prev_complete": "2026-01",
+            "prev_month": "2025-12",
+            "yoy": "2025-02",
+            "prev_month_partial": "2026-01",
+        },
+        "raw_data": {
+            "current": current_groups,
+            "prev_complete": prev_complete_groups,
+            "prev_month": prev_month_groups,
+            "yoy": yoy_groups,
+            "prev_month_partial": prev_month_partial_groups,
+        },
+        "cc_mapping": cc_mapping or {},
+    }
+
+
+def test_process_mtd_sets_is_mtd_flag() -> None:
+    """process() with is_mtd=True sets is_mtd: true in summary."""
+    collected = _make_collected(
+        current_groups=[_make_group("app", "BoxUsage:m5.xlarge", 100, 10)],
+        prev_groups=[],
+        yoy_groups=[],
+    )
+    result = process(collected, is_mtd=True)
+    assert result["summary"]["is_mtd"] is True
+
+
+def test_process_non_mtd_sets_is_mtd_false() -> None:
+    """process() without is_mtd=True sets is_mtd: false in summary."""
+    collected = _make_collected(
+        current_groups=[_make_group("app", "BoxUsage:m5.xlarge", 100, 10)],
+        prev_groups=[],
+        yoy_groups=[],
+    )
+    result = process(collected, is_mtd=False)
+    assert result["summary"]["is_mtd"] is False
+
+
+def test_process_mtd_includes_mtd_comparison() -> None:
+    """process() with is_mtd=True and prev_month_partial data emits mtd_comparison."""
+    collected = _make_mtd_collected(
+        current_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 800, 100),
+            _make_group("api", "BoxUsage:t3.medium", 200, 50),
+        ],
+        prev_complete_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 1000, 744),
+        ],
+        prev_month_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 900, 720),
+        ],
+        yoy_groups=[],
+        prev_month_partial_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 250, 80),
+            _make_group("api", "BoxUsage:t3.medium", 70, 25),
+        ],
+        cc_mapping={"web-app": "Engineering", "api": "Engineering"},
+        prior_partial_dates=("2026-01-01", "2026-01-08"),
+    )
+
+    result = process(collected, is_mtd=True)
+    summary = result["summary"]
+
+    # is_mtd flag present
+    assert summary["is_mtd"] is True
+
+    # mtd_comparison must be present
+    assert "mtd_comparison" in summary
+    mtd_cmp = summary["mtd_comparison"]
+
+    # Date range
+    assert mtd_cmp["prior_partial_start"] == "2026-01-01"
+    assert mtd_cmp["prior_partial_end_exclusive"] == "2026-01-08"
+
+    # One cost center (Engineering) with combined prior partial cost
+    assert len(mtd_cmp["cost_centers"]) == 1
+    eng_cmp = mtd_cmp["cost_centers"][0]
+    assert eng_cmp["name"] == "Engineering"
+    assert eng_cmp["prior_partial_cost_usd"] == 320.0  # 250 + 70
+
+    # Workloads in mtd_comparison
+    wl_names = {w["name"] for w in eng_cmp["workloads"]}
+    assert "web-app" in wl_names
+    assert "api" in wl_names
+    web_wl = next(w for w in eng_cmp["workloads"] if w["name"] == "web-app")
+    assert web_wl["prior_partial_cost_usd"] == 250.0
+    api_wl = next(w for w in eng_cmp["workloads"] if w["name"] == "api")
+    assert api_wl["prior_partial_cost_usd"] == 70.0
+
+
+def test_process_mtd_no_comparison_without_partial_data() -> None:
+    """process() with is_mtd=True but no prev_month_partial data omits mtd_comparison."""
+    collected = _make_collected(
+        current_groups=[_make_group("app", "BoxUsage:m5.xlarge", 100, 10)],
+        prev_groups=[],
+        yoy_groups=[],
+    )
+    # No prev_month_partial in raw_data
+    result = process(collected, is_mtd=True)
+    assert result["summary"]["is_mtd"] is True
+    assert "mtd_comparison" not in result["summary"]
+
+
+def test_process_mtd_comparison_absent_when_not_mtd() -> None:
+    """process() with is_mtd=False never emits mtd_comparison even with partial data."""
+    collected = _make_mtd_collected(
+        current_groups=[_make_group("app", "BoxUsage:m5.xlarge", 100, 10)],
+        prev_complete_groups=[],
+        prev_month_groups=[],
+        yoy_groups=[],
+        prev_month_partial_groups=[_make_group("app", "BoxUsage:m5.xlarge", 30, 5)],
+    )
+    result = process(collected, is_mtd=False)
+    assert result["summary"]["is_mtd"] is False
+    assert "mtd_comparison" not in result["summary"]
+
+
+def test_process_summary_periods_excludes_internal_keys() -> None:
+    """summary.periods only contains current, prev_month, yoy — not prev_complete or prev_month_partial."""
+    collected = _make_mtd_collected(
+        current_groups=[_make_group("app", "BoxUsage:m5.xlarge", 100, 10)],
+        prev_complete_groups=[],
+        prev_month_groups=[],
+        yoy_groups=[],
+        prev_month_partial_groups=[],
+    )
+    result = process(collected, is_mtd=True)
+    periods = result["summary"]["periods"]
+    assert "current" in periods
+    assert "prev_month" in periods
+    assert "yoy" in periods
+    assert "prev_complete" not in periods
+    assert "prev_month_partial" not in periods

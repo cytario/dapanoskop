@@ -16,6 +16,8 @@ Dapanoskop is an opinionated approach to cloud cost monitoring. Rather than tryi
 
 A daily Lambda queries AWS Cost Explorer, aggregates costs by workload and cost center, and writes pre-computed `summary.json`, Parquet files, and an `index.json` manifest to S3. The SPA authenticates via Cognito, obtains temporary AWS credentials from a Cognito Identity Pool, and accesses S3 directly — JSON via the AWS S3 SDK, Parquet via DuckDB-wasm's native S3 support (httpfs). Data access is enforced at the IAM level: only authenticated users receive scoped `s3:GetObject` credentials.
 
+Each daily run also collects the current in-progress month (month-to-date). The MTD period appears first in the period selector with a "MTD" badge; the report displays a banner and like-for-like change annotations comparing the current partial month against the same date range of the prior month (e.g., Feb 1–7 vs. Jan 1–7). The default period selection remains the most recently completed month.
+
 For initial setup, the Lambda supports backfill mode to populate up to 13 months of historical Cost Explorer data in a single invocation.
 
 ```

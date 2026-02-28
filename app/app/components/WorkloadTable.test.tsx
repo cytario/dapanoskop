@@ -2,12 +2,20 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, it, expect } from "vitest";
 import { WorkloadTable } from "./WorkloadTable";
-import type { Workload } from "~/types/cost-data";
+import type { Workload, MtdCostCenter } from "~/types/cost-data";
 
-function renderTable(workloads: Workload[]) {
+function renderTable(
+  workloads: Workload[],
+  opts?: { isMtd?: boolean; mtdCostCenter?: MtdCostCenter },
+) {
   return render(
     <MemoryRouter>
-      <WorkloadTable workloads={workloads} period="2026-01" />
+      <WorkloadTable
+        workloads={workloads}
+        period="2026-01"
+        isMtd={opts?.isMtd}
+        mtdCostCenter={opts?.mtdCostCenter}
+      />
     </MemoryRouter>,
   );
 }
@@ -106,5 +114,70 @@ describe("WorkloadTable", () => {
     renderTable(withUntagged);
     const row = screen.getByText("Untagged").closest("tr");
     expect(row).toHaveClass("bg-red-50");
+  });
+
+  it("shows MTD prior partial comparison when mtdCostCenter is provided", () => {
+    const workloads: Workload[] = [
+      {
+        name: "data-pipeline",
+        current_cost_usd: 5000,
+        prev_month_cost_usd: 14000,
+        yoy_cost_usd: 3200,
+      },
+    ];
+    const mtdCostCenter: MtdCostCenter = {
+      name: "Engineering",
+      prior_partial_cost_usd: 4200,
+      workloads: [{ name: "data-pipeline", prior_partial_cost_usd: 4200 }],
+    };
+    const { container } = renderTable(workloads, {
+      isMtd: true,
+      mtdCostCenter,
+    });
+    // Should use MTD partial cost ($4200), not full month ($14000)
+    // Delta = $5000 - $4200 = $800, so should show +$800.00
+    expect(container.textContent).toContain("+$800.00");
+  });
+
+  it("suppresses YoY and shows N/A (MTD) when isMtd is true", () => {
+    const workloads: Workload[] = [
+      {
+        name: "data-pipeline",
+        current_cost_usd: 5000,
+        prev_month_cost_usd: 4800,
+        yoy_cost_usd: 3200,
+      },
+    ];
+    const { container } = renderTable(workloads, { isMtd: true });
+    expect(container.textContent).toContain("N/A (MTD)");
+  });
+
+  it("falls back to standard MoM when isMtd but no mtdCostCenter", () => {
+    const workloads: Workload[] = [
+      {
+        name: "data-pipeline",
+        current_cost_usd: 5000,
+        prev_month_cost_usd: 4800,
+        yoy_cost_usd: 3200,
+      },
+    ];
+    const { container } = renderTable(workloads, { isMtd: true });
+    // Should use prev_month_cost_usd ($4800): delta = +$200.00
+    expect(container.textContent).toContain("+$200.00");
+  });
+
+  it("shows vs Prior Partial header when isMtd", () => {
+    const workloads: Workload[] = [
+      {
+        name: "data-pipeline",
+        current_cost_usd: 5000,
+        prev_month_cost_usd: 4800,
+        yoy_cost_usd: 3200,
+      },
+    ];
+    const { container } = renderTable(workloads, { isMtd: true });
+    const headers = container.querySelectorAll("th");
+    const texts = Array.from(headers).map((h) => h.textContent);
+    expect(texts).toContain("vs Prior Partial");
   });
 });

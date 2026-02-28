@@ -264,12 +264,93 @@ def _apply_split_charge_redistribution(
     return result
 
 
+def _compute_mtd_comparison(
+    raw_partial: list[dict[str, Any]],
+    partial_dates: tuple[str, str],
+    partial_allocated: dict[str, float],
+    cc_groups: dict[str, list[str]],
+    cc_mapping: dict[str, str],
+    split_charge_cats: list[str],
+    split_charge_rules: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Compute mtd_comparison aggregates from the prior partial period data.
+
+    Returns the mtd_comparison dict to embed in summary.json.
+    """
+    prior_partial_start, prior_partial_end_exclusive = partial_dates
+    partial_rows = _parse_groups(raw_partial)
+    partial_costs = _aggregate_workloads(partial_rows)
+
+    # Apply split charge redistribution to partial allocated costs if needed
+    partial_alloc = dict(partial_allocated)
+    if split_charge_rules:
+        partial_alloc = _apply_split_charge_redistribution(
+            partial_alloc, split_charge_rules
+        )
+
+    comparison_centers = []
+    for cc_name in sorted(cc_groups):
+        is_split_charge = cc_name in split_charge_cats
+        wls = cc_groups[cc_name]
+
+        workloads = []
+        for wl_name in wls:
+            workloads.append(
+                {
+                    "name": wl_name,
+                    "prior_partial_cost_usd": round(partial_costs.get(wl_name, 0), 2),
+                }
+            )
+        workloads.sort(
+            key=lambda w: w["prior_partial_cost_usd"],
+            reverse=True,  # type: ignore[return-value]
+        )
+
+        if partial_alloc and cc_name in partial_alloc:
+            cc_partial = round(partial_alloc[cc_name], 2)
+        else:
+            cc_partial = round(sum(w["prior_partial_cost_usd"] for w in workloads), 2)
+
+        if is_split_charge:
+            cc_partial = 0.0
+
+        cc_entry: dict[str, Any] = {
+            "name": cc_name,
+            "prior_partial_cost_usd": cc_partial,
+            "workloads": workloads,
+        }
+        if is_split_charge:
+            cc_entry["is_split_charge"] = True
+
+        comparison_centers.append(cc_entry)
+
+    comparison_centers.sort(
+        key=lambda c: c["prior_partial_cost_usd"],
+        reverse=True,  # type: ignore[return-value]
+    )
+
+    return {
+        "prior_partial_start": prior_partial_start,
+        "prior_partial_end_exclusive": prior_partial_end_exclusive,
+        "cost_centers": comparison_centers,
+    }
+
+
 def process(
     collected: dict[str, Any],
     include_efs: bool = False,
     include_ebs: bool = False,
+    is_mtd: bool = False,
 ) -> dict[str, Any]:
-    """Process raw collected data into summary and parquet-ready structures."""
+    """Process raw collected data into summary and parquet-ready structures.
+
+    Args:
+        collected: Raw data from collect().
+        include_efs: Include EFS in storage metrics.
+        include_ebs: Include EBS in storage metrics.
+        is_mtd: When True, marks the period as in-progress and computes
+                mtd_comparison from raw_data["prev_month_partial"] if present.
+    """
     now: datetime = collected["now"]
     period_labels: dict[str, str] = collected["period_labels"]
     raw_data: dict[str, list[dict[str, Any]]] = collected["raw_data"]
@@ -278,10 +359,14 @@ def process(
     split_charge_rules: list[dict[str, Any]] = collected.get("split_charge_rules", [])
     allocated_costs: dict[str, dict[str, float]] = collected.get("allocated_costs", {})
 
-    # Parse all periods
+    # Parse primary periods (exclude prev_month_partial — handled separately)
+    primary_keys = ["current", "prev_month", "yoy"]
     parsed: dict[str, list[dict[str, Any]]] = {}
-    for period_key, groups in raw_data.items():
-        parsed[period_key] = _parse_groups(groups)
+    for period_key in primary_keys:
+        if period_key in raw_data:
+            parsed[period_key] = _parse_groups(raw_data[period_key])
+        else:
+            parsed[period_key] = []
 
     current_rows = parsed["current"]
     prev_rows = parsed["prev_month"]
@@ -374,39 +459,70 @@ def process(
     )
     tagging_coverage = _compute_tagging_coverage(current_costs)
 
-    summary = {
+    # Build the summary labels dict — only include the three standard comparison
+    # periods (current, prev_month, yoy); prev_complete and prev_month_partial
+    # are internal pipeline keys and should not appear in summary.periods.
+    summary_period_labels = {
+        k: v for k, v in period_labels.items() if k in ("current", "prev_month", "yoy")
+    }
+
+    summary: dict[str, Any] = {
         "collected_at": now.isoformat(),
         "period": period_labels["current"],
-        "periods": period_labels,
+        "is_mtd": is_mtd,
+        "periods": summary_period_labels,
         "storage_config": {"include_efs": include_efs, "include_ebs": include_ebs},
         "storage_metrics": storage_metrics,
         "cost_centers": cost_centers,
         "tagging_coverage": tagging_coverage,
     }
 
-    # Build parquet data
+    # When this is the in-progress MTD period and prior partial data is present,
+    # compute and attach the mtd_comparison aggregates.
+    if is_mtd and "prev_month_partial" in raw_data:
+        periods_raw: dict[str, tuple[str, str]] = collected.get("periods", {})
+        partial_dates = periods_raw.get("prev_month_partial", ("", ""))
+        partial_allocated = allocated_costs.get("prev_month_partial", {})
+
+        mtd_comparison = _compute_mtd_comparison(
+            raw_data["prev_month_partial"],
+            partial_dates,
+            partial_allocated,
+            cc_groups,
+            cc_mapping,
+            split_charge_cats,
+            split_charge_rules,
+        )
+        summary["mtd_comparison"] = mtd_comparison
+
+    # Build parquet data (only primary periods)
+    parquet_period_map: dict[str, dict[str, float]] = {
+        "current": current_costs,
+        "prev_month": prev_costs,
+        "yoy": yoy_costs,
+    }
     workload_rows = []
     for cc in cost_centers:
         for wl in cc["workloads"]:
-            for period_key, label in period_labels.items():
-                cost_map = {
-                    "current": current_costs,
-                    "prev_month": prev_costs,
-                    "yoy": yoy_costs,
-                }
+            for period_key, cost_map in parquet_period_map.items():
+                if period_key not in period_labels:
+                    continue
+                label = period_labels[period_key]
                 workload_rows.append(
                     {
                         "cost_center": cc["name"],
                         "workload": wl["name"],
                         "period": label,
-                        "cost_usd": round(cost_map[period_key].get(wl["name"], 0), 2),
+                        "cost_usd": round(cost_map.get(wl["name"], 0), 2),
                     }
                 )
 
     usage_type_rows = []
-    for period_key, rows in parsed.items():
+    for period_key in primary_keys:
+        if period_key not in period_labels:
+            continue
         label = period_labels[period_key]
-        for row in rows:
+        for row in parsed[period_key]:
             usage_type_rows.append(
                 {
                     "workload": row["workload"],

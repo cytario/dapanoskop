@@ -5,8 +5,8 @@
 | Document ID         | URS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.11 (Draft)                               |
-| Date                | 2026-02-16                                 |
+| Version             | 0.13 (Draft)                               |
+| Date                | 2026-02-27                                 |
 
 ---
 
@@ -37,6 +37,7 @@ Dapanoskop provides opinionated AWS cloud cost visibility by leveraging resource
 | MoM | Month-over-Month comparison |
 | YoY | Year-over-Year comparison |
 | Hot tier | Storage classes with immediate access: S3 Standard, S3 Intelligent-Tiering Frequent Access, EFS Standard |
+| MTD | Month-to-date — cost data for the current calendar month that is still in progress and therefore incomplete |
 | DevOps | Engineers who deploy and manage AWS infrastructure |
 | Budget Owner | Individuals responsible for cost budgets who may not be familiar with AWS |
 
@@ -102,6 +103,7 @@ The name comes from Greek δαπάνη (dapáni, "cost") + σκοπέω (skopéo
 - "Show me storage costs separately because that is our biggest cost driver"
 - "I want to see cost per TB stored"
 - "I want to know what percentage of our data is in hot storage tiers"
+- "I want to see what we have spent so far this month, not just last month's final bill"
 
 #### 2.2.4 Macro-Step 4: Investigate Cost Anomalies
 
@@ -211,6 +213,12 @@ A Budget Owner or DevOps engineer investigates storage volume and object count o
 
 **Note**: This requirement is deferred. The current implementation (Option A: CloudWatch-only) provides organization-wide storage totals from S3 Storage Lens but does not support per-bucket breakdowns. Per-bucket detail would require Option B (S3 Inventory) or Option C (S3 Storage Lens + Inventory), which are not currently implemented.
 
+**[URS-DP-10314] View Month-to-Date Cost Data**
+A Budget Owner views the cost accumulated so far in the current calendar month (month-to-date) before the month has closed, so that they can monitor in-progress spend and identify trends or overruns earlier than waiting for the prior month's final figures. The report clearly distinguishes MTD data from completed-month data so the user understands that the figures will change as the month progresses. The daily pipeline refreshes MTD data so that it reflects costs accrued up to the previous day.
+
+**[URS-DP-10315] Compare Month-to-Date Costs Against an Equivalent Prior Period**
+A Budget Owner views change annotations when inspecting MTD data that compare the current month's partial spend (e.g., March 1–7) against the same date range of the prior month (e.g., February 1–7), rather than against the prior month's full-month total. This like-for-like partial-month comparison lets the user judge whether spending is running higher or lower than the prior month at the same point in time, removing the distortion that arises when comparing an incomplete month against a full completed month.
+
 #### 3.1.4 Investigate Cost Anomalies (Macro-Step 4)
 
 **[URS-DP-10401] Drill Into Workload Cost**
@@ -295,3 +303,5 @@ A Budget Owner accesses and reviews the cost report on a mobile device (phone or
 | 0.9     | 2026-02-15 | —      | Add cost trend time range toggle (URS-DP-10309 update) and cost center detail page navigation (URS-DP-10311) |
 | 0.10    | 2026-02-16 | —      | Add S3 Inventory integration (URS-DP-10106), actual storage volume display (URS-DP-10312), storage per-bucket investigation (URS-DP-10313), split charge cost allocation understanding (URS-DP-10403), and resource tags/permissions boundary configuration (URS-DP-10101 update) |
 | 0.11    | 2026-02-16 | —      | Replace S3 Inventory with S3 Storage Lens (URS-DP-10106, 10312 updates); defer per-bucket storage investigation (URS-DP-10313 note added) |
+| 0.12    | 2026-02-27 | —      | Add month-to-date cost data requirement (URS-DP-10314); add MTD definition (§1.4); add MTD user request to Macro-Step 3 |
+| 0.13    | 2026-02-27 | —      | Add like-for-like MTD partial-month comparison requirement (URS-DP-10315) |

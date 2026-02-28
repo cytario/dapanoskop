@@ -5,8 +5,8 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.12 (Draft)                               |
-| Date                | 2026-02-19                                 |
+| Version             | 0.16 (Draft)                               |
+| Date                | 2026-02-28                                 |
 
 ---
 
@@ -39,6 +39,7 @@ Dapanoskop is a web-based AWS cloud cost monitoring application. This document d
 | TimedStorage-ByteHrs | AWS usage type metric measuring S3 storage volume over time |
 | Identity Pool | Amazon Cognito Identity Pool — exchanges Cognito ID tokens for temporary AWS credentials via the enhanced (simplified) authflow |
 | httpfs | DuckDB extension enabling SQL queries against remote files via HTTP(S) or S3 protocols |
+| MTD | Month-to-date — cost data for the current in-progress calendar month, collected daily and updated until the month closes |
 
 ---
 
@@ -326,12 +327,35 @@ Refs: URS-DP-10201, URS-DP-10202
 #### 3.1.7 Report Period Selection
 
 **[SRS-DP-310501] Select Reporting Month**
-The system displays a horizontal month strip showing all available reporting periods. The user selects a month by clicking it. The current (incomplete) month is labeled "MTD" (Month-to-date). The default selection is the most recently completed month. Note: The cost trend chart (SRS-DP-310214) operates independently of this selector and always displays all available periods.
-Refs: URS-DP-10301
+The system displays a horizontal month strip showing all available reporting periods derived from the `index.json` period manifest. The user selects a month by clicking it. The default selection is the most recently completed calendar month (not the MTD entry).
+
+**MTD entry**: The data pipeline (SI-2) collects cost data for the current in-progress calendar month on every daily run. As a result, the period selector always contains an MTD (month-to-date) entry as the first (most recent) item, representing costs accrued in the current month up to the previous day. The system labels this entry "MTD" in the period strip to indicate that the data is incomplete and will be refreshed again on the next daily run. The MTD entry is visually distinguished from completed-month entries (see SRS-DP-310219). When the month ends and a new daily run executes, the former MTD entry transitions to a completed-month entry and a new MTD entry appears for the newly started month.
+
+Note: The cost trend chart (SRS-DP-310214) operates independently of this selector and always displays all available periods, including the MTD period.
+Refs: URS-DP-10301, URS-DP-10314
 
 | No | Element | Data type | Value range | Other relevant information |
 |----|---------|-----------|-------------|---------------------------|
-| 1  | Month strip | List of dates (month precision) | From earliest available data to current | Default: most recent complete month. Current month labeled "MTD". |
+| 1  | Month strip | List of dates (month precision) | From earliest available data to current in-progress month | Default: most recently completed month (not MTD). MTD entry always present as first item; labeled "MTD" with visual distinction. |
+
+**[SRS-DP-310219] Visual Distinction for MTD Period**
+The system visually distinguishes the MTD period entry in the period selector and throughout the report to communicate to the user that the data is in-progress and will change. The MTD entry in the period strip displays the abbreviated month name followed by an "MTD" badge (e.g., "Feb '26 MTD"), giving the user both the month context and an in-progress indicator. When the MTD period is selected, the report displays a visible indicator (e.g., a banner or badge) stating that the figures shown are month-to-date and will be updated daily until the month closes.
+Refs: URS-DP-10314, URS-DP-10302
+
+| No | Element | Data type | Value range | Other relevant information |
+|----|---------|-----------|-------------|---------------------------|
+| 1  | MTD label | String | "{Mon 'YY} MTD" | Month abbreviation with appended "MTD" badge (e.g., "Feb '26 MTD") in the period strip |
+| 2  | MTD indicator | Banner / badge | — | Shown on report when MTD period is selected; text: "Month-to-date — figures update daily" |
+
+**[SRS-DP-310220] Like-for-Like MTD Change Annotations**
+When the MTD period is selected, the system displays MoM change annotations (absolute dollar difference and percentage change) computed against the equivalent partial period of the prior month rather than against the prior month's full-month total. The equivalent prior period spans from the first day of the prior month through the same day-of-month as the last day of the current MTD window (inclusive). For example, if today is March 8 and the MTD period covers March 1–7, the comparison period covers February 1–7. This like-for-like comparison removes the distortion caused by comparing an incomplete month against a full completed month. A tooltip or inline label explains the nature of the comparison (e.g., "Compared to [Month] 1–[Day], [Year]"). YoY change is not displayed for the MTD period because a reliable equivalent day-of-year prior period is not collected.
+Refs: URS-DP-10315, URS-DP-10302
+
+| No | Element | Data type | Value range | Other relevant information |
+|----|---------|-----------|-------------|---------------------------|
+| 1  | Like-for-like MoM annotation | Currency + Percentage | Any | Combined: "+$800 (+5.6%)" comparing MTD range against same date range of prior month |
+| 2  | Comparison period label | String | — | Displayed as tooltip or inline note, e.g., "vs. Feb 1–7" |
+| 3  | YoY annotation | — | — | Not displayed for MTD period; replaced with "N/A (MTD)" or equivalent |
 
 ---
 
@@ -436,9 +460,9 @@ Refs: URS-DP-10104
 The system queries the Cost Explorer `GetCostAndUsage` API grouped by App tag (workload) and `USAGE_TYPE` to retrieve per-workload, per-usage-type cost data. Metric: `UnblendedCost` and `UsageQuantity`. Granularity: `MONTHLY`.
 Refs: URS-DP-10301, URS-DP-10303, URS-DP-10401
 
-**[SRS-DP-420102] Query Historical Cost Data**
-The system queries Cost Explorer for the current month, the previous month, and the same month of the previous year to support MoM and YoY comparisons.
-Refs: URS-DP-10302
+**[SRS-DP-420102] Query Cost Data for Completed Months and Current Month-to-Date**
+The system queries Cost Explorer for cost data covering both completed months and the current in-progress calendar month (MTD). For each normal daily run, the pipeline collects data for: the current in-progress calendar month (the MTD period, as the primary entry written to S3 and shown first in the period selector), the most recently completed calendar month (for MoM comparison and as the second selectable period), the month before that (for further MoM comparison), and the same month of the previous year (for YoY comparison). The MTD data reflects costs accrued through the day before the pipeline runs. Because the current month has not closed, the cost figures in the MTD period will change on each subsequent daily run until the month ends and the period transitions to a completed-month entry.
+Refs: URS-DP-10302, URS-DP-10314
 
 **[SRS-DP-420103] Query Cost Category Mapping**
 The system queries the configured AWS Cost Category (or the first one returned by the API if not explicitly configured) to obtain the mapping of workloads to cost centers. The Cost Category's values are the cost centers. This mapping is queried separately from the cost data and applied during data processing. The system also queries category-level allocated costs to properly handle split charge rules.
@@ -464,6 +488,14 @@ Refs: URS-DP-10105
 When S3 Storage Lens integration is configured (via optional `storage_lens_config_id` variable), the system queries S3 Storage Lens CloudWatch metrics to obtain the actual total storage volume (in bytes) across the organization. The system auto-discovers the first available organization-level Storage Lens configuration if no config ID is provided (by calling `s3control:ListStorageLensConfigurations` and `s3control:GetStorageLensConfiguration`), then queries the CloudWatch `AWS/S3/Storage-Lens` namespace for the `StorageBytes` metric (statistic: `Average`) for the reporting period. If Storage Lens data is unavailable or not configured, this step is skipped and storage metrics rely solely on Cost Explorer usage quantities.
 Refs: URS-DP-10106, URS-DP-10312
 
+**[SRS-DP-420109] Refresh Month-to-Date Data on Every Daily Run**
+The system overwrites the MTD period data in the data store on every daily pipeline execution. Each daily run queries Cost Explorer for the current in-progress calendar month using a time range from the first day of the month to the current date (exclusive end), replacing the previous day's MTD summary.json and parquet files with updated figures. The MTD period entry is always present in `index.json` at the first position (most recent period) during a calendar month. When the month ends and the first daily run of the new month executes, the former MTD period transitions to a completed-month period (no longer labeled MTD) and a new MTD entry is created for the newly started month. The period selector default selection remains the most recently completed calendar month, not the MTD entry.
+Refs: URS-DP-10314
+
+**[SRS-DP-420110] Query Prior Month's Equivalent Partial Period for MTD Comparison**
+When collecting MTD data, the system performs an additional Cost Explorer `GetCostAndUsage` query for the equivalent date range in the prior calendar month. The prior partial period spans from the first day of the prior month through the day-of-month corresponding to the last day of the current MTD window (exclusive end). For example, if today is March 8 and the MTD period covers March 1–7, the prior partial period query covers February 1–7. The query uses the same grouping and metric parameters as the MTD query (grouped by App tag and USAGE_TYPE, metric: `UnblendedCost` and `UsageQuantity`, granularity: `MONTHLY`). A separate `NetAmortizedCost` cost-center-level query is also executed for the prior partial period to support allocated cost center totals. The resulting data is processed to produce cost center and workload totals for the prior partial period and stored alongside the MTD summary data. When the MTD window starts on day 1 of the current month and the prior month has fewer days than the current day-of-month window end (e.g., February only has 28 days and today is March 30), the prior partial period end date is clamped to the last day of the prior month.
+Refs: URS-DP-10315, URS-DP-10302
+
 #### 4.2.2 Models
 
 **Cost Explorer Query Parameters — workload and usage-type queries (SRS-DP-420101):**
@@ -485,6 +517,18 @@ Refs: URS-DP-10106, URS-DP-10312
 | Granularity | String | Always `MONTHLY` |
 | Metrics | List[String] | `NetAmortizedCost` |
 | GroupBy | List[Object] | `COST_CATEGORY` (configured category name) |
+
+**Cost Explorer Query Parameters — prior month partial period queries (SRS-DP-420110):**
+
+Two queries are executed for the prior month's equivalent partial period: one workload/usage-type query (`UnblendedCost`) and one cost-center allocated totals query (`NetAmortizedCost`). The time range differs from the full-month queries.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| TimePeriod.Start | String (YYYY-MM-DD) | First day of the prior calendar month (e.g., `2026-02-01` when current month is March) |
+| TimePeriod.End | String (YYYY-MM-DD) | Day after the last equivalent day in the prior month (e.g., `2026-02-08` when MTD covers March 1–7). Clamped to the first day of the current month if the prior month is shorter. |
+| Granularity | String | Always `MONTHLY` |
+| Metrics | List[String] | `UnblendedCost`, `UsageQuantity` (workload query); `NetAmortizedCost` (cost-center query) |
+| GroupBy | List[Object] | Same as respective full-period queries |
 
 **Metric Usage by Data Destination:**
 
@@ -642,3 +686,7 @@ Refs: URS-DP-10101
 | 0.10    | 2026-02-16 | —      | Add S3 Inventory integration (SRS-DP-420108); actual storage volume display (SRS-DP-310217); storage deep dive navigation (SRS-DP-310218); Storage Deep Dive Screen (§3.1.5, SRS-DP-310307); split charge category detection (SRS-DP-420107); split charge badge display (SRS-DP-310201 update); token revocation on logout (SRS-DP-410107); Managed Login v2 requirement (SRS-DP-410103 update); resource tags (SRS-DP-530003); permissions boundary (SRS-DP-530004); AWS provider version bump to >= 5.95 (SRS-DP-600003 update); renumber Tagging Coverage and Report Period Selection sections (§3.1.5→§3.1.6, §3.1.6→§3.1.7) |
 | 0.11    | 2026-02-16 | —      | Replace S3 Inventory with S3 Storage Lens CloudWatch integration (SRS-DP-420108 rewrite); remove storage deep dive screen (§3.1.5 removed, SRS-DP-310307 removed); remove storage deep dive navigation (SRS-DP-310218 marked removed); update actual storage volume display to use Storage Lens (SRS-DP-310217 update) |
 | 0.12    | 2026-02-19 | —      | Document dual-metric architecture: `NetAmortizedCost` for cost center allocated totals in summary.json, `UnblendedCost` for parquet drill-down data (§4.2.2 new tables + note); add `NetAmortizedCost` definition (§1.4); update SRS-DP-420107 to specify that the complete split charge rule structure (Source, Targets, Method, Parameters) is passed to the processor for redistribution, not just category names |
+| 0.13    | 2026-02-27 | —      | Clarify completed-months-only scope constraint: update SRS-DP-420102 to explicitly state the pipeline only queries fully completed calendar months; update SRS-DP-310501 to document that the period selector normally never shows an MTD entry (pipeline does not collect current in-progress month), and that "MTD" labeling only applies to a current-month period that was written via a mid-month backfill run |
+| 0.14    | 2026-02-27 | —      | Add MTD as a supported feature: reverse completed-months-only constraint in SRS-DP-420102 (pipeline now collects current in-progress month on every daily run); update SRS-DP-310501 to document MTD as always-present first entry in period selector with visual distinction; add SRS-DP-420109 (daily MTD refresh); add SRS-DP-310219 (MTD visual distinction in period selector and report); add MTD definition (§1.4) |
+| 0.15    | 2026-02-27 | —      | Add like-for-like MTD partial-month comparison: add SRS-DP-420110 (pipeline query for prior month equivalent partial period); update SRS-DP-310219 (remove MoM note now covered separately); add SRS-DP-310220 (like-for-like MTD change annotations in UI, no YoY for MTD) |
+| 0.16    | 2026-02-28 | —      | Clarify MTD period-strip label (SRS-DP-310219 update): the MTD entry displays the month abbreviation with an appended "MTD" badge (e.g., "Feb '26 MTD") rather than replacing the abbreviation entirely, giving users both the month context and an in-progress indicator |

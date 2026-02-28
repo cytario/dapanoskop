@@ -5,8 +5,8 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.17 (Draft)                               |
-| Date                | 2026-02-19                                 |
+| Version             | 0.21 (Draft)                               |
+| Date                | 2026-02-28                                 |
 
 ---
 
@@ -174,7 +174,9 @@ Refs: SRS-DP-450102
 
 **[SDS-DP-010201] Fetch Summary Data via S3 SDK**
 The Report Renderer fetches `{year}-{month}/summary.json` for the selected reporting period using the AWS S3 SDK `GetObjectCommand` with temporary credentials from C-1.3. In local dev mode (auth bypass), it falls back to a plain HTTP fetch from the local dev server. It renders the 1-page cost report (global summary bar, cost center cards, storage metric cards). Period discovery in production reads `index.json` from S3; in local dev mode, it probes up to 36 months of candidate periods in parallel via `Promise.allSettled` to identify available summary.json files without requiring an index file.
-Refs: SRS-DP-310201, SRS-DP-310211, SRS-DP-430102
+
+**MTD default selection**: After reading `index.json`, the Report Renderer identifies the default reporting period as the most recently completed month. The first entry in `index.json` (the current month) is the MTD period and is detected by inspecting the `is_mtd` field of its summary.json, or by comparing the period string to the current calendar month. The default period is set to the first entry in `index.json` whose `is_mtd` flag is `false` (i.e., the most recently completed month). The MTD period is selectable but not the default, consistent with SRS-DP-310501. When the MTD period is selected, the Report Renderer reads the `is_mtd` field from the fetched summary.json and passes it as a prop to layout components, which conditionally render the MTD indicator banner (SRS-DP-310219).
+Refs: SRS-DP-310201, SRS-DP-310211, SRS-DP-310219, SRS-DP-430102, SRS-DP-310501
 
 **[SDS-DP-010202] Render Cost Center Cards**
 The Report Renderer renders each cost center as an expandable card with summary (total, MoM, YoY, workload count, top mover) from summary.json. The cost center name is rendered as a `<Link to={/cost-center/${encodeURIComponent(name)}?period=${period}}>` component, navigating to the cost center detail page while preserving the current reporting period. The workload breakdown table is rendered within the expanded card.
@@ -252,6 +254,19 @@ Refs: SRS-DP-310206, SRS-DP-430102
 The Report Renderer includes a dedicated route component at `/storage-detail` (route file: `routes/storage-detail.tsx`) for displaying storage volume distribution across S3 storage tiers (S3 Standard, Intelligent-Tiering access tiers, Glacier tiers, etc.). The route is accessed by clicking the "Total Stored" card in the StorageOverview component, which passes the current period as a query parameter. The component reads the period from the query string via `useSearchParams()` and follows the same authentication pattern as other detail routes. The component fetches the summary.json for context (storage metrics, periods), then initializes DuckDB-wasm and queries the `cost-by-usage-type.parquet` file with a `WHERE usage_type LIKE '%TimedStorage%'` filter, grouped by `usage_type` and sorted by `usage_quantity DESC`. The query returns columns: `usage_type`, `gb_months` (sum of usage_quantity), `cost_usd`. The component maps AWS usage type suffixes (e.g., "TimedStorage-ByteHrs", "TimedStorage-INT-FA-ByteHrs") to friendly tier names ("S3 Standard", "IT Frequent Access") using a predefined mapping. The component renders the shared `<Header>` and `<Footer>` components, a back link to the main report, three summary cards showing Total Stored (from Storage Lens), Hot Tier %, and Cost/TB (all sourced from summary.json), a pie chart (Recharts `<PieChart>`) showing tier distribution by volume with color-coded segments (warm-to-cool palette matching hot-to-cold tiers), and a table displaying tier name, volume (formatted GB or TB), cost, and percentage of total. The route is registered in `routes.ts` as `route("storage-detail", "routes/storage-detail.tsx")`. This feature provides tier-level drill-down; per-bucket detail (URS-DP-10313) remains deferred.
 Refs: SRS-DP-310207, SRS-DP-310208, SRS-DP-310217
 
+**[SDS-DP-010221] Render Like-for-Like MTD Change Annotations**
+The Report Renderer conditionally renders like-for-like MTD change annotations when the selected period is the MTD period (i.e., when the fetched `summary.json` has `is_mtd: true`) and when the `mtd_comparison` field is present. The annotations replace the standard MoM change display across all components that show per-cost-center or per-workload change figures (global summary bar, cost center cards, workload table rows). The rendering logic is as follows:
+
+- **Annotation source**: The `prior_partial_cost_usd` value for each cost center and workload is read from `summary.json.mtd_comparison.cost_centers[*]` and its `.workloads[*]` arrays, matched by `name` field.
+- **Delta computation**: `delta_usd` = `current_cost_usd` − `prior_partial_cost_usd`; `delta_pct` = `delta_usd / prior_partial_cost_usd × 100` (if `prior_partial_cost_usd` > 0, otherwise displayed as "N/A").
+- **Display format**: Same combined format as standard MoM (e.g., "+$800 (+5.6%)"), using the same color-coded direction indicators (SRS-DP-310210).
+- **Comparison label**: A helper `formatPartialPeriodLabel(start: string, endExclusive: string): string` constructs a human-readable label from `mtd_comparison.prior_partial_start` and `mtd_comparison.prior_partial_end_exclusive` (e.g., `"Jan 1–7"` when start=`"2026-01-01"` and end_exclusive=`"2026-01-08"`). This label is rendered as a tooltip or inline annotation (e.g., "vs. Jan 1–7").
+- **YoY suppression**: When `is_mtd` is `true`, the YoY change column/row is replaced with "N/A (MTD)" to avoid displaying a full-year comparison against a partial current period.
+- **Fallback**: If `mtd_comparison` is absent from the fetched summary.json (e.g., data was written by an older pipeline version), the component falls back to the standard full-month MoM display using `prev_month_cost_usd`, consistent with prior SRS-DP-310219 behavior.
+
+The `is_mtd` flag and the `mtd_comparison` object are passed as props down the component tree from the top-level page component (which fetches summary.json) to `GlobalSummary`, `CostCenterCard`, and `WorkloadTable`.
+Refs: SRS-DP-310219, SRS-DP-310220
+
 Wireframes: See `docs/wireframes/cost-report.puml` and `docs/wireframes/workload-detail.puml`.
 Cost direction indicators (color coding, direction arrows, +/- prefixes) and anomaly highlighting are implemented with Tailwind CSS utility classes.
 Refs: SRS-DP-310210, SRS-DP-310213
@@ -289,7 +304,7 @@ Refs: SRS-DP-310210, SRS-DP-310213
 
 ##### 3.2.1 C-2.1: Cost Collector
 
-**Purpose / Responsibility**: Queries the AWS Cost Explorer API to retrieve raw cost and usage data for the reporting periods (current month, previous month, same month last year).
+**Purpose / Responsibility**: Queries the AWS Cost Explorer API to retrieve raw cost and usage data for three completed reporting periods: the most recently completed month, the month before that, and the same month of the previous year.
 
 **Interfaces**:
 - **Inbound**: Invoked by the Data Processor (C-2.2) or directly by the Lambda handler
@@ -297,9 +312,15 @@ Refs: SRS-DP-310210, SRS-DP-310213
 
 **Variability**: GroupBy dimensions are fixed (TAG:App + USAGE_TYPE). The Cost Category name is configurable (defaults to the first one returned by the API).
 
-**[SDS-DP-020101] Query Cost Explorer for Three Periods**
-The Cost Collector queries `GetCostAndUsage` for three time periods: the current (or most recent complete) month, the previous month, and the same month of the previous year. Each query uses `MONTHLY` granularity and requests `UnblendedCost` and `UsageQuantity` metrics, grouped by App tag and USAGE_TYPE (2 GroupBy dimensions, within the CE API limit).
-Refs: SRS-DP-420101, SRS-DP-420102
+**[SDS-DP-020101] Query Cost Explorer for Current MTD Period and Comparison Periods**
+The Cost Collector queries `GetCostAndUsage` for five time periods on each normal daily invocation: (1) the current in-progress calendar month (the MTD period — from the first day of the current month to today exclusive), (2) the prior month's equivalent partial period (same day range as the MTD window, from the first day of the prior month to the same day-of-month exclusive — see SDS-DP-020210 for the date computation), (3) the most recently completed calendar month (for MoM comparison and as a standalone selectable period), (4) the month before that (for further MoM comparison), and (5) the same month of the previous year (for YoY comparison). Each query uses `MONTHLY` granularity and requests `UnblendedCost` and `UsageQuantity` metrics, grouped by App tag and USAGE_TYPE (2 GroupBy dimensions, within the CE API limit).
+
+**MTD period generation**: In normal daily invocation (no `target_year`/`target_month` parameters), the `_get_periods()` function returns the current calendar month as the primary period using a time range `[first_day_of_current_month, today)`. The MTD period's summary.json is written under the `{current_year}-{current_month}/` prefix and always appears as the first (most recent) entry in `index.json`. Because the month is in progress, the figures will change on each subsequent daily run until the month ends.
+
+**Month transition**: When the month ends and the first daily run of the new month executes, the former MTD period (`{year}-{month}/summary.json`) is overwritten with the full completed-month data and the `is_mtd` flag is set to `false`. A new MTD entry is simultaneously created for the newly started month. This transition is seamless — the S3 prefix for the former MTD period does not change, only its content and metadata.
+
+**Backfill interaction**: When the backfill handler (`_generate_backfill_months()`) generates its target month list, it starts from the current calendar month and works backwards N months, consistent with normal MTD collection. Backfill runs behave the same as daily runs for the current month — they write or overwrite the MTD entry. The prior month's equivalent partial period query (SDS-DP-020210) is only executed for the current in-progress month (backfill months for past periods are already complete and do not require like-for-like partial comparison).
+Refs: SRS-DP-420101, SRS-DP-420102, SRS-DP-420109, SRS-DP-420110
 
 **[SDS-DP-020102] Query Cost Category Mapping and Detect Split Charges**
 The Cost Collector queries the configured AWS Cost Category (by name, or the first one returned by `GetCostCategories` if not configured) to obtain the mapping of workloads (App tag values) to cost centers. The AWS CE API returns cost category group keys with the format `{CategoryName}${Value}` (e.g., `CostCenter$IT`). The collector strips the `{CategoryName}$` prefix to extract the clean cost center name. Resources without an App tag (empty string key) are mapped to the label "Untagged" during this step. Additionally, the collector calls `ListCostCategoryDefinitions` and `DescribeCostCategoryDefinition` to identify cost categories with split charge rules (indicated by the presence of `SplitChargeRules` array in the definition). For each detected split charge category, the collector queries category-level allocated costs using `GetCostAndUsage` with `GroupBy: [{"Type": "COST_CATEGORY", "Key": "{CategoryName}"}]` and metric `NetAmortizedCost` for all three periods. The `get_split_charge_categories()` function returns `tuple[list[str], list[dict]]` — the first element is the list of split charge cost center names, the second is the list of split charge rule objects. Each rule object contains: `Source` (string — the source cost center name), `Targets` (list of strings — destination cost center names, or the string `"ALL_OTHER"` to target all remaining cost centers), `Method` (string — `"PROPORTIONAL"`, `"EVEN"`, or `"FIXED"`), and `Parameters` (list of dicts — present only for `"FIXED"` method, each with `"Key"` and `"Value"` sub-fields where Key is the target cost center name and Value is the percentage allocation as a string). This mapping and split charge rule data are passed to the data processor (C-2.2) to allocate workload costs to cost centers, apply redistributions, and correctly handle split charge categories.
@@ -308,6 +329,17 @@ Refs: SRS-DP-420103, SRS-DP-420107
 **[SDS-DP-020103] Support Parameterized Period Generation**
 The Cost Collector supports generating target periods for an arbitrary month (specified by year and month) in addition to the default "current month" logic. This enables the backfill handler to request data for any historical month using the same collection logic.
 Refs: SRS-DP-420106
+
+**[SDS-DP-020210] Compute Prior Month's Equivalent Partial Period**
+The Cost Collector computes the date range for the prior month's equivalent partial period using the following algorithm, implemented in a `_get_prior_partial_period(mtd_start, mtd_end_exclusive)` helper:
+
+1. `prior_month_start` = first day of the month before `mtd_start` (e.g., if `mtd_start` is `2026-03-01`, `prior_month_start` = `2026-02-01`).
+2. `mtd_days` = number of days in the MTD window = (`mtd_end_exclusive` − `mtd_start`).days (e.g., MTD covers March 1–7 → 7 days).
+3. `prior_partial_end_exclusive` = `prior_month_start` + `timedelta(days=mtd_days)`. This represents the same number of days into the prior month as the MTD window covers in the current month.
+4. **Clamping**: If `prior_partial_end_exclusive` would fall beyond the last day of the prior month (i.e., the prior month is shorter than the MTD window's day count), clamp it to the first day of the current month. This prevents invalid or cross-month date ranges when, for example, today is March 30 and the prior month is February (28 days).
+
+The computed `(prior_month_start, prior_partial_end_exclusive)` pair is passed to `GetCostAndUsage` as `TimePeriod.Start` and `TimePeriod.End`. Both queries (workload/usage-type with `UnblendedCost`, and cost-center with `NetAmortizedCost`) use this same time range. The `_get_periods()` function includes the prior partial period alongside the other periods in its return value, clearly labeled (e.g., as `prev_month_partial`) so the processor can identify it for storage in the `mtd_comparison` summary.json field (SDS-DP-020211).
+Refs: SRS-DP-420110
 
 ##### 3.2.2 C-2.2: Data Processor & Writer
 
@@ -341,9 +373,9 @@ Refs: SRS-DP-420103, SRS-DP-420107
 The Data Processor computes total storage volume from S3 `TimedStorage-*` usage quantities and calculates the hot tier percentage as: `(TimedStorage-ByteHrs + TimedStorage-INT-FA-ByteHrs) / total TimedStorage-*-ByteHrs`. Usage type matching uses substring checks (`in` for storage volume, `endswith` for hot tier) rather than exact match or prefix match, because AWS Cost Explorer returns usage types with region prefixes (e.g. `USE1-TimedStorage-ByteHrs`, `EUW1-TimedStorage-INT-FA-ByteHrs`). EFS/EBS types are checked first (via `EFS:` / `EBS:` substring) to prevent false matches when EFS types contain "TimedStorage" in their name (e.g. `EFS:TimedStorage-ByteHrs`). When configured, EFS and EBS storage usage types are included in the totals. **AWS Cost Explorer returns `UsageQuantity` for TimedStorage-* in GB-hours, not byte-hours.** The processor converts GB-hours to average bytes stored by multiplying by 1,000,000,000 (bytes per GB) and then dividing by the number of hours in the reporting month. The processor uses decimal terabytes (TB = 10^12 bytes) for all volume conversions, consistent with AWS Cost Explorer and billing practices. Note: Prior to v1.5.0, the constant `_BYTES_PER_TB` incorrectly used tebibytes (TiB = 2^40 = 1,099,511,627,776) instead of terabytes, causing a ~10% overstatement in cost per TB values. This was corrected to 1,000,000,000,000 (10^12). Prior to v1.6.0, the processor incorrectly treated GB-hours as byte-hours, producing storage volumes ~1 billion times too large and cost-per-TB values ~1 billion times too small.
 Refs: SRS-DP-420104
 
-**[SDS-DP-020204] Write Summary JSON with Storage Lens Data**
-The Data Processor writes `{year}-{month}/summary.json` containing pre-computed aggregates for the 1-page report: cost center totals (current, prev month, YoY), workload breakdown per cost center (sorted by cost descending, with MoM/YoY), storage metrics (total cost, cost/TB, hot tier %), a `collected_at` ISO 8601 timestamp, and optionally a `storage_lens` object containing organization-wide storage data from C-2.3 when Storage Lens integration is configured. The `storage_lens` object includes: `total_bytes` and `storage_lens_date` (timestamp from CloudWatch metric). Cost centers with `is_split_charge: true` are included in the `cost_centers` array but excluded from global summary calculations.
-Refs: SRS-DP-430101, SRS-DP-510002, SRS-DP-420108
+**[SDS-DP-020204] Write Summary JSON with Storage Lens Data and MTD Comparison**
+The Data Processor writes `{year}-{month}/summary.json` containing pre-computed aggregates for the 1-page report: cost center totals (current, prev month, YoY), workload breakdown per cost center (sorted by cost descending, with MoM/YoY), storage metrics (total cost, cost/TB, hot tier %), a `collected_at` ISO 8601 timestamp, and optionally a `storage_lens` object containing organization-wide storage data from C-2.3 when Storage Lens integration is configured. The `storage_lens` object includes: `total_bytes` and `storage_lens_date` (timestamp from CloudWatch metric). Cost centers with `is_split_charge: true` are included in the `cost_centers` array but excluded from global summary calculations. When `is_mtd` is `true`, the processor additionally writes an `mtd_comparison` object (SDS-DP-020211) containing cost center and workload totals for the prior month's equivalent partial period, plus the `prior_partial_start` and `prior_partial_end_exclusive` date strings that define the comparison range. The `mtd_comparison` field is omitted from completed-month summary.json files.
+Refs: SRS-DP-430101, SRS-DP-510002, SRS-DP-420108, SRS-DP-420110
 
 **[SDS-DP-020205] Write Workload Parquet**
 The Data Processor writes `{year}-{month}/cost-by-workload.parquet` containing per-workload cost data with columns: `cost_center`, `workload`, `period`, `cost_usd`. Rows for all three periods (current, previous month, YoY month) are included so the SPA can compute comparisons via DuckDB queries.
@@ -358,8 +390,16 @@ After writing period-specific files, the Data Processor lists all `YYYY-MM/` pre
 Refs: SRS-DP-430103
 
 **[SDS-DP-020208] Handle Backfill Mode**
-The Lambda handler detects backfill mode via the event payload `{"backfill": true, "months": N, "force": false}`. In backfill mode, the handler generates a list of N target months (ending at the current month), processes each sequentially by invoking `collect_for_month()` (C-2.1) and `write_to_s3()` (C-2.2) per month with index updates suppressed. Before processing each month, the handler checks whether data already exists in S3 (by probing for `{year}-{month}/summary.json`) and skips existing months unless `force` is true. After all months are processed, the handler calls `update_index()` once to rebuild the period manifest. The response includes a multi-status report: `{"statusCode": 200|207, "succeeded": [...], "failed": [...], "skipped": [...]}`.
+The Lambda handler detects backfill mode via the event payload `{"backfill": true, "months": N, "force": false}`. In backfill mode, the handler generates a list of N target months (ending at the current month), processes each sequentially by invoking `collect()` (C-2.1) with explicit `target_year`/`target_month` parameters and `write_to_s3()` (C-2.2) per month with index updates suppressed. Before processing each month, the handler checks whether data already exists in S3 (by probing for `{year}-{month}/summary.json`) and skips existing months unless `force` is true. The current in-progress month is always included in the backfill target list and is treated the same as any other target month — it will be written regardless of the `force` flag when no existing entry is found, or skipped if one exists and `force` is false. After all months are processed, the handler calls `update_index()` once to rebuild the period manifest. The response includes a multi-status report: `{"statusCode": 200|207, "succeeded": [...], "failed": [...], "skipped": [...]}`.
 Refs: SRS-DP-420106
+
+**[SDS-DP-020209] Overwrite MTD Period on Each Daily Run**
+The normal daily Lambda handler (non-backfill invocation) always overwrites the current month's data files in S3, regardless of whether they already exist. The existence check (`HeadObject summary.json`) that applies to backfill mode does not apply to normal daily runs — daily runs unconditionally call `collect()` for the current in-progress month and write the result to `{current_year}-{current_month}/summary.json`, `cost-by-workload.parquet`, and `cost-by-usage-type.parquet`. The `write_to_s3()` call for the MTD period sets `is_mtd=True` in the summary.json payload (see SDS-DP-040002). After writing the MTD period data, the handler writes the most recently completed month's data (as a non-MTD entry), then calls `update_index()` to ensure the MTD period is listed first in `index.json`. Both the MTD period and the most recently completed month are written on every normal daily run; a single daily invocation therefore produces two writes to S3 (plus the index update).
+Refs: SRS-DP-420102, SRS-DP-420109
+
+**[SDS-DP-020211] Compute and Write MTD Comparison Aggregates**
+The Data Processor computes cost center and workload totals for the prior month's equivalent partial period (SDS-DP-020210) using the same categorization, Cost Category mapping, and split charge redistribution logic applied to the normal comparison periods. The resulting aggregates are stored in a top-level `mtd_comparison` object in the MTD period's `summary.json` (see SDS-DP-040002 for schema). The `mtd_comparison` object records the exact date range that was queried (`prior_partial_start` and `prior_partial_end_exclusive` as ISO 8601 date strings) so the SPA can display a human-readable comparison label (e.g., "vs. Feb 1–7"). The `mtd_comparison` field is only written when `is_mtd` is `true`; completed-month summary.json files do not contain this field. When the clamping logic of SDS-DP-020210 applies (prior month is shorter), the stored date range reflects the clamped end date, and the SPA renders the label accordingly.
+Refs: SRS-DP-420110, SRS-DP-310220
 
 ##### 3.2.3 C-2.3: Storage Lens Reader
 
@@ -516,24 +556,33 @@ A root-level manifest and per-period data files:
 
 ```
 index.json                       # Lists all available YYYY-MM periods (reverse chronological)
+                                 # The current in-progress month is always the first entry.
 {year}-{month}/
   summary.json                   # Pre-computed aggregates for instant 1-page render
-  cost-by-workload.parquet       # Detailed workload cost data for all 3 periods
-  cost-by-usage-type.parquet     # Detailed usage type cost data for all 3 periods
+                                 # Contains is_mtd: true when the period is in progress.
+  cost-by-workload.parquet       # Detailed workload cost data for all 3+ periods
+  cost-by-usage-type.parquet     # Detailed usage type cost data for all 3+ periods
 ```
 
-Refs: SRS-DP-430101, SRS-DP-430102, SRS-DP-430103
+The current in-progress calendar month is always present as the first entry in `index.json` and is overwritten on every daily pipeline run. Its `summary.json` contains `"is_mtd": true`. Completed-month entries have `"is_mtd": false` (or the field absent, which is treated as `false`).
+
+Refs: SRS-DP-430101, SRS-DP-430102, SRS-DP-430103, SRS-DP-420109
 
 **[SDS-DP-040002] summary.json Schema**
+
+The `is_mtd` field indicates whether the reporting period is the current in-progress calendar month. When `true`, the SPA displays an MTD indicator and labels the period "MTD" in the period selector. When `false` (or absent), the period is a completed month and is labeled with its abbreviated month name.
+
+The `mtd_comparison` field is present only when `is_mtd` is `true`. It contains pre-computed cost center and workload totals for the prior month's equivalent partial period (same number of days into the prior month as the MTD window covers in the current month), enabling the SPA to render like-for-like change annotations without additional API calls. The `prior_partial_start` and `prior_partial_end_exclusive` fields (ISO 8601 date strings) record the exact date range queried so the SPA can construct human-readable comparison labels.
 
 ```json
 {
   "collected_at": "2026-02-08T03:00:00Z",
-  "period": "2026-01",
+  "period": "2026-02",
+  "is_mtd": true,
   "periods": {
-    "current": "2026-01",
-    "prev_month": "2025-12",
-    "yoy": "2025-01"
+    "current": "2026-02",
+    "prev_month": "2026-01",
+    "yoy": "2025-02"
   },
   "storage_config": { "include_efs": true, "include_ebs": false },
   "storage_metrics": {
@@ -575,11 +624,33 @@ Refs: SRS-DP-430101, SRS-DP-430102, SRS-DP-430103
   "storage_lens": {
     "total_bytes": 5500000000000,
     "storage_lens_date": "2026-01-31T23:00:00Z"
+  },
+  "mtd_comparison": {
+    "prior_partial_start": "2026-01-01",
+    "prior_partial_end_exclusive": "2026-01-08",
+    "cost_centers": [
+      {
+        "name": "Engineering",
+        "prior_partial_cost_usd": 3200.00,
+        "workloads": [
+          {
+            "name": "data-pipeline",
+            "prior_partial_cost_usd": 1100.00
+          }
+        ]
+      },
+      {
+        "name": "SharedServices",
+        "prior_partial_cost_usd": 0.00,
+        "is_split_charge": true,
+        "workloads": []
+      }
+    ]
   }
 }
 ```
 
-Refs: SRS-DP-430101, SRS-DP-430102
+Refs: SRS-DP-430101, SRS-DP-430102, SRS-DP-420110
 
 **[SDS-DP-040003] Parquet File Schemas**
 
@@ -623,31 +694,72 @@ EventBridge          Lambda (C-2.1 + C-2.2)          Cost Explorer       S3 Data
     │                         │── GetCostCategories ──────>│                  │
     │                         │<── CC→workload mapping ────│                  │
     │                         │                            │                  │
+    │                         │ [collect MTD period]       │                  │
     │                         │── GetCostAndUsage ────────>│                  │
-    │                         │   (current month,          │                  │
-    │                         │    GroupBy: App + USAGE_TYPE)                  │
+    │                         │   (current month MTD,      │                  │
+    │                         │    GroupBy: App + USAGE_TYPE)                 │
+    │                         │<── response ───────────────│                  │
+    │                         │                            │                  │
+    │                         │ [collect prior partial     │                  │
+    │                         │  period for like-for-like  │                  │
+    │                         │  MTD comparison]           │                  │
+    │                         │── GetCostAndUsage ────────>│                  │
+    │                         │   (prior month same date   │                  │
+    │                         │    range as MTD window,    │                  │
+    │                         │    GroupBy: App + USAGE_TYPE)                 │
+    │                         │<── response ───────────────│                  │
+    │                         │── GetCostAndUsage ────────>│                  │
+    │                         │   (prior month same range, │                  │
+    │                         │    GroupBy: COST_CATEGORY, │                  │
+    │                         │    metric: NetAmortizedCost)                  │
     │                         │<── response ───────────────│                  │
     │                         │                            │                  │
     │                         │── GetCostAndUsage ────────>│                  │
-    │                         │   (prev month, same)       │                  │
+    │                         │   (prev month complete,    │                  │
+    │                         │    same GroupBy)           │                  │
     │                         │<── response ───────────────│                  │
-    │                         │                            │                  │
     │                         │── GetCostAndUsage ────────>│                  │
     │                         │   (YoY month, same)        │                  │
     │                         │<── response ───────────────│                  │
     │                         │                            │                  │
     │                         │ [apply CC mapping,         │                  │
     │                         │  categorize, aggregate,    │                  │
-    │                         │  compute storage metrics]  │                  │
+    │                         │  compute storage metrics,  │                  │
+    │                         │  compute mtd_comparison,   │                  │
+    │                         │  set is_mtd=true]          │                  │
     │                         │                            │                  │
     │                         │── PutObject ──────────────────────────────────>│
-    │                         │   {y}-{m}/summary.json                        │
-    │                         │   {y}-{m}/cost-by-workload.parquet            │
-    │                         │   {y}-{m}/cost-by-usage-type.parquet          │
+    │                         │   {y}-{cur_m}/summary.json (is_mtd: true,     │
+    │                         │     mtd_comparison: {...}) │                  │
+    │                         │   {y}-{cur_m}/cost-by-workload.parquet        │
+    │                         │   {y}-{cur_m}/cost-by-usage-type.parquet      │
+    │                         │                                               │
+    │                         │ [collect most recently completed month]       │
+    │                         │── GetCostAndUsage ────────>│                  │
+    │                         │   (prev complete month,    │                  │
+    │                         │    GroupBy: App + USAGE_TYPE)                 │
+    │                         │<── response ───────────────│                  │
+    │                         │── GetCostAndUsage ────────>│                  │
+    │                         │   (month before that)      │                  │
+    │                         │<── response ───────────────│                  │
+    │                         │── GetCostAndUsage ────────>│                  │
+    │                         │   (YoY month, same)        │                  │
+    │                         │<── response ───────────────│                  │
+    │                         │                            │                  │
+    │                         │ [apply CC mapping,         │                  │
+    │                         │  categorize, aggregate,    │                  │
+    │                         │  compute storage metrics,  │                  │
+    │                         │  set is_mtd=false]         │                  │
+    │                         │                            │                  │
+    │                         │── PutObject ──────────────────────────────────>│
+    │                         │   {y}-{prev_m}/summary.json (is_mtd: false)   │
+    │                         │   {y}-{prev_m}/cost-by-workload.parquet       │
+    │                         │   {y}-{prev_m}/cost-by-usage-type.parquet     │
     │                         │                                               │
     │                         │── ListObjectsV2 (delimiter="/") ─────────────>│
     │                         │<── CommonPrefixes (YYYY-MM/) ────────────────│
     │                         │── PutObject index.json ──────────────────────>│
+    │                         │   (current month first, then prev months)     │
     │                         │<── 200 OK ────────────────────────────────────│
 ```
 
@@ -749,7 +861,7 @@ DevOps Engineer          Lambda (handler)              Cost Explorer       S3 Da
       │                         │                            │                  │
       │                         │   [month not yet collected — proceed]         │
       │                         │                            │                  │
-      │                         │── collect_for_month() ────>│                  │
+      │                         │── collect() ──────────────>│                  │
       │                         │   (queries CE for 3 periods)                  │
       │                         │<── cost data ──────────────│                  │
       │                         │                            │                  │
@@ -1241,3 +1353,7 @@ How should Dapanoskop obtain actual storage volume data (in bytes) to supplement
 | 0.15    | 2026-02-17 | —      | Phase 2 Storage Cost Breakdown: Add storage cost detail route (SDS-DP-010219); update StorageOverview to render Storage Cost card as clickable link with period param (SDS-DP-010204 update) |
 | 0.16    | 2026-02-17 | —      | Phase 3 Storage Tier Breakdown: Add storage tier breakdown route (SDS-DP-010220); update StorageOverview to render Total Stored card as clickable link with period param (SDS-DP-010204 update) |
 | 0.17    | 2026-02-19 | —      | Document dual-metric architecture and split charge redistribution logic: update SDS-DP-020102 to document `split_charge_rules` list structure, updated `get_split_charge_categories()` return type `tuple[list[str], list[dict]]`, and "Untagged" mapping for empty App tags; update SDS-DP-020202 to document `_apply_split_charge_redistribution()` function including PROPORTIONAL/EVEN/FIXED methods, ALL_OTHER sentinel resolution, zero-target and malformed-parameter fallback behaviors, and that rules are evaluated against original source costs (not post-redistribution values) |
+| 0.18    | 2026-02-27 | —      | Clarify completed-months-only scope constraint: update SDS-DP-020101 to document that normal daily pipeline runs always resolve the primary period to the previous complete calendar month (never the current in-progress month), explain the backfill exception (backfill includes current month as starting point and may write an incomplete MTD entry), and note the downstream effect on the period selector (SRS-DP-310501) |
+| 0.19    | 2026-02-27 | —      | Add MTD as a supported feature: rewrite SDS-DP-020101 to describe `_get_periods()` returning the current in-progress month as primary period plus three comparison periods; add SDS-DP-020209 (daily MTD overwrite logic); add `is_mtd` field to SDS-DP-040002 summary.json schema; update SDS-DP-040001 data layout to note MTD is always the first index.json entry; update SDS-DP-010201 to document MTD default-selection logic and `is_mtd` prop propagation to layout components; update SDS-DP-020208 backfill to note current month handled consistently; update §4.1 sequence diagram to show MTD + completed-month writes on each daily run |
+| 0.20    | 2026-02-27 | —      | Add like-for-like MTD comparison: update SDS-DP-020101 to include 5th query (prior month partial period); add SDS-DP-020210 (prior partial period date computation algorithm); add SDS-DP-020211 (processor writes mtd_comparison aggregates); update SDS-DP-020204 (summary writer includes mtd_comparison when is_mtd); update SDS-DP-040002 (summary.json schema adds mtd_comparison with prior_partial_start, prior_partial_end_exclusive, cost_centers); add SDS-DP-010221 (SPA renders like-for-like annotations, suppresses YoY for MTD, falls back gracefully); update §4.1 sequence diagram to show prior partial period queries |
+| 0.21    | 2026-02-28 | —      | Correct function name references: rename `collect_for_month()` to `collect()` in SDS-DP-020208, SDS-DP-020209, and §4.1 backfill sequence diagram to match the actual implementation in `collector.py` |
