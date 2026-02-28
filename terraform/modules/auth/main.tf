@@ -115,6 +115,12 @@ resource "aws_cognito_identity_provider" "saml" {
       condition     = var.saml_provider_name != ""
       error_message = "saml_provider_name is required when saml_metadata_url is set."
     }
+
+    ignore_changes = [
+      provider_details["ActiveEncryptionCertificate"],
+      provider_details["SLORedirectBindingURI"],
+      provider_details["SSORedirectBindingURI"],
+    ]
   }
 }
 
