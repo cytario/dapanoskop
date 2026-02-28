@@ -1520,15 +1520,158 @@ def test_yoy_cost_not_double_redistributed_with_nonzero_yoy_source() -> None:
     assert eng["current_cost_usd"] == 6000.0
     assert shared["current_cost_usd"] == 0.0
 
-    # YoY: processor must use yoy_allocated values WITHOUT re-redistribution.
-    # CE returned Engineering=4200, Shared=500 for Jan 2025 — trust these.
-    # If double-redistribution occurred: Engineering would get 4200 + 500 = 4700,
-    # Shared would be zeroed — incorrectly changing the historical total.
-    # With the fix: yoy_allocated is used as-is, Shared zeroed only by is_split_charge.
-    assert eng["yoy_cost_usd"] == 4200.0, (
-        "Engineering YoY must be 4200 (CE's value as-is). "
-        "Double-redistribution would incorrectly add the Shared $500 again."
+    # YoY: the processor does NOT re-apply the current FIXED split charge rules to
+    # yoy_allocated. Instead, it redistributes the YoY source balance (Shared=$500)
+    # proportionally to targets using their YoY amounts as weights (Bug 1 fix).
+    # Since Engineering is the only target, it absorbs the full $500.
+    # CE returned Engineering=4200, Shared=500 — the processor preserves the global
+    # total (4700) without reusing the current period's percentages.
+    assert eng["yoy_cost_usd"] == 4700.0, (
+        "Engineering YoY must be 4700: CE's 4200 plus the $500 Shared source "
+        "redistributed proportionally (Bug 1 fix preserves global YoY total)."
     )
-    assert (
-        shared["yoy_cost_usd"] == 0.0
-    )  # zeroed by is_split_charge, not redistribution
+    assert shared["yoy_cost_usd"] == 0.0  # zeroed after redistribution to targets
+
+
+def test_yoy_global_total_preserves_split_charge_source_cost() -> None:
+    """Bug 1 validation: split charge source cost must not vanish from YoY total.
+
+    For current/prev_month, _apply_split_charge_redistribution() runs BEFORE the
+    cost center loop, moving source costs to targets. The is_split_charge guard then
+    safely zeroes the source because its cost already lives in the targets.
+
+    For YoY, redistribution is intentionally skipped (to avoid double-redistribution
+    with historically-different rules). But the is_split_charge guard still zeroes
+    cc_yoy for the source CC. If yoy_allocated has a non-zero source balance, that
+    cost vanishes -- it was never redistributed to targets, yet the source is zeroed.
+
+    This test creates a scenario where:
+    - yoy_allocated has Engineering=$4000 and Shared Services=$600 (non-zero source)
+    - No redistribution is applied to yoy (correct -- avoid double-redistribution)
+    - The is_split_charge guard zeroes Shared Services to $0
+    - Expected global YoY total: $4600 (the true total from CE)
+    - Buggy global YoY total: $4000 (the $600 disappeared)
+    """
+    current_groups = [
+        _make_group("eng-app", "BoxUsage:m5.xlarge", 5000, 744),
+        _make_group("shared-svc", "BoxUsage:t3.medium", 1000, 744),
+    ]
+    yoy_groups = [
+        _make_group("eng-app", "BoxUsage:m5.xlarge", 4000, 744),
+        _make_group("shared-svc", "BoxUsage:t3.medium", 600, 744),
+    ]
+
+    collected = _make_collected(
+        current_groups=current_groups,
+        prev_groups=[],
+        yoy_groups=yoy_groups,
+        cc_mapping={"eng-app": "Engineering", "shared-svc": "Shared Services"},
+    )
+
+    collected["split_charge_categories"] = ["Shared Services"]
+    collected["split_charge_rules"] = [
+        {
+            "Source": "Shared Services",
+            "Targets": ["Engineering"],
+            "Method": "PROPORTIONAL",
+            "Parameters": [],
+        }
+    ]
+    collected["allocated_costs"] = {
+        "current": {
+            "Engineering": 5000.0,
+            "Shared Services": 1000.0,
+        },
+        "prev_month": {},
+        # YoY: CE returned a non-zero source balance for the historical period.
+        # This is the correct CE output -- it must be preserved in the global total.
+        "yoy": {
+            "Engineering": 4000.0,
+            "Shared Services": 600.0,
+        },
+    }
+
+    result = process(collected)
+    ccs = result["summary"]["cost_centers"]
+
+    eng = next(cc for cc in ccs if cc["name"] == "Engineering")
+    shared = next(cc for cc in ccs if cc["name"] == "Shared Services")
+
+    # Shared Services is zeroed after redistribution
+    assert shared["yoy_cost_usd"] == 0.0
+
+    # Engineering absorbs the Shared source balance via proportional redistribution
+    assert eng["yoy_cost_usd"] == 4600.0
+
+    # The critical check: global YoY total must equal the true CE total ($4600).
+    true_yoy_total = 4000.0 + 600.0  # sum of all yoy_allocated values
+    actual_yoy_total = sum(cc["yoy_cost_usd"] for cc in ccs)
+
+    assert actual_yoy_total == true_yoy_total, (
+        f"Bug 1 confirmed: global YoY total is ${actual_yoy_total} but should be "
+        f"${true_yoy_total}. The split charge source cost (${600.0}) vanished because "
+        f"is_split_charge zeroed the source CC without redistribution to targets."
+    )
+
+
+def test_yoy_double_count_untagged_in_allocated_and_uncategorized() -> None:
+    """Bug 2 validation: Untagged costs double-counted via allocated + workload fallback.
+
+    Scenario:
+    - Cost Category allocates $1000 to "Engineering" (which internally includes
+      $200 from Untagged resources attributed by CC rules).
+    - The App-tag CE query also returns an "Untagged" workload with $200 cost
+      in the YoY period.
+    - "Untagged" is NOT in cc_mapping, so it maps to "Uncategorized".
+    - yoy_allocated has "Engineering"=$1000 but no "Uncategorized" key.
+    - The fallback at lines 447-448 sums workload costs for "Uncategorized",
+      producing $200 from the "Untagged" workload.
+
+    Expected: global YoY total = $1000 (not $1200 from double-counting).
+    """
+    # Engineering workload: $800 (tagged portion visible in CE App-tag query)
+    # Untagged workload: $200 (untagged portion, also visible in CE App-tag query)
+    # But yoy_allocated["Engineering"] = $1000 (CC rolls up both tagged + untagged)
+    yoy_groups = [
+        _make_group("eng-service", "BoxUsage:m5.xlarge", 800, 744),
+        _make_group("", "BoxUsage:t3.micro", 200, 744),  # Untagged
+    ]
+
+    collected = _make_collected(
+        current_groups=[
+            _make_group("eng-service", "BoxUsage:m5.xlarge", 900, 744),
+        ],
+        prev_groups=[
+            _make_group("eng-service", "BoxUsage:m5.xlarge", 850, 744),
+        ],
+        yoy_groups=yoy_groups,
+        cc_mapping={"eng-service": "Engineering"},
+        # Note: "Untagged" is NOT in cc_mapping -> maps to "Uncategorized"
+    )
+
+    collected["allocated_costs"] = {
+        "current": {"Engineering": 900.0},
+        "prev_month": {"Engineering": 850.0},
+        # YoY allocated: CC attributes ALL $1000 to Engineering
+        # (includes the $200 from untagged resources)
+        "yoy": {"Engineering": 1000.0},
+    }
+
+    result = process(collected)
+    summary = result["summary"]
+    cc_map = {cc["name"]: cc for cc in summary["cost_centers"]}
+
+    engineering = cc_map["Engineering"]
+    uncategorized = cc_map.get("Uncategorized")
+
+    # Engineering should use yoy_allocated value
+    assert engineering["yoy_cost_usd"] == 1000.0
+
+    # The global YoY total should be $1000, not $1200
+    global_yoy = sum(cc["yoy_cost_usd"] for cc in summary["cost_centers"])
+    assert global_yoy == 1000.0, (
+        f"Global YoY total is ${global_yoy}, expected $1000. "
+        f"Uncategorized YoY = ${uncategorized['yoy_cost_usd'] if uncategorized else 'N/A'}. "
+        f"Bug 2 confirmed: Untagged costs double-counted in both Engineering "
+        f"(via allocated) and Uncategorized (via workload sum fallback)."
+    )

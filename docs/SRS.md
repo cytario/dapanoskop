@@ -5,7 +5,7 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.17 (Draft)                               |
+| Version             | 0.18 (Draft)                               |
 | Date                | 2026-02-28                                 |
 
 ---
@@ -461,7 +461,7 @@ The system queries the Cost Explorer `GetCostAndUsage` API grouped by App tag (w
 Refs: URS-DP-10301, URS-DP-10303, URS-DP-10401
 
 **[SRS-DP-420102] Query Cost Data for Completed Months and Current Month-to-Date**
-The system queries Cost Explorer for cost data covering both completed months and the current in-progress calendar month (MTD). For each normal daily run, the pipeline collects data for: the current in-progress calendar month (the MTD period, as the primary entry written to S3 and shown first in the period selector), the most recently completed calendar month (for MoM comparison and as the second selectable period), the month before that (for further MoM comparison), and the same month of the previous year (for YoY comparison). The MTD data reflects costs accrued through the day before the pipeline runs. Because the current month has not closed, the cost figures in the MTD period will change on each subsequent daily run until the month ends and the period transitions to a completed-month entry.
+The system queries Cost Explorer for cost data covering both completed months and the current in-progress calendar month (MTD). For each normal daily run, the pipeline collects data for: the current in-progress calendar month (the MTD period, as the primary entry written to S3 and shown first in the period selector), the most recently completed calendar month (for MoM comparison and as the second selectable period), the month before that (for further MoM comparison), and the correct year-ago period for each selectable period (for YoY comparison). Each selectable period's YoY figure must compare against the same calendar month one year prior to that specific period — not a shared or offset year-ago period. The MTD data reflects costs accrued through the day before the pipeline runs. Because the current month has not closed, the cost figures in the MTD period will change on each subsequent daily run until the month ends and the period transitions to a completed-month entry.
 Refs: URS-DP-10302, URS-DP-10314
 
 **[SRS-DP-420103] Query Cost Category Mapping**
@@ -695,3 +695,4 @@ Refs: URS-DP-10101
 | 0.15    | 2026-02-27 | —      | Add like-for-like MTD partial-month comparison: add SRS-DP-420110 (pipeline query for prior month equivalent partial period); update SRS-DP-310219 (remove MoM note now covered separately); add SRS-DP-310220 (like-for-like MTD change annotations in UI, no YoY for MTD) |
 | 0.16    | 2026-02-28 | —      | Clarify MTD period-strip label (SRS-DP-310219 update): the MTD entry displays the month abbreviation with an appended "MTD" badge (e.g., "Feb '26 MTD") rather than replacing the abbreviation entirely, giving users both the month context and an in-progress indicator |
 | 0.17    | 2026-02-28 | —      | Add empty CE response skip requirement (SRS-DP-420111): pipeline must not write data for a month when CE returns zero result groups, preserving existing historical data for periods beyond CE retention window |
+| 0.18    | 2026-02-28 | —      | Bug fix documentation: update SRS-DP-420102 to clarify that each selectable period's YoY comparison must use the correct year-ago period for that specific period (not a shared offset year-ago period) — fixes previously ambiguous wording that implied a single shared YoY period sufficed for both the MTD and completed-month entries |

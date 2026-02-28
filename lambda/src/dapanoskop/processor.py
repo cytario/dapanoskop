@@ -409,6 +409,15 @@ def process(
             prev_allocated, split_charge_rules
         )
 
+    # Determine if yoy_allocated covers real cost center names (as opposed to only
+    # sentinel keys like "No cost category" from pre-category periods).
+    # When it does, the allocation is complete and cost centers absent from
+    # yoy_allocated should receive 0, not the workload sum, to avoid double-counting
+    # costs already rolled up into another cost center's allocated total (Bug 2).
+    yoy_alloc_covers_known_cc = bool(yoy_allocated) and any(
+        k in cc_groups for k in yoy_allocated
+    )
+
     cost_centers = []
     for cc_name in sorted(cc_groups):
         is_split_charge = cc_name in split_charge_cats
@@ -444,15 +453,29 @@ def process(
 
         if yoy_allocated and cc_name in yoy_allocated:
             cc_yoy = round(yoy_allocated[cc_name], 2)
+        elif yoy_alloc_covers_known_cc:
+            # yoy_allocated is a complete allocation (covers known CCs) but this
+            # cost center is not present — its costs were already rolled up into
+            # another CC's allocated total, so use 0 to avoid double-counting.
+            cc_yoy = 0.0
         else:
             cc_yoy = round(sum(w["yoy_cost_usd"] for w in workloads), 2)
 
         # Split charge categories have their cost redistributed to others;
-        # show them with zero cost to avoid double-counting
+        # show them with zero cost to avoid double-counting.
+        #
+        # For current/prev_month, _apply_split_charge_redistribution() already moved
+        # the source cost to targets before this loop, so zeroing is safe here.
+        #
+        # For YoY, redistribution is intentionally skipped (to avoid re-applying the
+        # current period's rules to historically-different allocations). The YoY
+        # source balance is preserved in cc_yoy for now and redistributed in the
+        # post-loop pass below before the split charge zeroing is applied (Bug 1).
         if is_split_charge:
             cc_current = 0.0
             cc_prev = 0.0
-            cc_yoy = 0.0
+            # cc_yoy is intentionally NOT zeroed here; the post-loop redistribution
+            # pass will move it to targets and then zero it.
 
         cc_entry: dict[str, Any] = {
             "name": cc_name,
@@ -465,6 +488,47 @@ def process(
             cc_entry["is_split_charge"] = True
 
         cost_centers.append(cc_entry)
+
+    # YoY split charge redistribution pass (Bug 1 fix):
+    # When yoy_allocated covers known cost centers (complete allocation from CE),
+    # redistribute any non-zero split charge source balances proportionally to
+    # their targets using the YoY target amounts as weights, then zero the source.
+    # This preserves the CE-reported global YoY total without re-applying the
+    # current period's rule method or percentages to historical data.
+    #
+    # When YoY falls back to workload sums (yoy_alloc_covers_known_cc is False),
+    # the workload-based totals are independent — just zero the split charge
+    # sources without redistribution (same as the existing current/prev behavior).
+    if yoy_alloc_covers_known_cc and split_charge_rules:
+        cc_yoy_map = {cc["name"]: cc for cc in cost_centers}
+        for rule in split_charge_rules:
+            source_name = rule["Source"]
+            source_cc = cc_yoy_map.get(source_name)
+            if source_cc is None:
+                continue
+            source_yoy = source_cc["yoy_cost_usd"]
+            if source_yoy == 0.0:
+                continue
+            targets = [t for t in rule.get("Targets", []) if t in cc_yoy_map]
+            if not targets:
+                source_cc["yoy_cost_usd"] = 0.0
+                continue
+            total_target_yoy = sum(cc_yoy_map[t]["yoy_cost_usd"] for t in targets)
+            for t in targets:
+                if total_target_yoy > 0:
+                    fraction = cc_yoy_map[t]["yoy_cost_usd"] / total_target_yoy
+                else:
+                    fraction = 1.0 / len(targets)
+                cc_yoy_map[t]["yoy_cost_usd"] = round(
+                    cc_yoy_map[t]["yoy_cost_usd"] + source_yoy * fraction, 2
+                )
+            source_cc["yoy_cost_usd"] = 0.0
+
+    # Zero any split charge sources whose yoy_cost_usd was not consumed by the
+    # redistribution pass above (zero-balance sources, or workload-sum fallback path).
+    for cc in cost_centers:
+        if cc.get("is_split_charge") and cc["yoy_cost_usd"] != 0.0:
+            cc["yoy_cost_usd"] = 0.0
 
     # Sort cost centers by current cost descending
     cost_centers.sort(key=lambda c: c["current_cost_usd"], reverse=True)
