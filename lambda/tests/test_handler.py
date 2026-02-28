@@ -1026,6 +1026,7 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
                 "prev_complete": ("2026-01-01", "2026-02-01"),
                 "prev_month": ("2025-12-01", "2026-01-01"),
                 "yoy": ("2025-02-01", "2025-02-08"),
+                "yoy_prev_complete": ("2025-01-01", "2025-02-01"),
                 "prev_month_partial": ("2026-01-01", "2026-01-08"),
             },
             "period_labels": {
@@ -1033,6 +1034,7 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
                 "prev_complete": "2026-01",
                 "prev_month": "2025-12",
                 "yoy": "2025-02",
+                "yoy_prev_complete": "2025-01",
                 "prev_month_partial": "2026-01",
             },
             "raw_data": {
@@ -1064,6 +1066,15 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
                     }
                 ],
                 "yoy": [],
+                "yoy_prev_complete": [
+                    {
+                        "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                        "Metrics": {
+                            "UnblendedCost": {"Amount": "850", "Unit": "USD"},
+                            "UsageQuantity": {"Amount": "700", "Unit": "Hrs"},
+                        },
+                    }
+                ],
                 "prev_month_partial": [
                     {
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
@@ -1121,6 +1132,11 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
     assert prev_summary["period"] == "2026-01"
     assert prev_summary["is_mtd"] is False
     assert "mtd_comparison" not in prev_summary
+    # YoY period should be 2025-01 (not 2025-02 which is the MTD month's YoY)
+    assert prev_summary["periods"]["yoy"] == "2025-01"
+    # YoY cost center total should reflect yoy_prev_complete data ($850), not yoy data
+    eng_cc = next(c for c in prev_summary["cost_centers"] if c["name"] == "Engineering")
+    assert eng_cc["yoy_cost_usd"] == 850.0
 
     # Verify index.json contains both periods
     index_obj = s3.get_object(Bucket=s3_bucket_env, Key="index.json")

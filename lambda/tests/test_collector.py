@@ -311,13 +311,15 @@ def test_collect_integration() -> None:
     # 2: prev_complete
     # 3: prev_month
     # 4: yoy
-    # 5: prev_month_partial
-    # 6: cost category mapping (App tag + COST_CATEGORY)
-    # 7: allocated costs: current
-    # 8: allocated costs: prev_complete
-    # 9: allocated costs: prev_month
-    # 10: allocated costs: yoy
-    # 11: allocated costs: prev_month_partial
+    # 5: yoy_prev_complete
+    # 6: prev_month_partial
+    # 7: cost category mapping (App tag + COST_CATEGORY)
+    # 8: allocated costs: current
+    # 9: allocated costs: prev_complete
+    # 10: allocated costs: prev_month
+    # 11: allocated costs: yoy
+    # 12: allocated costs: yoy_prev_complete
+    # 13: allocated costs: prev_month_partial
     mock_ce_client.get_cost_and_usage.side_effect = [
         # 1: current (MTD) — two groups
         {
@@ -393,7 +395,23 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # 5: prev_month_partial — one group
+        # 5: yoy_prev_complete — one group
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
+                            "Metrics": {
+                                "UnblendedCost": {"Amount": "750.0", "Unit": "USD"},
+                                "UsageQuantity": {"Amount": "680.0", "Unit": "Hrs"},
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # 6: prev_month_partial — one group
         {
             "ResultsByTime": [
                 {
@@ -409,7 +427,7 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # 6: cost category mapping query (App tag + COST_CATEGORY)
+        # 7: cost category mapping query (App tag + COST_CATEGORY)
         {
             "ResultsByTime": [
                 {
@@ -430,7 +448,7 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # 7: allocated costs: current
+        # 8: allocated costs: current
         {
             "ResultsByTime": [
                 {
@@ -445,7 +463,7 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # 8: allocated costs: prev_complete
+        # 9: allocated costs: prev_complete
         {
             "ResultsByTime": [
                 {
@@ -460,7 +478,7 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # 9: allocated costs: prev_month
+        # 10: allocated costs: prev_month
         {
             "ResultsByTime": [
                 {
@@ -475,7 +493,7 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # 10: allocated costs: yoy
+        # 11: allocated costs: yoy
         {
             "ResultsByTime": [
                 {
@@ -490,7 +508,22 @@ def test_collect_integration() -> None:
                 }
             ],
         },
-        # 11: allocated costs: prev_month_partial
+        # 12: allocated costs: yoy_prev_complete
+        {
+            "ResultsByTime": [
+                {
+                    "Groups": [
+                        {
+                            "Keys": ["CostCenter$Engineering"],
+                            "Metrics": {
+                                "NetAmortizedCost": {"Amount": "750.0", "Unit": "USD"}
+                            },
+                        }
+                    ]
+                }
+            ],
+        },
+        # 13: allocated costs: prev_month_partial
         {
             "ResultsByTime": [
                 {
@@ -549,13 +582,15 @@ def test_collect_integration() -> None:
     assert "prev_complete" in result["period_labels"]
     assert "prev_month" in result["period_labels"]
     assert "yoy" in result["period_labels"]
+    assert "yoy_prev_complete" in result["period_labels"]
     assert "prev_month_partial" in result["period_labels"]
 
-    # Verify raw_data contains all five periods
+    # Verify raw_data contains all six periods
     assert "current" in result["raw_data"]
     assert "prev_complete" in result["raw_data"]
     assert "prev_month" in result["raw_data"]
     assert "yoy" in result["raw_data"]
+    assert "yoy_prev_complete" in result["raw_data"]
     assert "prev_month_partial" in result["raw_data"]
 
     # Verify data was collected
@@ -563,6 +598,7 @@ def test_collect_integration() -> None:
     assert len(result["raw_data"]["prev_complete"]) == 1
     assert len(result["raw_data"]["prev_month"]) == 1
     assert len(result["raw_data"]["yoy"]) == 1
+    assert len(result["raw_data"]["yoy_prev_complete"]) == 1
     assert len(result["raw_data"]["prev_month_partial"]) == 1
 
     # Verify cost category mapping
@@ -572,19 +608,21 @@ def test_collect_integration() -> None:
     assert result["split_charge_categories"] == []
     assert result["split_charge_rules"] == []
 
-    # Verify allocated costs: current, prev_complete, prev_month, yoy, prev_month_partial
+    # Verify allocated costs: current, prev_complete, prev_month, yoy, yoy_prev_complete, prev_month_partial
     assert "current" in result["allocated_costs"]
     assert "prev_complete" in result["allocated_costs"]
     assert "prev_month" in result["allocated_costs"]
     assert "yoy" in result["allocated_costs"]
+    assert "yoy_prev_complete" in result["allocated_costs"]
     assert "prev_month_partial" in result["allocated_costs"]
     assert result["allocated_costs"]["current"] == {"Engineering": 1100.0}
     assert result["allocated_costs"]["prev_complete"] == {"Engineering": 950.0}
+    assert result["allocated_costs"]["yoy_prev_complete"] == {"Engineering": 750.0}
     assert result["allocated_costs"]["prev_month_partial"] == {"Engineering": 250.0}
 
-    # Verify get_cost_and_usage was called 11 times:
-    # 5 periods + 1 for cost category mapping + 5 for allocated costs
-    assert mock_ce_client.get_cost_and_usage.call_count == 11
+    # Verify get_cost_and_usage was called 13 times:
+    # 6 periods + 1 for cost category mapping + 6 for allocated costs
+    assert mock_ce_client.get_cost_and_usage.call_count == 13
 
 
 def test_collect_with_target_month() -> None:
@@ -789,20 +827,22 @@ def test_collect_auto_discovers_category_name() -> None:
     }
 
     # get_cost_and_usage call order in MTD mode:
-    # 1-5:  five periods (raw cost data: current, prev_complete, prev_month, yoy, prev_month_partial)
-    # 6:    cost category mapping (App + COST_CATEGORY)
-    # 7-11: allocated costs per period (current, prev_complete, prev_month, yoy, prev_month_partial)
+    # 1-6:  six periods (raw cost data: current, prev_complete, prev_month, yoy, yoy_prev_complete, prev_month_partial)
+    # 7:    cost category mapping (App + COST_CATEGORY)
+    # 8-13: allocated costs per period (current, prev_complete, prev_month, yoy, yoy_prev_complete, prev_month_partial)
     mock_ce_client.get_cost_and_usage.side_effect = [
         empty_period,  # current (MTD) raw data
         empty_period,  # prev_complete raw data
         empty_period,  # prev_month raw data
         empty_period,  # yoy raw data
+        empty_period,  # yoy_prev_complete raw data
         empty_period,  # prev_month_partial raw data
         cc_mapping_response,  # cc mapping
         allocated_response,  # allocated costs: current
         allocated_response,  # allocated costs: prev_complete
         allocated_response,  # allocated costs: prev_month
         allocated_response,  # allocated costs: yoy
+        allocated_response,  # allocated costs: yoy_prev_complete
         allocated_response,  # allocated costs: prev_month_partial
     ]
 

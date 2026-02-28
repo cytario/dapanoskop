@@ -76,8 +76,11 @@ def _get_periods(
 
     Otherwise (normal daily run), "current" is the current in-progress calendar
     month (MTD period: [first_day_of_current_month, today)), and "prev_complete"
-    is the most recently completed calendar month. "prev_month_partial" is the
-    prior month's equivalent partial period for like-for-like MTD comparison.
+    is the most recently completed calendar month. "yoy_prev_complete" is the
+    year-over-year period for prev_complete (same calendar month one year prior
+    to prev_complete — different from "yoy" which is the MTD month's YoY).
+    "prev_month_partial" is the prior month's equivalent partial period for
+    like-for-like MTD comparison.
     """
     if target_year is not None and target_month is not None:
         # Backfill mode: use explicit target month as a completed period
@@ -119,6 +122,10 @@ def _get_periods(
     # Year-over-year (same month last year) — based on current in-progress month
     yoy_start, yoy_end = _month_range(year - 1, month)
 
+    # Year-over-year for the prev_complete month (different from yoy when
+    # the current MTD month != prev_complete month, which is always)
+    yoy_pc_start, yoy_pc_end = _month_range(prev_year - 1, prev_month)
+
     # Prior partial period for like-for-like MTD comparison
     prior_partial_start, prior_partial_end = _get_prior_partial_period(
         mtd_start, mtd_end
@@ -129,6 +136,7 @@ def _get_periods(
         "prev_complete": (prev_complete_start, prev_complete_end),
         "prev_month": (pm2_start, pm2_end),
         "yoy": (yoy_start, yoy_end),
+        "yoy_prev_complete": (yoy_pc_start, yoy_pc_end),
         "prev_month_partial": (prior_partial_start, prior_partial_end),
     }
 
@@ -353,8 +361,10 @@ def collect(
     includes is_mtd=True and additional keys:
       - raw_data["current"]: current in-progress month (MTD period)
       - raw_data["prev_complete"]: most recently completed calendar month
+      - raw_data["yoy_prev_complete"]: year-over-year for prev_complete month
       - raw_data["prev_month_partial"]: prior partial period for like-for-like comparison
       - period_labels["prev_complete"]: label for the completed month
+      - period_labels["yoy_prev_complete"]: label for prev_complete's YoY
       - period_labels["prev_month_partial"]: label for the prior partial period
     """
     is_mtd = target_year is None and target_month is None

@@ -254,7 +254,8 @@ def _build_prev_complete_collected(collected: dict[str, Any]) -> dict[str, Any]:
     Remaps the keys from the MTD-era collected dict so that:
       - "prev_complete" becomes "current"
       - "prev_month" (the month before prev_complete) stays as "prev_month"
-      - "yoy" stays as "yoy"
+      - "yoy_prev_complete" becomes "yoy" (same calendar month one year prior
+        to prev_complete, NOT the MTD month's YoY)
     Strips MTD-specific keys (prev_month_partial, is_mtd).
     """
     raw_data = collected["raw_data"]
@@ -268,17 +269,17 @@ def _build_prev_complete_collected(collected: dict[str, Any]) -> dict[str, Any]:
         "periods": {
             "current": periods_raw.get("prev_complete", ("", "")),
             "prev_month": periods_raw.get("prev_month", ("", "")),
-            "yoy": periods_raw.get("yoy", ("", "")),
+            "yoy": periods_raw.get("yoy_prev_complete", ("", "")),
         },
         "period_labels": {
             "current": period_labels.get("prev_complete", ""),
             "prev_month": period_labels.get("prev_month", ""),
-            "yoy": period_labels.get("yoy", ""),
+            "yoy": period_labels.get("yoy_prev_complete", ""),
         },
         "raw_data": {
             "current": raw_data.get("prev_complete", []),
             "prev_month": raw_data.get("prev_month", []),
-            "yoy": raw_data.get("yoy", []),
+            "yoy": raw_data.get("yoy_prev_complete", []),
         },
         "cc_mapping": collected.get("cc_mapping", {}),
         "split_charge_categories": collected.get("split_charge_categories", []),
@@ -286,7 +287,7 @@ def _build_prev_complete_collected(collected: dict[str, Any]) -> dict[str, Any]:
         "allocated_costs": {
             "current": allocated_costs.get("prev_complete", {}),
             "prev_month": allocated_costs.get("prev_month", {}),
-            "yoy": allocated_costs.get("yoy", {}),
+            "yoy": allocated_costs.get("yoy_prev_complete", {}),
         },
     }
 
