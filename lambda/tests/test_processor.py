@@ -1239,3 +1239,296 @@ def test_process_summary_periods_excludes_internal_keys() -> None:
     assert "yoy" in periods
     assert "prev_complete" not in periods
     assert "prev_month_partial" not in periods
+
+
+def test_yoy_cost_uses_workload_sum_when_yoy_allocated_predates_cost_category() -> None:
+    """Regression vector 1: YoY falls back to workload sums when YoY period predates
+    the Cost Category definition entirely.
+
+    Scenario (Jan 2026 run):
+    - Current (Jan 2026): valid allocated_costs with real cost center names.
+    - YoY (Jan 2025): CE returns costs under "No cost category" because the Cost
+      Category didn't exist yet. yoy_allocated has no keys matching any cc_name.
+
+    Bug (pre-fix): the shared gate `if current_allocated and cc_name in current_allocated`
+    was True for Jan 2026, so the code took the allocated path for ALL periods and called
+    `yoy_allocated.get(cc_name, 0)` — returning 0 for every cost center instead of
+    the correct workload-summed total (~$13,425).
+
+    Fix: each period checks its own allocated dict independently, so when
+    `cc_name not in yoy_allocated` the YoY period falls back to workload sums.
+    """
+    # Jan 2026 workloads: ~$13,835 total across two cost centers
+    current_groups = [
+        _make_group("web-app", "BoxUsage:m5.xlarge", 8000, 744),
+        _make_group("api", "BoxUsage:t3.medium", 3000, 1488),
+        _make_group("shared-infra", "BoxUsage:t3.small", 2835, 744),
+    ]
+    # Jan 2025 workloads: ~$13,425 total — predates cost category
+    yoy_groups = [
+        _make_group("web-app", "BoxUsage:m5.xlarge", 7500, 744),
+        _make_group("api", "BoxUsage:t3.medium", 2800, 1488),
+        _make_group("shared-infra", "BoxUsage:t3.small", 3125, 744),
+    ]
+    # Dec 2025 workloads
+    prev_groups = [
+        _make_group("web-app", "BoxUsage:m5.xlarge", 7800, 720),
+        _make_group("api", "BoxUsage:t3.medium", 2900, 1440),
+        _make_group("shared-infra", "BoxUsage:t3.small", 2700, 720),
+    ]
+
+    collected = _make_collected(
+        current_groups=current_groups,
+        prev_groups=prev_groups,
+        yoy_groups=yoy_groups,
+        cc_mapping={
+            "web-app": "Engineering",
+            "api": "Engineering",
+            "shared-infra": "Shared Services",
+        },
+    )
+
+    # Simulate split charge: Shared Services redistributes to Engineering.
+    # Jan 2026 has valid allocated_costs with cost center names after redistribution.
+    # Jan 2025 (yoy) returns "No cost category" — predates Cost Category definition.
+    collected["split_charge_categories"] = ["Shared Services"]
+    collected["split_charge_rules"] = [
+        {
+            "Source": "Shared Services",
+            "Targets": ["Engineering"],
+            "Method": "PROPORTIONAL",
+            "Parameters": [],
+        }
+    ]
+    collected["allocated_costs"] = {
+        "current": {
+            # After redistribution: Shared Services cost added to Engineering
+            "Engineering": 13835.0,
+            "Shared Services": 2835.0,
+        },
+        "prev_month": {
+            "Engineering": 13400.0,
+            "Shared Services": 2700.0,
+        },
+        # YoY predates Cost Category — CE returns sentinel key, not real cc names
+        "yoy": {
+            "No cost category": 13425.0,
+        },
+    }
+
+    result = process(collected)
+    ccs = result["summary"]["cost_centers"]
+
+    eng = next(cc for cc in ccs if cc["name"] == "Engineering")
+    shared = next(cc for cc in ccs if cc["name"] == "Shared Services")
+
+    # Current: uses allocated costs (after split charge redistribution applied by processor)
+    # Shared Services cost 2835 is redistributed to Engineering proportionally.
+    # Engineering already has all cost in allocated (13835), Shared Services has 2835.
+    # After redistribution: Engineering = 13835 + 2835 = 16670, Shared = 0
+    assert eng["current_cost_usd"] == 16670.0
+    assert shared["current_cost_usd"] == 0.0
+    assert shared["is_split_charge"] is True
+
+    # YoY: "No cost category" key doesn't match "Engineering" or "Shared Services",
+    # so the processor must fall back to workload sums.
+    # Engineering workload sum from yoy_groups: web-app(7500) + api(2800) = 10300
+    assert eng["yoy_cost_usd"] == 10300.0, (
+        "Engineering YoY must use workload sum (10300) not $0 from missing "
+        "yoy_allocated key — the pre-fix bug returned 0 here"
+    )
+    # Shared Services workload sum from yoy_groups: shared-infra(3125)
+    # (then zeroed because is_split_charge)
+    assert shared["yoy_cost_usd"] == 0.0  # zeroed by split charge logic
+
+    # Total YoY across non-split-charge cost centers must reflect actual Jan 2025 spend
+    yoy_total = sum(cc["yoy_cost_usd"] for cc in ccs if not cc.get("is_split_charge"))
+    assert yoy_total == 10300.0, (
+        f"Total YoY should be 10300 (workload sums), got {yoy_total}. "
+        "The pre-fix bug returned 0 because yoy_allocated had no matching keys."
+    )
+
+
+def test_yoy_cost_not_double_redistributed_when_cost_category_rules_changed() -> None:
+    """Regression vector 2: YoY allocated costs are not re-redistributed by current
+    split charge rules when the Cost Category existed in the YoY period.
+
+    CE's NetAmortizedCost already encodes the historically-correct split charge
+    allocation for the YoY period. Re-applying the current period's rules (which may
+    differ — e.g. FIXED percentages in Jan 2026 vs PROPORTIONAL in Jan 2025) would
+    corrupt the YoY totals.
+
+    Scenario:
+    - Jan 2026: FIXED split charge rules (60% Eng, 40% Data from Shared Services $1000).
+    - Jan 2025 (yoy): Cost Category existed but with PROPORTIONAL rules. CE returns
+      yoy_allocated already redistributed: Eng=$6200, Data=$4800, Shared=$0.
+      If we re-apply Jan 2026 FIXED rules: Shared source is $0, so no harm in this
+      specific case — but the test also covers the case where yoy_allocated still has
+      a non-zero source balance, which would cause double-redistribution.
+
+    The fix: only apply _apply_split_charge_redistribution to current_allocated.
+    Historical periods trust CE's own NetAmortizedCost which already applied the
+    period-correct rules.
+    """
+    current_groups = [
+        _make_group("eng-app", "BoxUsage:m5.xlarge", 5000, 744),
+        _make_group("data-app", "BoxUsage:r5.xlarge", 3000, 744),
+        _make_group("shared-svc", "BoxUsage:t3.medium", 1000, 744),
+    ]
+    # YoY: same workloads but Cost Category had PROPORTIONAL rules.
+    # CE returned yoy_allocated already incorporating those PROPORTIONAL results.
+    # At that time Eng had $6000 and Data $4000 base, Shared had $800.
+    # PROPORTIONAL: Eng gets 6000/10000*800=480, Data gets 4000/10000*800=320.
+    # CE baked this in: Eng=6480, Data=4320, Shared=0.
+    yoy_groups = [
+        _make_group("eng-app", "BoxUsage:m5.xlarge", 6000, 744),
+        _make_group("data-app", "BoxUsage:r5.xlarge", 4000, 744),
+        _make_group("shared-svc", "BoxUsage:t3.medium", 800, 744),
+    ]
+
+    collected = _make_collected(
+        current_groups=current_groups,
+        prev_groups=[],
+        yoy_groups=yoy_groups,
+        cc_mapping={
+            "eng-app": "Engineering",
+            "data-app": "Data",
+            "shared-svc": "Shared Services",
+        },
+    )
+
+    # Current period: FIXED split charge — 60% to Engineering, 40% to Data
+    collected["split_charge_categories"] = ["Shared Services"]
+    collected["split_charge_rules"] = [
+        {
+            "Source": "Shared Services",
+            "Targets": ["Engineering", "Data"],
+            "Method": "FIXED",
+            "Parameters": [{"Type": "ALLOCATION_PERCENTAGES", "Values": ["60", "40"]}],
+        }
+    ]
+    collected["allocated_costs"] = {
+        "current": {
+            # Pre-redistribution: raw CE allocated totals for Jan 2026
+            "Engineering": 5000.0,
+            "Data": 3000.0,
+            "Shared Services": 1000.0,
+        },
+        "prev_month": {},
+        # YoY: CE already applied PROPORTIONAL rules for Jan 2025.
+        # These are the correct final values for that period.
+        "yoy": {
+            "Engineering": 6480.0,
+            "Data": 4320.0,
+            "Shared Services": 0.0,
+        },
+    }
+
+    result = process(collected)
+    ccs = result["summary"]["cost_centers"]
+
+    eng = next(cc for cc in ccs if cc["name"] == "Engineering")
+    data = next(cc for cc in ccs if cc["name"] == "Data")
+    shared = next(cc for cc in ccs if cc["name"] == "Shared Services")
+
+    # Current: processor applies FIXED rules to current_allocated.
+    # Engineering: 5000 + 60% of 1000 = 5600
+    # Data: 3000 + 40% of 1000 = 3400
+    assert eng["current_cost_usd"] == 5600.0
+    assert data["current_cost_usd"] == 3400.0
+    assert shared["current_cost_usd"] == 0.0
+    assert shared["is_split_charge"] is True
+
+    # YoY: processor must NOT re-apply FIXED rules to yoy_allocated.
+    # CE already allocated correctly for Jan 2025 using PROPORTIONAL rules.
+    # Expected: use yoy_allocated values as-is (Eng=6480, Data=4320).
+    # Double-redistribution bug would re-apply FIXED rules to yoy_allocated:
+    #   Shared source is already 0, so targets unchanged — this specific case is
+    #   harmless. The more dangerous variant is tested below with non-zero yoy source.
+    assert eng["yoy_cost_usd"] == 6480.0, (
+        "Engineering YoY must use CE's already-allocated value (6480), "
+        "not a re-redistributed total"
+    )
+    assert data["yoy_cost_usd"] == 4320.0, (
+        "Data YoY must use CE's already-allocated value (4320), "
+        "not a re-redistributed total"
+    )
+
+    # Verify the totals are consistent: YoY non-split-charge total = 6480 + 4320
+    yoy_total = sum(cc["yoy_cost_usd"] for cc in ccs if not cc.get("is_split_charge"))
+    assert yoy_total == 10800.0
+
+
+def test_yoy_cost_not_double_redistributed_with_nonzero_yoy_source() -> None:
+    """Regression vector 2b: double-redistribution when yoy_allocated has a non-zero
+    source balance (the most dangerous variant).
+
+    If AWS's Cost Category definition changed between Jan 2025 and Jan 2026 such that
+    the source cost center retained a non-zero balance in yoy_allocated (e.g. new
+    workloads were added to the source in Jan 2026 that didn't exist in Jan 2025),
+    re-applying current FIXED rules would incorrectly redistribute that historical
+    source balance using the wrong percentages.
+
+    Setup: yoy_allocated has Shared=$500 non-zero (CE didn't fully zero it for that
+    period for some reason). The processor must NOT re-apply FIXED rules on top.
+    """
+    current_groups = [
+        _make_group("eng-app", "BoxUsage:m5.xlarge", 5000, 744),
+        _make_group("shared-svc", "BoxUsage:t3.medium", 1000, 744),
+    ]
+    yoy_groups = [
+        _make_group("eng-app", "BoxUsage:m5.xlarge", 4000, 744),
+        _make_group("shared-svc", "BoxUsage:t3.medium", 500, 744),
+    ]
+
+    collected = _make_collected(
+        current_groups=current_groups,
+        prev_groups=[],
+        yoy_groups=yoy_groups,
+        cc_mapping={"eng-app": "Engineering", "shared-svc": "Shared Services"},
+    )
+
+    collected["split_charge_categories"] = ["Shared Services"]
+    collected["split_charge_rules"] = [
+        {
+            "Source": "Shared Services",
+            "Targets": ["Engineering"],
+            "Method": "FIXED",
+            "Parameters": [{"Type": "ALLOCATION_PERCENTAGES", "Values": ["100"]}],
+        }
+    ]
+    collected["allocated_costs"] = {
+        "current": {
+            "Engineering": 5000.0,
+            "Shared Services": 1000.0,
+        },
+        "prev_month": {},
+        # yoy_allocated: CE returned Shared=$500 non-zero (historically correct)
+        "yoy": {
+            "Engineering": 4200.0,  # CE already allocated some Shared cost here
+            "Shared Services": 500.0,  # remaining non-zero balance for this period
+        },
+    }
+
+    result = process(collected)
+    ccs = result["summary"]["cost_centers"]
+
+    eng = next(cc for cc in ccs if cc["name"] == "Engineering")
+    shared = next(cc for cc in ccs if cc["name"] == "Shared Services")
+
+    # Current: processor applies FIXED 100% rule. Engineering = 5000 + 1000 = 6000.
+    assert eng["current_cost_usd"] == 6000.0
+    assert shared["current_cost_usd"] == 0.0
+
+    # YoY: processor must use yoy_allocated values WITHOUT re-redistribution.
+    # CE returned Engineering=4200, Shared=500 for Jan 2025 — trust these.
+    # If double-redistribution occurred: Engineering would get 4200 + 500 = 4700,
+    # Shared would be zeroed — incorrectly changing the historical total.
+    # With the fix: yoy_allocated is used as-is, Shared zeroed only by is_split_charge.
+    assert eng["yoy_cost_usd"] == 4200.0, (
+        "Engineering YoY must be 4200 (CE's value as-is). "
+        "Double-redistribution would incorrectly add the Shared $500 again."
+    )
+    assert (
+        shared["yoy_cost_usd"] == 0.0
+    )  # zeroed by is_split_charge, not redistribution

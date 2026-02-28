@@ -384,7 +384,19 @@ def process(
         cc = cc_mapping.get(wl, _DEFAULT_CC)
         cc_groups.setdefault(cc, []).append(wl)
 
-    # Build cost center summaries — apply split charge redistribution if rules exist
+    # Build cost center summaries — apply split charge redistribution to current and
+    # prev_month periods only (not yoy).
+    #
+    # CE's NetAmortizedCost query already encodes the historically-correct split charge
+    # allocation for each period. For the YoY period (12 months ago), the Cost Category
+    # definition may have had different split charge rules — e.g. PROPORTIONAL in Jan 2025
+    # vs FIXED percentages in Jan 2026. Re-applying Jan 2026's rules to Jan 2025's
+    # allocated costs would double-redistribute with the wrong percentages.
+    #
+    # prev_month (last month) uses the same Cost Category definition as current and
+    # CE returns pre-redistribution balances for it, so redistribution is applied there.
+    # yoy_allocated is used as-is and falls back to workload sums via the per-period gate
+    # if the keys don't match (e.g. "No cost category" for pre-category periods).
     current_allocated = allocated_costs.get("current", {})
     prev_allocated = allocated_costs.get("prev_month", {})
     yoy_allocated = allocated_costs.get("yoy", {})
@@ -395,9 +407,6 @@ def process(
         )
         prev_allocated = _apply_split_charge_redistribution(
             prev_allocated, split_charge_rules
-        )
-        yoy_allocated = _apply_split_charge_redistribution(
-            yoy_allocated, split_charge_rules
         )
 
     cost_centers = []
@@ -418,18 +427,24 @@ def process(
         workloads.sort(key=lambda w: w["current_cost_usd"], reverse=True)
 
         # Use allocated costs from category-level query if available AND
-        # the cost center name exists in the allocated costs dict.
-        # Fall back to summing workload costs when allocated costs are
-        # unavailable or the cost center is not present (e.g. historic months
-        # before Cost Categories were defined return keys like
-        # "No cost category" instead of the expected cost center names).
+        # the cost center name exists in that period's allocated costs dict.
+        # Each period is checked independently — the YoY or prev_month periods
+        # may predate the Cost Category definition and return sentinel keys like
+        # "No cost category" instead of real cost center names, so a valid
+        # current_allocated must not short-circuit the fallback for other periods.
         if current_allocated and cc_name in current_allocated:
             cc_current = round(current_allocated[cc_name], 2)
-            cc_prev = round(prev_allocated.get(cc_name, 0), 2)
-            cc_yoy = round(yoy_allocated.get(cc_name, 0), 2)
         else:
             cc_current = round(sum(w["current_cost_usd"] for w in workloads), 2)
+
+        if prev_allocated and cc_name in prev_allocated:
+            cc_prev = round(prev_allocated[cc_name], 2)
+        else:
             cc_prev = round(sum(w["prev_month_cost_usd"] for w in workloads), 2)
+
+        if yoy_allocated and cc_name in yoy_allocated:
+            cc_yoy = round(yoy_allocated[cc_name], 2)
+        else:
             cc_yoy = round(sum(w["yoy_cost_usd"] for w in workloads), 2)
 
         # Split charge categories have their cost redistributed to others;
