@@ -1675,3 +1675,74 @@ def test_yoy_double_count_untagged_in_allocated_and_uncategorized() -> None:
         f"Bug 2 confirmed: Untagged costs double-counted in both Engineering "
         f"(via allocated) and Uncategorized (via workload sum fallback)."
     )
+
+
+def test_yoy_uncategorized_preserved_when_no_cc_sentinel_present() -> None:
+    """Regression: Uncategorized YoY costs must not be zeroed when yoy_allocated
+    contains real CC names AND a 'No cost category' sentinel.
+
+    Scenario (mirrors real deployments where most spend is untagged):
+    - yoy_allocated has "Engineering"=$200 (real CC) and
+      "No cost category"=$13,200 (CE sentinel for uncovered spend).
+    - Many workloads map to "Uncategorized" totaling ~$13,200 in YoY costs.
+    - yoy_alloc_covers_known_cc is True (Engineering is a known CC), but
+      the prior fix (Bug 2) must NOT zero out Uncategorized when a "No cost
+      category" sentinel is present — those costs are genuinely uncategorized.
+
+    Expected: global YoY total ≈ $13,400 (Engineering $200 + Uncategorized $13,200).
+    """
+    yoy_groups = [
+        _make_group("eng-service", "BoxUsage:m5.xlarge", 200, 744),
+        # Many untagged workloads totaling $13,200
+        _make_group("", "BoxUsage:t3.micro", 5000, 744),
+        _make_group("", "BoxUsage:m5.large", 4200, 744),
+        _make_group("", "RDS:db.t3.medium", 4000, 744),
+    ]
+
+    collected = _make_collected(
+        current_groups=[
+            _make_group("eng-service", "BoxUsage:m5.xlarge", 250, 744),
+            _make_group("", "BoxUsage:t3.micro", 5500, 744),
+        ],
+        prev_groups=[
+            _make_group("eng-service", "BoxUsage:m5.xlarge", 220, 744),
+        ],
+        yoy_groups=yoy_groups,
+        cc_mapping={"eng-service": "Engineering"},
+        # "Untagged" is NOT in cc_mapping -> maps to "Uncategorized"
+    )
+
+    collected["allocated_costs"] = {
+        "current": {"Engineering": 250.0},
+        "prev_month": {"Engineering": 220.0},
+        # YoY: CE CC covers Engineering ($200) but attributes $13,200 to
+        # "No cost category" (spend not covered by any CC rule).
+        "yoy": {"Engineering": 200.0, "No cost category": 13200.0},
+    }
+
+    result = process(collected)
+    summary = result["summary"]
+    cc_map = {cc["name"]: cc for cc in summary["cost_centers"]}
+
+    engineering = cc_map["Engineering"]
+    uncategorized = cc_map.get("Uncategorized")
+
+    assert engineering["yoy_cost_usd"] == 200.0, (
+        f"Engineering YoY should be $200 (from yoy_allocated), got "
+        f"${engineering['yoy_cost_usd']}"
+    )
+
+    assert uncategorized is not None, (
+        "Uncategorized cost center should exist (has $13,200 in YoY workload costs)"
+    )
+    assert uncategorized["yoy_cost_usd"] == 13200.0, (
+        f"Uncategorized YoY should be $13,200 (from 'No cost category' sentinel), "
+        f"got ${uncategorized['yoy_cost_usd']}. "
+        f"Regression: over-aggressive Bug 2 fix zeroed Uncategorized even though "
+        f"yoy_allocated had a 'No cost category' sentinel indicating genuine uncovered costs."
+    )
+
+    global_yoy = sum(cc["yoy_cost_usd"] for cc in summary["cost_centers"])
+    assert global_yoy == 13400.0, (
+        f"Global YoY total should be $13,400, got ${global_yoy}"
+    )

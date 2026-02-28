@@ -411,12 +411,22 @@ def process(
 
     # Determine if yoy_allocated covers real cost center names (as opposed to only
     # sentinel keys like "No cost category" from pre-category periods).
-    # When it does, the allocation is complete and cost centers absent from
-    # yoy_allocated should receive 0, not the workload sum, to avoid double-counting
-    # costs already rolled up into another cost center's allocated total (Bug 2).
+    # When it does AND there is no "No cost category" sentinel (meaning the CC covers
+    # 100% of spend including untagged resources), cost centers absent from
+    # yoy_allocated should receive 0 to avoid double-counting costs already rolled up
+    # into another cost center's allocated total (Bug 2).
+    #
+    # When yoy_allocated has a "No cost category" sentinel, genuine uncategorized spend
+    # exists outside the CC definition — map it to "Uncategorized" rather than
+    # zeroing Uncategorized's workload sum, to avoid wiping out legitimate costs.
+    _NO_CC_SENTINEL = "No cost category"
     yoy_alloc_covers_known_cc = bool(yoy_allocated) and any(
         k in cc_groups for k in yoy_allocated
     )
+    # Treat "No cost category" from CE as the allocated amount for "Uncategorized".
+    # When this sentinel is present, the CC does not cover 100% of spend, so
+    # "Uncategorized" must not be forced to 0 (that would wipe genuine costs).
+    yoy_no_cc_amount: float | None = yoy_allocated.get(_NO_CC_SENTINEL)
 
     cost_centers = []
     for cc_name in sorted(cc_groups):
@@ -453,10 +463,16 @@ def process(
 
         if yoy_allocated and cc_name in yoy_allocated:
             cc_yoy = round(yoy_allocated[cc_name], 2)
-        elif yoy_alloc_covers_known_cc:
-            # yoy_allocated is a complete allocation (covers known CCs) but this
-            # cost center is not present — its costs were already rolled up into
-            # another CC's allocated total, so use 0 to avoid double-counting.
+        elif cc_name == _DEFAULT_CC and yoy_no_cc_amount is not None:
+            # "Uncategorized" maps to CE's "No cost category" sentinel.
+            # Use it as the authoritative allocated amount when present.
+            cc_yoy = round(yoy_no_cc_amount, 2)
+        elif yoy_alloc_covers_known_cc and yoy_no_cc_amount is None:
+            # yoy_allocated covers all real CCs with no uncategorized residual
+            # (complete CC coverage — CC rules attribute 100% of spend including
+            # untagged resources). This CC is absent from yoy_allocated, meaning
+            # its workloads' costs were already rolled into another CC's allocated
+            # total by CC rules — use 0 to avoid double-counting (Bug 2).
             cc_yoy = 0.0
         else:
             cc_yoy = round(sum(w["yoy_cost_usd"] for w in workloads), 2)
