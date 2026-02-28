@@ -1,16 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
+import { MetricCard, DeltaIndicator, Banner, Card } from "@cytario/design";
 import type { CostSummary } from "~/types/cost-data";
 import { discoverPeriods, fetchSummary } from "~/lib/data";
 import { initAuth, isAuthenticated, login, logout } from "~/lib/auth";
 import { formatUsd } from "~/lib/format";
-import { CostChange } from "~/components/CostChange";
 import { WorkloadTable } from "~/components/WorkloadTable";
 import { Header } from "~/components/Header";
 import { Footer } from "~/components/Footer";
 import { PeriodSelector } from "~/components/PeriodSelector";
 import { CostTrendSection } from "~/components/CostTrendSection";
-import { InfoTooltip } from "~/components/InfoTooltip";
 import type { TrendPoint } from "~/lib/useTrendData";
 
 export function meta() {
@@ -189,11 +188,7 @@ export default function CostCenterDetail() {
           </div>
         )}
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-            {error}
-          </div>
-        )}
+        {error && <Banner variant="danger">{error}</Banner>}
 
         {costCenter && !loading && (
           <>
@@ -204,43 +199,32 @@ export default function CostCenterDetail() {
 
             {/* Summary cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-                <div className="text-sm text-gray-500">
-                  Total Spend
-                  <InfoTooltip text="Total cost for this cost center in the selected period." />
-                </div>
-                <div className="text-2xl font-semibold mt-1">
-                  {formatUsd(costCenter.current_cost_usd)}
-                </div>
-              </div>
-              <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-                <div className="text-sm text-gray-500">
-                  vs Last Month
-                  <InfoTooltip text="Cost change from the previous calendar month." />
-                </div>
-                <div className="text-lg font-medium mt-1">
-                  <CostChange
+              <MetricCard
+                label="Total Spend"
+                value={formatUsd(costCenter.current_cost_usd)}
+              />
+              <MetricCard
+                label="vs Last Month"
+                value={
+                  <DeltaIndicator
                     current={costCenter.current_cost_usd}
                     previous={costCenter.prev_month_cost_usd}
                   />
-                </div>
-              </div>
-              <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-                <div className="text-sm text-gray-500">
-                  vs Last Year
-                  <InfoTooltip text="Cost change compared to the same month one year ago." />
-                </div>
-                <div className="text-lg font-medium mt-1">
-                  {costCenter.yoy_cost_usd > 0 ? (
-                    <CostChange
+                }
+              />
+              <MetricCard
+                label="vs Last Year"
+                value={
+                  costCenter.yoy_cost_usd > 0 ? (
+                    <DeltaIndicator
                       current={costCenter.current_cost_usd}
                       previous={costCenter.yoy_cost_usd}
                     />
                   ) : (
-                    <span className="text-gray-400">N/A</span>
-                  )}
-                </div>
-              </div>
+                    <DeltaIndicator current={0} previous={0} unavailable />
+                  )
+                }
+              />
             </div>
 
             {/* Cost trend chart for this cost center */}
@@ -253,20 +237,20 @@ export default function CostCenterDetail() {
             />
 
             {/* Workload breakdown */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <Card padding="md">
               <h3 className="text-lg font-semibold mb-4">Workload Breakdown</h3>
               <WorkloadTable
                 workloads={costCenter.workloads}
                 period={selectedPeriod}
               />
-            </div>
+            </Card>
           </>
         )}
 
         {!loading && !error && !costCenter && summary && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-700">
+          <Banner variant="warning">
             Cost center &ldquo;{name}&rdquo; not found in the selected period.
-          </div>
+          </Banner>
         )}
       </main>
 

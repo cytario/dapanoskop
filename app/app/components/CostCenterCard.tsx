@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router";
+import { Card, Badge, DeltaIndicator } from "@cytario/design";
 import type { CostCenter, MtdComparison } from "~/types/cost-data";
 import { formatUsd, formatPartialPeriodLabel } from "~/lib/format";
-import { CostChange } from "./CostChange";
 import { WorkloadTable } from "./WorkloadTable";
-import { InfoTooltip } from "./InfoTooltip";
 
 interface CostCenterCardProps {
   costCenter: CostCenter;
@@ -36,7 +35,6 @@ export function CostCenterCard({
     costCenter.workloads.length > 0
       ? costCenter.workloads.reduce(
           (best, wl) => {
-            // Use MTD prior partial cost if available
             const mtdWl = mtdCostCenter?.workloads.find(
               (mw) => mw.name === wl.name,
             );
@@ -74,7 +72,7 @@ export function CostCenterCard({
   const detailUrl = `/cost-center/${encodeURIComponent(costCenter.name)}?period=${period}`;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden transition-shadow hover:shadow-md">
+    <Card padding="none">
       <div className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -97,9 +95,7 @@ export function CostCenterCard({
               {costCenter.name}
             </Link>
             {costCenter.is_split_charge && (
-              <span className="ml-2 text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
-                Split Charge
-              </span>
+              <Badge variant="slate">Split Charge</Badge>
             )}
           </div>
           <span className="text-xl font-semibold">
@@ -118,33 +114,32 @@ export function CostCenterCard({
           </div>
         ) : (
           <div className="flex items-center gap-6 mt-2 ml-7 text-sm">
-            <span className="inline-flex items-center">
-              <CostChange
-                current={costCenter.current_cost_usd}
-                previous={momPrevious}
-                label={momLabel}
-              />
-              <InfoTooltip
-                text={
-                  isMtd && mtdComparison
-                    ? `Like-for-like comparison against the same number of days in the prior month (${formatPartialPeriodLabel(mtdComparison.prior_partial_start, mtdComparison.prior_partial_end_exclusive)}).`
-                    : "Cost change from the previous calendar month, shown as absolute and percentage."
-                }
-              />
-            </span>
+            <DeltaIndicator
+              current={costCenter.current_cost_usd}
+              previous={momPrevious}
+              label={momLabel}
+            />
             {isMtd ? (
-              <span className="text-gray-400 text-sm">YoY N/A (MTD)</span>
+              <DeltaIndicator
+                current={0}
+                previous={0}
+                unavailable
+                unavailableText="YoY N/A (MTD)"
+                label=""
+              />
             ) : costCenter.yoy_cost_usd > 0 ? (
-              <span className="inline-flex items-center">
-                <CostChange
-                  current={costCenter.current_cost_usd}
-                  previous={costCenter.yoy_cost_usd}
-                  label="YoY"
-                />
-                <InfoTooltip text="Cost change compared to the same month last year. Helps identify long-term trends." />
-              </span>
+              <DeltaIndicator
+                current={costCenter.current_cost_usd}
+                previous={costCenter.yoy_cost_usd}
+                label="YoY"
+              />
             ) : (
-              <span className="text-gray-400 text-sm">YoY N/A</span>
+              <DeltaIndicator
+                current={0}
+                previous={0}
+                unavailable
+                unavailableText="YoY N/A"
+              />
             )}
           </div>
         )}
@@ -155,21 +150,22 @@ export function CostCenterCard({
               {" "}
               · Top mover: {topMover.name} ({topMoverPct}%{" "}
               {isMtd && mtdComparison ? "partial" : "MoM"})
-              <InfoTooltip text="The workload with the largest absolute dollar change compared to last month. Identifies where costs shifted the most." />
             </>
           )}
         </div>
       </div>
       {expanded && (
-        <div className="px-4 pb-4">
-          <WorkloadTable
-            workloads={costCenter.workloads}
-            period={period}
-            isMtd={isMtd}
-            mtdCostCenter={mtdCostCenter}
-          />
+        <div className="px-4 pb-4 border-t border-gray-200">
+          <div className="pt-3">
+            <WorkloadTable
+              workloads={costCenter.workloads}
+              period={period}
+              isMtd={isMtd}
+              mtdCostCenter={mtdCostCenter}
+            />
+          </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

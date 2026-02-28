@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import { InfoTooltip } from "./InfoTooltip";
 
@@ -8,31 +8,28 @@ describe("InfoTooltip", () => {
     expect(container.textContent).toContain("i");
   });
 
-  it("contains the tooltip text in the DOM", () => {
-    const { container } = render(
-      <InfoTooltip text="Total storage cost divided by volume." />,
-    );
-    expect(container.textContent).toContain(
-      "Total storage cost divided by volume.",
-    );
-  });
-
   it("has aria-label for accessibility", () => {
-    const { container } = render(<InfoTooltip text="Help text here" />);
-    const icon = container.querySelector('[aria-label="Help text here"]');
-    expect(icon).not.toBeNull();
+    render(<InfoTooltip text="Help text here" />);
+    const button = screen.getByRole("button", { name: "Help text here" });
+    expect(button).toBeInTheDocument();
   });
 
-  it("has role=tooltip on the tooltip element", () => {
-    const { container } = render(<InfoTooltip text="Explanation" />);
-    const tooltip = container.querySelector('[role="tooltip"]');
-    expect(tooltip).not.toBeNull();
-    expect(tooltip?.textContent).toBe("Explanation");
+  it("shows tooltip on focus", async () => {
+    render(<InfoTooltip text="Explanation" />);
+    const trigger = screen.getByRole("button", { name: "Explanation" });
+    await act(async () => {
+      trigger.focus();
+    });
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toBeInTheDocument();
+    expect(tooltip.textContent).toBe("Explanation");
   });
 
-  it("wrapper is keyboard-focusable via tabIndex", () => {
-    const { container } = render(<InfoTooltip text="Focusable" />);
-    const wrapper = container.querySelector('[tabindex="0"]');
-    expect(wrapper).not.toBeNull();
+  it("trigger is keyboard-focusable", () => {
+    render(<InfoTooltip text="Focusable" />);
+    const trigger = screen.getByRole("button", { name: "Focusable" });
+    expect(trigger).toBeTruthy();
+    trigger.focus();
+    expect(trigger).toHaveFocus();
   });
 });

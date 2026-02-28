@@ -3,11 +3,12 @@ import { Link, useSearchParams } from "react-router";
 import {
   PieChart,
   Pie,
-  Cell,
-  Tooltip,
+  Cell as RechartsCell,
+  Tooltip as RechartsTooltip,
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { MetricCard, Banner } from "@cytario/design";
 import type { CostSummary } from "~/types/cost-data";
 import { fetchSummary } from "~/lib/data";
 import { initAuth, isAuthenticated, login } from "~/lib/auth";
@@ -17,7 +18,6 @@ import { buildS3ConfigStatements } from "~/lib/duckdb-config";
 import { formatUsd, formatBytes } from "~/lib/format";
 import { Header } from "~/components/Header";
 import { Footer } from "~/components/Footer";
-import { InfoTooltip } from "~/components/InfoTooltip";
 
 export function meta() {
   return [{ title: "Dapanoskop — Storage Volume Breakdown" }];
@@ -36,20 +36,21 @@ const TIER_MAP: Record<string, string> = {
   "TimedStorage-GDA-ByteHrs": "Glacier Deep Archive",
 };
 
-/** Color palette ordered warm-to-cool (hot-to-cold tiers). */
+// Hardcoded hex values because Recharts can't consume CSS custom properties.
+// Color palette ordered warm-to-cool (hot-to-cold storage tiers).
 const TIER_COLORS: Record<string, string> = {
-  "S3 Standard": "#ef4444",
-  "IT Frequent Access": "#f97316",
-  "Glacier Instant": "#eab308",
-  "IT Infrequent Access": "#22c55e",
-  "One Zone-IA": "#14b8a6",
-  "IT Archive Instant": "#3b82f6",
-  "Glacier Flexible": "#8b5cf6",
-  "IT Deep Archive": "#6366f1",
-  "Glacier Deep Archive": "#1e3a5f",
+  "S3 Standard": "#ef4444", // red-500
+  "IT Frequent Access": "#f97316", // orange-500
+  "Glacier Instant": "#eab308", // yellow-500
+  "IT Infrequent Access": "#22c55e", // green-500
+  "One Zone-IA": "#14b8a6", // teal-500
+  "IT Archive Instant": "#3b82f6", // blue-500
+  "Glacier Flexible": "#8b5cf6", // violet-500
+  "IT Deep Archive": "#6366f1", // indigo-500
+  "Glacier Deep Archive": "#1e3a5f", // slate-900
 };
 
-const DEFAULT_COLOR = "#94a3b8"; // slate-400
+const DEFAULT_COLOR = "#94a3b8"; // --color-slate-400
 
 interface TierRow {
   tier: string;
@@ -259,35 +260,22 @@ export default function StorageDetail() {
 
         {storageMetrics && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-              <div className="text-sm text-gray-500">
-                Total Stored
-                <InfoTooltip text="Total storage volume from S3 Storage Lens, measured at the time of the latest metrics snapshot." />
-              </div>
-              <div className="text-xl font-semibold mt-1">
-                {storageMetrics.storage_lens_total_bytes != null
+            <MetricCard
+              label="Total Stored"
+              value={
+                storageMetrics.storage_lens_total_bytes != null
                   ? formatBytes(storageMetrics.storage_lens_total_bytes)
-                  : "N/A"}
-              </div>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-              <div className="text-sm text-gray-500">
-                Hot Tier
-                <InfoTooltip text="Percentage of stored data in frequently accessed tiers (e.g., S3 Standard). High values may indicate optimization opportunities via lifecycle policies." />
-              </div>
-              <div className="text-xl font-semibold mt-1">
-                {storageMetrics.hot_tier_percentage.toFixed(1)}%
-              </div>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-              <div className="text-sm text-gray-500">
-                Cost / TB
-                <InfoTooltip text="Total storage cost divided by total volume stored, in terabytes. Lower values indicate better cost efficiency." />
-              </div>
-              <div className="text-xl font-semibold mt-1">
-                {formatUsd(storageMetrics.cost_per_tb_usd)}
-              </div>
-            </div>
+                  : "N/A"
+              }
+            />
+            <MetricCard
+              label="Hot Tier"
+              value={`${storageMetrics.hot_tier_percentage.toFixed(1)}%`}
+            />
+            <MetricCard
+              label="Cost / TB"
+              value={formatUsd(storageMetrics.cost_per_tb_usd)}
+            />
           </div>
         )}
 
@@ -299,11 +287,7 @@ export default function StorageDetail() {
           </div>
         )}
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-            {error}
-          </div>
-        )}
+        {error && <Banner variant="danger">{error}</Banner>}
 
         {!loading && tierRows.length > 0 && (
           <>
@@ -325,13 +309,13 @@ export default function StorageDetail() {
                     }
                   >
                     {tierRows.map((row) => (
-                      <Cell
+                      <RechartsCell
                         key={row.tier}
                         fill={TIER_COLORS[row.tier] ?? DEFAULT_COLOR}
                       />
                     ))}
                   </Pie>
-                  <Tooltip content={<CustomPieTooltip />} />
+                  <RechartsTooltip content={<CustomPieTooltip />} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>

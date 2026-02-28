@@ -1,5 +1,6 @@
 import { useEffect, useState, lazy, Suspense } from "react";
 import { Link, useSearchParams } from "react-router";
+import { MetricCard, DeltaIndicator, Banner } from "@cytario/design";
 import type { CostSummary, UsageTypeCostRow } from "~/types/cost-data";
 import { fetchSummary } from "~/lib/data";
 import { initAuth, isAuthenticated, login } from "~/lib/auth";
@@ -7,10 +8,8 @@ import { getConfig } from "~/lib/config";
 import { getAwsCredentials } from "~/lib/credentials";
 import { buildS3ConfigStatements } from "~/lib/duckdb-config";
 import { formatUsd } from "~/lib/format";
-import { CostChange } from "~/components/CostChange";
 import { Header } from "~/components/Header";
 import { Footer } from "~/components/Footer";
-import { InfoTooltip } from "~/components/InfoTooltip";
 
 const UsageTypeTable = lazy(() =>
   import("~/components/UsageTypeTable").then((m) => ({
@@ -195,27 +194,19 @@ export default function StorageCostDetail() {
 
         {storageMetrics && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-              <div className="text-sm text-gray-500">
-                Total Storage Cost
-                <InfoTooltip text="Total cost of all storage usage types across all workloads for this period." />
-              </div>
-              <div className="text-xl font-semibold mt-1">
-                {formatUsd(storageMetrics.total_cost_usd)}
-              </div>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-              <div className="text-sm text-gray-500">
-                vs Last Month
-                <InfoTooltip text="Storage cost change from the previous calendar month, shown as absolute and percentage." />
-              </div>
-              <div className="text-lg font-medium mt-1">
-                <CostChange
+            <MetricCard
+              label="Total Storage Cost"
+              value={formatUsd(storageMetrics.total_cost_usd)}
+            />
+            <MetricCard
+              label="vs Last Month"
+              value={
+                <DeltaIndicator
                   current={storageMetrics.total_cost_usd}
                   previous={storageMetrics.prev_month_cost_usd}
                 />
-              </div>
-            </div>
+              }
+            />
           </div>
         )}
 
@@ -227,11 +218,7 @@ export default function StorageCostDetail() {
           </div>
         )}
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-            {error}
-          </div>
-        )}
+        {error && <Banner variant="danger">{error}</Banner>}
 
         {!loading && usageRows.length > 0 && summary && (
           <Suspense fallback={<div>Loading table...</div>}>

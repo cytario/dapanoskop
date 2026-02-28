@@ -1,5 +1,6 @@
 import { useEffect, useState, lazy, Suspense } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
+import { MetricCard, DeltaIndicator, Banner } from "@cytario/design";
 import type { CostSummary, UsageTypeCostRow } from "~/types/cost-data";
 import { fetchSummary } from "~/lib/data";
 import { initAuth, isAuthenticated, login } from "~/lib/auth";
@@ -7,10 +8,8 @@ import { getConfig } from "~/lib/config";
 import { getAwsCredentials } from "~/lib/credentials";
 import { buildS3ConfigStatements } from "~/lib/duckdb-config";
 import { formatUsd } from "~/lib/format";
-import { CostChange } from "~/components/CostChange";
 import { Header } from "~/components/Header";
 import { Footer } from "~/components/Footer";
-import { InfoTooltip } from "~/components/InfoTooltip";
 
 const UsageTypeTable = lazy(() =>
   import("~/components/UsageTypeTable").then((m) => ({
@@ -47,8 +46,6 @@ export default function WorkloadDetail() {
         const duckdb = await import("@duckdb/duckdb-wasm");
         if (cancelled) return;
 
-        // Self-hosted DuckDB bundles copied to public/duckdb/ by Vite plugin.
-        // Using stable paths that bypass Vite content-hashing.
         const DUCKDB_BUNDLES = {
           mvp: {
             mainModule: `${window.location.origin}/duckdb/duckdb-eh.wasm`,
@@ -68,8 +65,6 @@ export default function WorkloadDetail() {
         await db.instantiate(bundle.mainModule);
         if (cancelled) return;
 
-        // Set up connection — for S3, configure httpfs on the same connection
-        // that will run the query (matches cytario-web's working pattern)
         let parquetSource: string;
         const conn = await db.connect();
 
@@ -83,7 +78,6 @@ export default function WorkloadDetail() {
           await db.registerFileBuffer("usage.parquet", buffer);
           parquetSource = "'usage.parquet'";
         } else {
-          // Load experimental httpfs for S3 protocol support (see duckdb/duckdb-wasm#2107)
           await conn.query("SET builtin_httpfs = false");
           await conn.query("LOAD httpfs");
           await conn.query("SET enable_object_cache = true");
@@ -176,7 +170,7 @@ export default function WorkloadDetail() {
             to={`/?period=${period}`}
             className="text-primary-600 hover:underline text-sm"
           >
-            ← Back to Report
+            &larr; Back to Report
           </Link>
           {summary && (
             <span className="text-sm text-gray-500">
@@ -201,43 +195,32 @@ export default function WorkloadDetail() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-                <div className="text-sm text-gray-500">
-                  Current
-                  <InfoTooltip text="Total cost for this workload in the selected period, including all usage types (compute, storage, data transfer, etc.)." />
-                </div>
-                <div className="text-xl font-semibold mt-1">
-                  {formatUsd(workload.current_cost_usd)}
-                </div>
-              </div>
-              <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-                <div className="text-sm text-gray-500">
-                  vs Last Month
-                  <InfoTooltip text="Cost change for this workload from the previous calendar month, shown as absolute and percentage." />
-                </div>
-                <div className="text-lg font-medium mt-1">
-                  <CostChange
+              <MetricCard
+                label="Current"
+                value={formatUsd(workload.current_cost_usd)}
+              />
+              <MetricCard
+                label="vs Last Month"
+                value={
+                  <DeltaIndicator
                     current={workload.current_cost_usd}
                     previous={workload.prev_month_cost_usd}
                   />
-                </div>
-              </div>
-              <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-                <div className="text-sm text-gray-500">
-                  vs Last Year
-                  <InfoTooltip text="Cost change for this workload compared to the same month one year ago. Useful for spotting seasonal patterns." />
-                </div>
-                <div className="text-lg font-medium mt-1">
-                  {workload.yoy_cost_usd > 0 ? (
-                    <CostChange
+                }
+              />
+              <MetricCard
+                label="vs Last Year"
+                value={
+                  workload.yoy_cost_usd > 0 ? (
+                    <DeltaIndicator
                       current={workload.current_cost_usd}
                       previous={workload.yoy_cost_usd}
                     />
                   ) : (
-                    <span className="text-gray-400">N/A</span>
-                  )}
-                </div>
-              </div>
+                    <DeltaIndicator current={0} previous={0} unavailable />
+                  )
+                }
+              />
             </div>
           </>
         )}
@@ -250,11 +233,7 @@ export default function WorkloadDetail() {
           </div>
         )}
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-            {error}
-          </div>
-        )}
+        {error && <Banner variant="danger">{error}</Banner>}
 
         {!loading && usageRows.length > 0 && summary && (
           <Suspense fallback={<div>Loading table...</div>}>

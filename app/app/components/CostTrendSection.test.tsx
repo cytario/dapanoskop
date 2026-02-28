@@ -113,9 +113,9 @@ describe("CostTrendSection", () => {
       return pts;
     }
 
-    it("hides toggle when data has 12 or fewer points", async () => {
+    it("hides toggle when data has 13 or fewer points", async () => {
       mockUseTrendData.mockReturnValue({
-        points: makePoints(12),
+        points: makePoints(13),
         costCenterNames: ["Eng"],
         loading: false,
         error: null,
@@ -128,7 +128,7 @@ describe("CostTrendSection", () => {
       expect(container.querySelector('[role="radiogroup"]')).toBeNull();
     });
 
-    it("shows toggle when data has more than 12 points", async () => {
+    it("shows toggle when data has more than 13 points", async () => {
       mockUseTrendData.mockReturnValue({
         points: makePoints(15),
         costCenterNames: ["Eng"],
@@ -143,8 +143,8 @@ describe("CostTrendSection", () => {
       expect(container.querySelector('[role="radiogroup"]')).not.toBeNull();
     });
 
-    it("defaults to 1 Year showing last 12 points", async () => {
-      const points = makePoints(15);
+    it("defaults to 1 Year showing last 13 points", async () => {
+      const points = makePoints(18);
       mockUseTrendData.mockReturnValue({
         points,
         costCenterNames: ["Eng"],
@@ -157,13 +157,13 @@ describe("CostTrendSection", () => {
         expect(container.querySelector('[data-testid="chart"]')).not.toBeNull();
       });
 
-      // Default is "1 Year" -- should show 12 points
+      // Default is "1 Year" -- should show 13 points (13-month window)
       const chart = container.querySelector('[data-testid="chart"]');
-      expect(chart?.textContent).toContain("12pts");
+      expect(chart?.textContent).toContain("13pts");
     });
 
     it("shows all points when All Time is selected", async () => {
-      const points = makePoints(15);
+      const points = makePoints(18);
       mockUseTrendData.mockReturnValue({
         points,
         costCenterNames: ["Eng"],
@@ -183,11 +183,11 @@ describe("CostTrendSection", () => {
       fireEvent.click(allTimeBtn!);
 
       const chart = container.querySelector('[data-testid="chart"]');
-      expect(chart?.textContent).toContain("15pts");
+      expect(chart?.textContent).toContain("18pts");
     });
 
     it("switches back to 1 Year from All Time", async () => {
-      const points = makePoints(15);
+      const points = makePoints(18);
       mockUseTrendData.mockReturnValue({
         points,
         costCenterNames: ["Eng"],
@@ -207,7 +207,7 @@ describe("CostTrendSection", () => {
       fireEvent.click(allTimeBtn!);
       expect(
         container.querySelector('[data-testid="chart"]')?.textContent,
-      ).toContain("15pts");
+      ).toContain("18pts");
 
       // Click "1 Year" (now it's the unchecked one)
       const oneYearBtn = container.querySelector(
@@ -216,11 +216,11 @@ describe("CostTrendSection", () => {
       fireEvent.click(oneYearBtn!);
       expect(
         container.querySelector('[data-testid="chart"]')?.textContent,
-      ).toContain("12pts");
+      ).toContain("13pts");
     });
 
-    it("shows toggle and filters to 12 points when data has exactly 13 points", async () => {
-      const points = makePoints(13);
+    it("shows toggle and filters to 13 points when data has exactly 14 points", async () => {
+      const points = makePoints(14);
       mockUseTrendData.mockReturnValue({
         points,
         costCenterNames: ["Eng"],
@@ -233,19 +233,19 @@ describe("CostTrendSection", () => {
         expect(container.querySelector('[data-testid="chart"]')).not.toBeNull();
       });
 
-      // Toggle should be visible (13 > 12)
+      // Toggle should be visible (14 > 13)
       expect(container.querySelector('[role="radiogroup"]')).not.toBeNull();
 
-      // Default "1 Year" should show 12 points
+      // Default "1 Year" should show 13 points
       const chart = container.querySelector('[data-testid="chart"]');
-      expect(chart?.textContent).toContain("12pts");
+      expect(chart?.textContent).toContain("13pts");
 
-      // "All Time" should show all 13 points
+      // "All Time" should show all 14 points
       const allTimeBtn = container.querySelector(
         '[role="radio"][aria-checked="false"]',
       );
       fireEvent.click(allTimeBtn!);
-      expect(chart?.textContent).toContain("13pts");
+      expect(chart?.textContent).toContain("14pts");
     });
 
     it("handles empty data gracefully", async () => {

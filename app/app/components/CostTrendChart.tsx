@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   ComposedChart,
   Bar,
@@ -5,21 +6,25 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from "recharts";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { formatPeriodLabel, formatUsd } from "~/lib/format";
 import { computeMovingAverage } from "~/lib/moving-average";
 import type { TrendPoint } from "~/lib/useTrendData";
 
+// Hardcoded hex values because Recharts can't consume CSS custom properties.
+// Values sourced from cytario design tokens (tokens/base.json).
 const COLORS = [
-  "#2563eb", // blue-600
-  "#7c3aed", // violet-600
+  "#6b2695", // --color-purple-600
+  "#2a9b9c", // --color-teal-600
   "#0891b2", // cyan-600
   "#059669", // emerald-600
-  "#d97706", // amber-600
-  "#dc2626", // red-600
+  "#d97706", // --color-amber-600
+  "#e11d48", // --color-rose-600
 ];
+
+const MA_COLOR = "#be123c"; // --color-rose-700
 
 function getColor(index: number): string {
   return COLORS[index % COLORS.length];
@@ -66,9 +71,73 @@ function CustomTooltip({
         Total: {formatUsd(total)}
       </p>
       {maEntry && maEntry.value != null && (
-        <p className="text-xs mt-1" style={{ color: "#be185d" }}>
+        <p className="text-xs mt-1" style={{ color: MA_COLOR }}>
           3-Month Avg: {formatUsd(maEntry.value)}
         </p>
+      )}
+    </div>
+  );
+}
+
+/** Custom bar shape that renders MTD bars with reduced opacity. */
+function MtdAwareBar(props: Record<string, unknown>) {
+  const { x, y, width, height, fill, payload } = props as {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    fill: string;
+    payload: TrendPoint;
+  };
+  const isMtd = payload?._isMtd === true;
+  return (
+    <rect
+      x={x}
+      y={y}
+      width={width}
+      height={height}
+      fill={fill}
+      fillOpacity={isMtd ? 0.5 : 1}
+    />
+  );
+}
+
+interface LegendEntry {
+  name: string;
+  color: string;
+}
+
+function CollapsibleLegend({ entries }: { entries: LegendEntry[] }) {
+  const [showLegend, setShowLegend] = useState(false);
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setShowLegend((v) => !v)}
+        className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+      >
+        {showLegend ? (
+          <>
+            <ChevronUp size={14} /> Hide legend
+          </>
+        ) : (
+          <>
+            <ChevronDown size={14} /> Show legend
+          </>
+        )}
+      </button>
+      {showLegend && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-600">
+          {entries.map((e) => (
+            <span key={e.name} className="flex items-center gap-1.5">
+              <span
+                className="inline-block w-3 h-3 rounded-sm"
+                style={{ backgroundColor: e.color }}
+              />
+              {e.name}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -90,37 +159,45 @@ export default function CostTrendChart({
     _movingAvg: maValues[i],
   }));
 
+  const legendEntries: LegendEntry[] = [
+    ...costCenterNames.map((name, i) => ({ name, color: getColor(i) })),
+    { name: "3-Month Avg", color: MA_COLOR },
+  ];
+
   return (
-    <ResponsiveContainer width="100%" height={360}>
-      <ComposedChart data={enrichedPoints}>
-        <XAxis
-          dataKey="period"
-          tickFormatter={formatPeriodLabel}
-          tick={{ fontSize: 12 }}
-        />
-        <YAxis tickFormatter={formatCompactUsd} tick={{ fontSize: 12 }} />
-        <Tooltip content={<CustomTooltip />} />
-        <Legend verticalAlign="bottom" wrapperStyle={{ paddingTop: 12 }} />
-        {costCenterNames.map((name, i) => (
-          <Bar
-            key={name}
-            dataKey={name}
-            stackId="cost"
-            fill={getColor(i)}
-            name={name}
+    <>
+      <ResponsiveContainer width="100%" height={360}>
+        <ComposedChart data={enrichedPoints}>
+          <XAxis
+            dataKey="period"
+            tickFormatter={formatPeriodLabel}
+            tick={{ fontSize: 12 }}
           />
-        ))}
-        <Line
-          type="monotone"
-          dataKey="_movingAvg"
-          stroke="#be185d"
-          strokeWidth={2}
-          strokeDasharray="6 3"
-          dot={false}
-          name="3-Month Avg"
-          connectNulls={false}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+          <YAxis tickFormatter={formatCompactUsd} tick={{ fontSize: 12 }} />
+          <Tooltip content={<CustomTooltip />} />
+          {costCenterNames.map((name, i) => (
+            <Bar
+              key={name}
+              dataKey={name}
+              stackId="cost"
+              fill={getColor(i)}
+              name={name}
+              shape={<MtdAwareBar />}
+            />
+          ))}
+          <Line
+            type="monotone"
+            dataKey="_movingAvg"
+            stroke={MA_COLOR}
+            strokeWidth={2}
+            strokeDasharray="6 3"
+            dot={false}
+            name="3-Month Avg"
+            connectNulls={false}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+      <CollapsibleLegend entries={legendEntries} />
+    </>
   );
 }

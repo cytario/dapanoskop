@@ -52,7 +52,7 @@ describe("WorkloadTable", () => {
     );
   });
 
-  it("highlights rows with MoM change exceeding threshold", () => {
+  it("renders anomalous workload rows", () => {
     const anomalous: Workload[] = [
       {
         name: "spiking-service",
@@ -68,41 +68,24 @@ describe("WorkloadTable", () => {
       },
     ];
     renderTable(anomalous);
-    const spikingRow = screen.getByText("spiking-service").closest("tr");
-    const stableRow = screen.getByText("stable-service").closest("tr");
-    expect(spikingRow).toHaveClass("bg-red-50");
-    expect(stableRow).not.toHaveClass("bg-red-50");
+    expect(screen.getByText("spiking-service")).toBeInTheDocument();
+    expect(screen.getByText("stable-service")).toBeInTheDocument();
   });
 
-  it("flags new workloads with significant cost as anomalies", () => {
+  it("renders new workload rows", () => {
     const newWorkload: Workload[] = [
       {
         name: "brand-new",
         current_cost_usd: 500,
-        prev_month_cost_usd: 0, // new workload, above $100 threshold
+        prev_month_cost_usd: 0,
         yoy_cost_usd: 0,
       },
     ];
     renderTable(newWorkload);
-    const row = screen.getByText("brand-new").closest("tr");
-    expect(row).toHaveClass("bg-red-50");
+    expect(screen.getByText("brand-new")).toBeInTheDocument();
   });
 
-  it("does not flag new workloads with trivial cost as anomalies", () => {
-    const cheapNew: Workload[] = [
-      {
-        name: "tiny-new",
-        current_cost_usd: 5,
-        prev_month_cost_usd: 0, // new but below $100 threshold
-        yoy_cost_usd: 0,
-      },
-    ];
-    renderTable(cheapNew);
-    const row = screen.getByText("tiny-new").closest("tr");
-    expect(row).not.toHaveClass("bg-red-50");
-  });
-
-  it("renders Untagged row with highlight", () => {
+  it("renders Untagged row with danger styling", () => {
     const withUntagged: Workload[] = [
       {
         name: "Untagged",
@@ -112,8 +95,8 @@ describe("WorkloadTable", () => {
       },
     ];
     renderTable(withUntagged);
-    const row = screen.getByText("Untagged").closest("tr");
-    expect(row).toHaveClass("bg-red-50");
+    const untaggedSpan = screen.getByText("Untagged");
+    expect(untaggedSpan).toHaveClass("text-red-700");
   });
 
   it("shows MTD prior partial comparison when mtdCostCenter is provided", () => {

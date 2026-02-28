@@ -5,7 +5,7 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.18 (Draft)                               |
+| Version             | 0.19 (Draft)                               |
 | Date                | 2026-02-28                                 |
 
 ---
@@ -152,7 +152,7 @@ Refs: URS-DP-10301, URS-DP-10302, URS-DP-30104
 ##### Cost Trend Chart
 
 **[SRS-DP-310214] Display Multi-Period Cost Trend Chart**
-The system displays a stacked bar chart showing cost totals for all available reporting periods, broken down by cost center. When more than 12 periods are available, the system displays a time range toggle with options "1 Year" (most recent 12 months) and "All Time" (all available periods); the toggle is hidden when 12 or fewer periods exist. The chart loads independently of the selected reporting period. Periods are displayed chronologically (oldest on the left). Cost centers are stacked within each bar, with the largest cost center at the bottom. A tooltip displays the per-cost-center cost and computed total for the hovered period. The chart loads asynchronously after the initial report render and displays a loading skeleton while data is being fetched. On narrow viewports, the legend is positioned below the chart to prevent overlap.
+The system displays a stacked bar chart showing cost totals for available reporting periods, broken down by cost center. The default view shows the most recent 13 months, enabling visual year-over-year comparison of the last completed month against the same month one year prior. When more than 13 periods are available, the system displays a time range toggle with options "13 Months" (most recent 13 months, default) and "All Time" (all available periods); the toggle is hidden when 13 or fewer periods exist. The chart loads independently of the selected reporting period. Periods are displayed chronologically (oldest on the left). Cost centers are stacked within each bar, with the largest cost center at the bottom. A tooltip displays the per-cost-center cost and computed total for the hovered period. The MTD bar (current in-progress month) is visually distinguished from completed-month bars using reduced opacity. The chart loads asynchronously after the initial report render and displays a loading skeleton while data is being fetched. The legend is collapsible and hidden by default; users can expand it to see cost center color assignments.
 Refs: URS-DP-10309, URS-DP-10302, URS-DP-30104
 
 | No | Element | Data type | Value range | Other relevant information |
@@ -161,7 +161,8 @@ Refs: URS-DP-10309, URS-DP-10302, URS-DP-30104
 | 2  | X-axis | Month labels | All available periods | Formatted as abbreviated month + 2-digit year (e.g., "Dec '25") |
 | 3  | Y-axis | Currency (USD) | ≥ 0 | Compact format (e.g., "$15K") |
 | 4  | Tooltip | Currency (USD) per cost center + total | ≥ 0 | Shows on hover; includes all cost centers and a total |
-| 5  | Legend | Cost center names | — | One entry per cost center with color indicator; positioned below chart on mobile |
+| 5  | MTD bar | Visual distinction | — | Rendered at reduced opacity to signal in-progress partial month |
+| 6  | Legend | Cost center names | — | Collapsible; hidden by default; one entry per cost center with color indicator |
 
 **[SRS-DP-310215] Display Cost Trend Line**
 The system overlays a dashed line on the cost trend chart showing the 3-month simple moving average of aggregate total cost (sum of all cost centers), enabling users to distinguish short-term volatility from sustained cost trajectory changes. The first two data points have no trend line value (insufficient window). The trend line is not configurable.
@@ -696,3 +697,4 @@ Refs: URS-DP-10101
 | 0.16    | 2026-02-28 | —      | Clarify MTD period-strip label (SRS-DP-310219 update): the MTD entry displays the month abbreviation with an appended "MTD" badge (e.g., "Feb '26 MTD") rather than replacing the abbreviation entirely, giving users both the month context and an in-progress indicator |
 | 0.17    | 2026-02-28 | —      | Add empty CE response skip requirement (SRS-DP-420111): pipeline must not write data for a month when CE returns zero result groups, preserving existing historical data for periods beyond CE retention window |
 | 0.18    | 2026-02-28 | —      | Bug fix documentation: update SRS-DP-420102 to clarify that each selectable period's YoY comparison must use the correct year-ago period for that specific period (not a shared offset year-ago period) — fixes previously ambiguous wording that implied a single shared YoY period sufficed for both the MTD and completed-month entries |
+| 0.19    | 2026-02-28 | —      | Update cost trend chart defaults and behaviors (SRS-DP-310214): change default period window from 12 months to 13 months to enable visual YoY comparison of the last completed month; update time range toggle options accordingly ("13 Months" / "All Time"); add MTD bar visual distinction (reduced opacity); add collapsible legend (hidden by default) |

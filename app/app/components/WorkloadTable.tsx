@@ -1,7 +1,15 @@
 import { Link } from "react-router";
+import {
+  Table,
+  TableHeader,
+  Column,
+  TableBody,
+  Row,
+  Cell,
+  DeltaIndicator,
+} from "@cytario/design";
 import type { Workload, MtdCostCenter } from "~/types/cost-data";
 import { formatUsd } from "~/lib/format";
-import { CostChange } from "./CostChange";
 
 interface WorkloadTableProps {
   workloads: Workload[];
@@ -10,9 +18,6 @@ interface WorkloadTableProps {
   mtdCostCenter?: MtdCostCenter;
 }
 
-const ANOMALY_THRESHOLD = 0.1; // 10% MoM change
-const NEW_WORKLOAD_COST_THRESHOLD = 100; // Flag new workloads above $100
-
 export function WorkloadTable({
   workloads,
   period,
@@ -20,18 +25,14 @@ export function WorkloadTable({
   mtdCostCenter,
 }: WorkloadTableProps) {
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-gray-200 text-left text-gray-500">
-          <th className="py-2 font-medium">Workload</th>
-          <th className="py-2 font-medium text-right">Current</th>
-          <th className="py-2 font-medium text-right">
-            {isMtd ? "vs Prior Partial" : "vs Last Month"}
-          </th>
-          <th className="py-2 font-medium text-right">vs Last Year</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table size="compact" aria-label="Workload breakdown">
+      <TableHeader>
+        <Column isRowHeader>Workload</Column>
+        <Column>Current</Column>
+        <Column>{isMtd ? "vs Prior Partial" : "vs Last Month"}</Column>
+        <Column>vs Last Year</Column>
+      </TableHeader>
+      <TableBody>
         {workloads.map((wl) => {
           // Use MTD prior partial cost if available
           const mtdWl = mtdCostCenter?.workloads.find(
@@ -42,24 +43,11 @@ export function WorkloadTable({
               ? mtdWl.prior_partial_cost_usd
               : wl.prev_month_cost_usd;
 
-          const isNewWorkload =
-            momPrevious === 0 &&
-            wl.current_cost_usd >= NEW_WORKLOAD_COST_THRESHOLD;
-          const momPct =
-            momPrevious !== 0
-              ? (wl.current_cost_usd - momPrevious) / momPrevious
-              : 0;
-          const isAnomaly =
-            Math.abs(momPct) >= ANOMALY_THRESHOLD || isNewWorkload;
           const isUntagged = wl.name === "Untagged";
-          const highlight = isAnomaly || isUntagged;
 
           return (
-            <tr
-              key={wl.name}
-              className={`border-b border-gray-100 ${highlight ? "bg-red-50" : ""}`}
-            >
-              <td className="py-2">
+            <Row key={wl.name}>
+              <Cell>
                 {isUntagged ? (
                   <span className="font-medium text-red-700">{wl.name}</span>
                 ) : (
@@ -70,32 +58,39 @@ export function WorkloadTable({
                     {wl.name}
                   </Link>
                 )}
-              </td>
-              <td className="py-2 text-right font-medium">
-                {formatUsd(wl.current_cost_usd)}
-              </td>
-              <td className="py-2 text-right">
-                <CostChange
+              </Cell>
+              <Cell>
+                <span className="tabular-nums font-medium">
+                  {formatUsd(wl.current_cost_usd)}
+                </span>
+              </Cell>
+              <Cell>
+                <DeltaIndicator
                   current={wl.current_cost_usd}
                   previous={momPrevious}
                 />
-              </td>
-              <td className="py-2 text-right">
+              </Cell>
+              <Cell>
                 {isMtd ? (
-                  <span className="text-gray-400">N/A (MTD)</span>
+                  <DeltaIndicator
+                    current={0}
+                    previous={0}
+                    unavailable
+                    unavailableText="N/A (MTD)"
+                  />
                 ) : wl.yoy_cost_usd > 0 ? (
-                  <CostChange
+                  <DeltaIndicator
                     current={wl.current_cost_usd}
                     previous={wl.yoy_cost_usd}
                   />
                 ) : (
-                  <span className="text-gray-400">N/A</span>
+                  <DeltaIndicator current={0} previous={0} unavailable />
                 )}
-              </td>
-            </tr>
+              </Cell>
+            </Row>
           );
         })}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }

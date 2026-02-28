@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import type { TrendPoint } from "~/lib/useTrendData";
 
@@ -7,10 +7,34 @@ vi.mock("recharts", () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactElement }) => (
     <div>{children}</div>
   ),
-  ComposedChart: ({ children }: { children: React.ReactNode }) => (
-    <svg data-testid="composed-chart">{children}</svg>
+  ComposedChart: ({
+    children,
+    data,
+  }: {
+    children: React.ReactNode;
+    data: TrendPoint[];
+  }) => (
+    <svg data-testid="composed-chart" data-point-count={data.length}>
+      {children}
+    </svg>
   ),
-  Bar: ({ name }: { name: string }) => <g data-name={name} />,
+  Bar: ({
+    name,
+    shape,
+    dataKey,
+  }: {
+    name: string;
+    shape?: React.ReactElement;
+    dataKey: string;
+  }) => {
+    // If shape is provided (MtdAwareBar), render it with test-friendly props
+    if (shape) {
+      return (
+        <g data-name={name} data-datakey={dataKey} data-has-shape="true" />
+      );
+    }
+    return <g data-name={name} data-datakey={dataKey} />;
+  },
   Line: ({
     name,
     dataKey,
@@ -32,19 +56,12 @@ vi.mock("recharts", () => ({
   XAxis: () => <g />,
   YAxis: () => <g />,
   Tooltip: () => <g />,
-  Legend: ({
-    payload,
-    verticalAlign,
-  }: {
-    payload?: { value: string }[];
-    verticalAlign?: string;
-  }) => (
-    <div data-vertical-align={verticalAlign}>
-      {payload?.map((p) => (
-        <span key={p.value}>{p.value}</span>
-      ))}
-    </div>
-  ),
+}));
+
+// Mock lucide-react icons used by CollapsibleLegend
+vi.mock("lucide-react", () => ({
+  ChevronDown: () => <span data-testid="chevron-down" />,
+  ChevronUp: () => <span data-testid="chevron-up" />,
 }));
 
 import CostTrendChart from "./CostTrendChart";
@@ -84,20 +101,12 @@ describe("CostTrendChart", () => {
     expect(line?.getAttribute("data-name")).toBe("3-Month Avg");
   });
 
-  it("renders Legend with verticalAlign bottom", () => {
-    const { container } = render(
-      <CostTrendChart points={points} costCenterNames={costCenterNames} />,
-    );
-    const legend = container.querySelector('[data-vertical-align="bottom"]');
-    expect(legend).not.toBeNull();
-  });
-
-  it("renders moving average line in pink-700 with dashed style", () => {
+  it("renders moving average line in rose-700 with dashed style", () => {
     const { container } = render(
       <CostTrendChart points={points} costCenterNames={costCenterNames} />,
     );
     const line = container.querySelector('g[data-datakey="_movingAvg"]');
-    expect(line?.getAttribute("data-stroke")).toBe("#be185d");
+    expect(line?.getAttribute("data-stroke")).toBe("#be123c");
     expect(line?.getAttribute("data-strokedasharray")).toBe("6 3");
   });
 
@@ -109,8 +118,60 @@ describe("CostTrendChart", () => {
     const { container } = render(
       <CostTrendChart points={twoPoints} costCenterNames={["Engineering"]} />,
     );
-    // The Line element should still be in the DOM
     const line = container.querySelector('g[data-datakey="_movingAvg"]');
     expect(line).not.toBeNull();
+  });
+
+  it("uses MtdAwareBar shape for all bars", () => {
+    const { container } = render(
+      <CostTrendChart points={points} costCenterNames={costCenterNames} />,
+    );
+    const bars = container.querySelectorAll('g[data-has-shape="true"]');
+    expect(bars.length).toBe(costCenterNames.length);
+  });
+
+  describe("collapsible legend", () => {
+    it("legend content is hidden by default", () => {
+      const { container } = render(
+        <CostTrendChart points={points} costCenterNames={costCenterNames} />,
+      );
+      // The "Show legend" button should be present
+      const toggleBtn = container.querySelector("button");
+      expect(toggleBtn).not.toBeNull();
+      expect(toggleBtn!.textContent).toContain("Show legend");
+
+      // Legend entries should NOT be visible
+      expect(container.textContent).not.toContain("Engineering");
+    });
+
+    it("clicking toggle shows legend entries", () => {
+      const { container } = render(
+        <CostTrendChart points={points} costCenterNames={costCenterNames} />,
+      );
+      const toggleBtn = container.querySelector("button")!;
+      fireEvent.click(toggleBtn);
+
+      // Now legend entries should be visible
+      expect(toggleBtn.textContent).toContain("Hide legend");
+      expect(container.textContent).toContain("Engineering");
+      expect(container.textContent).toContain("Data Science");
+      expect(container.textContent).toContain("3-Month Avg");
+    });
+
+    it("clicking toggle again hides legend entries", () => {
+      const { container } = render(
+        <CostTrendChart points={points} costCenterNames={costCenterNames} />,
+      );
+      const toggleBtn = container.querySelector("button")!;
+
+      // Open
+      fireEvent.click(toggleBtn);
+      expect(container.textContent).toContain("Engineering");
+
+      // Close
+      fireEvent.click(toggleBtn);
+      expect(container.textContent).not.toContain("Engineering");
+      expect(toggleBtn.textContent).toContain("Show legend");
+    });
   });
 });

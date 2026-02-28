@@ -1,7 +1,7 @@
 import { Link } from "react-router";
+import { MetricCard, DeltaIndicator } from "@cytario/design";
 import type { StorageMetrics, CostSummary } from "~/types/cost-data";
 import { formatUsd, formatBytes } from "~/lib/format";
-import { CostChange } from "./CostChange";
 import { InfoTooltip } from "./InfoTooltip";
 
 interface StorageOverviewProps {
@@ -28,57 +28,59 @@ export function StorageOverview({
   const gridCols = hasStorageLens ? "sm:grid-cols-4" : "sm:grid-cols-3";
 
   return (
-    <div className={`grid grid-cols-1 ${gridCols} gap-4`}>
-      <Link
-        to={`/storage-cost?period=${period}`}
-        className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md block"
-      >
-        <div className="text-sm text-gray-500">
-          Storage Cost
-          <InfoTooltip text={buildStorageCostTooltip(storageConfig)} />
-        </div>
-        <div className="text-xl font-semibold mt-1">
-          {formatUsd(metrics.total_cost_usd)}
-        </div>
-        <div className="mt-1 text-sm">
-          <CostChange
-            current={metrics.total_cost_usd}
-            previous={metrics.prev_month_cost_usd}
-          />
-        </div>
+    <div className={`grid grid-cols-1 ${gridCols} gap-4 items-stretch`}>
+      <Link to={`/storage-cost?period=${period}`} className="block">
+        <MetricCard
+          className="h-full"
+          label={
+            <>
+              Storage Cost{" "}
+              <InfoTooltip text={buildStorageCostTooltip(storageConfig)} />
+            </>
+          }
+          value={formatUsd(metrics.total_cost_usd)}
+          secondary={
+            <DeltaIndicator
+              current={metrics.total_cost_usd}
+              previous={metrics.prev_month_cost_usd}
+            />
+          }
+        />
       </Link>
       {hasStorageLens && (
-        <Link
-          to={`/storage-detail?period=${period}`}
-          className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md block"
-        >
-          <div className="text-sm text-gray-500">
-            Total Stored
-            <InfoTooltip text="Actual total storage volume from S3 Storage Lens. This is the precise amount of data stored, measured at the time of the latest metrics snapshot." />
-          </div>
-          <div className="text-xl font-semibold mt-1">
-            {formatBytes(metrics.storage_lens_total_bytes!)}
-          </div>
+        <Link to={`/storage-detail?period=${period}`} className="block">
+          <MetricCard
+            className="h-full"
+            label={
+              <>
+                Total Stored{" "}
+                <InfoTooltip text="Actual total storage volume from S3 Storage Lens. This is the precise amount of data stored, measured at the time of the latest metrics snapshot." />
+              </>
+            }
+            value={formatBytes(metrics.storage_lens_total_bytes!)}
+          />
         </Link>
       )}
-      <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-        <div className="text-sm text-gray-500">
-          Cost / TB
-          <InfoTooltip text="Total storage cost divided by the total volume of data stored, measured in terabytes (TB). Lower values indicate better storage cost efficiency." />
-        </div>
-        <div className="text-xl font-semibold mt-1">
-          {formatUsd(metrics.cost_per_tb_usd)}
-        </div>
-      </div>
-      <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-        <div className="text-sm text-gray-500">
-          Hot Tier
-          <InfoTooltip text="Percentage of stored data in frequently accessed tiers (e.g., S3 Standard, EFS Standard). High values may indicate optimization opportunities via lifecycle policies." />
-        </div>
-        <div className="text-xl font-semibold mt-1">
-          {metrics.hot_tier_percentage.toFixed(1)}%
-        </div>
-      </div>
+      <MetricCard
+        className="h-full"
+        label={
+          <>
+            Cost / TB{" "}
+            <InfoTooltip text="Total storage cost divided by the total volume of data stored, measured in terabytes (TB). Lower values indicate better storage cost efficiency." />
+          </>
+        }
+        value={formatUsd(metrics.cost_per_tb_usd)}
+      />
+      <MetricCard
+        className="h-full"
+        label={
+          <>
+            Hot Tier{" "}
+            <InfoTooltip text="Percentage of stored data in frequently accessed tiers (e.g., S3 Standard, EFS Standard). High values may indicate optimization opportunities via lifecycle policies." />
+          </>
+        }
+        value={`${metrics.hot_tier_percentage.toFixed(1)}%`}
+      />
     </div>
   );
 }

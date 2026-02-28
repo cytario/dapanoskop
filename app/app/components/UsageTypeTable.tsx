@@ -1,13 +1,35 @@
+import {
+  Table,
+  TableHeader,
+  Column,
+  TableBody,
+  Row,
+  Cell,
+  Badge,
+  DeltaIndicator,
+} from "@cytario/design";
 import type { UsageTypeCostRow } from "~/types/cost-data";
 import { formatUsd } from "~/lib/format";
 import { aggregateUsageTypes } from "~/lib/aggregate";
-import { CostChange } from "./CostChange";
 
 interface UsageTypeTableProps {
   rows: UsageTypeCostRow[];
   currentPeriod: string;
   prevPeriod: string;
   yoyPeriod: string;
+}
+
+function categoryBadgeVariant(category: string) {
+  switch (category) {
+    case "Compute":
+      return "purple" as const;
+    case "Storage":
+      return "teal" as const;
+    case "Support":
+      return "slate" as const;
+    default:
+      return "neutral" as const;
+  }
 }
 
 export function UsageTypeTable({
@@ -24,55 +46,47 @@ export function UsageTypeTable({
   );
 
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-gray-200 text-left text-gray-500">
-          <th className="py-2 font-medium">Usage Type</th>
-          <th className="py-2 font-medium">Category</th>
-          <th className="py-2 font-medium text-right">Current</th>
-          <th className="py-2 font-medium text-right">vs Last Month</th>
-          <th className="py-2 font-medium text-right">vs Last Year</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table size="compact" aria-label="Usage type breakdown">
+      <TableHeader>
+        <Column isRowHeader>Usage Type</Column>
+        <Column>Category</Column>
+        <Column>Current</Column>
+        <Column>vs Last Month</Column>
+        <Column>vs Last Year</Column>
+      </TableHeader>
+      <TableBody>
         {sorted.map((row) => (
-          <tr key={row.usage_type} className="border-b border-gray-100">
-            <td className="py-2 font-mono text-xs">{row.usage_type}</td>
-            <td className="py-2">
-              <span
-                className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                  row.category === "Storage"
-                    ? "bg-primary-100 text-primary-700"
-                    : row.category === "Compute"
-                      ? "bg-secondary-100 text-secondary-700"
-                      : row.category === "Support"
-                        ? "bg-yellow-100 text-yellow-700"
-                        : "bg-gray-100 text-gray-700"
-                }`}
-              >
+          <Row key={row.usage_type}>
+            <Cell>
+              <span className="font-mono text-xs">{row.usage_type}</span>
+            </Cell>
+            <Cell>
+              <Badge variant={categoryBadgeVariant(row.category)} size="sm">
                 {row.category}
+              </Badge>
+            </Cell>
+            <Cell>
+              <span className="tabular-nums font-medium">
+                {formatUsd(row.current)}
               </span>
-            </td>
-            <td className="py-2 text-right font-medium">
-              {formatUsd(row.current)}
-            </td>
-            <td className="py-2 text-right">
+            </Cell>
+            <Cell>
               {row.prev > 0 ? (
-                <CostChange current={row.current} previous={row.prev} />
+                <DeltaIndicator current={row.current} previous={row.prev} />
               ) : (
-                <span className="text-gray-400">N/A</span>
+                <DeltaIndicator current={0} previous={0} unavailable />
               )}
-            </td>
-            <td className="py-2 text-right">
+            </Cell>
+            <Cell>
               {row.yoy > 0 ? (
-                <CostChange current={row.current} previous={row.yoy} />
+                <DeltaIndicator current={row.current} previous={row.yoy} />
               ) : (
-                <span className="text-gray-400">N/A</span>
+                <DeltaIndicator current={0} previous={0} unavailable />
               )}
-            </td>
-          </tr>
+            </Cell>
+          </Row>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 }

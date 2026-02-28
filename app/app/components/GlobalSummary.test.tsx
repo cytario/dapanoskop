@@ -52,17 +52,13 @@ describe("GlobalSummary", () => {
   it("renders vs Last Month label by default", () => {
     const summary = makeSummary();
     const { container } = render(<GlobalSummary summary={summary} />);
-    const labels = container.querySelectorAll(".text-sm.text-gray-500");
-    const texts = Array.from(labels).map((el) => el.textContent);
-    expect(texts.some((t) => t?.includes("vs Last Month"))).toBe(true);
+    expect(container.textContent).toContain("vs Last Month");
   });
 
   it("renders vs Last Year label by default", () => {
     const summary = makeSummary();
     const { container } = render(<GlobalSummary summary={summary} />);
-    const labels = container.querySelectorAll(".text-sm.text-gray-500");
-    const texts = Array.from(labels).map((el) => el.textContent);
-    expect(texts.some((t) => t?.includes("vs Last Year"))).toBe(true);
+    expect(container.textContent).toContain("vs Last Year");
   });
 
   it("shows MTD like-for-like label when isMtd with mtdComparison", () => {
@@ -91,10 +87,8 @@ describe("GlobalSummary", () => {
       />,
     );
     // Should show "vs Dec 1–7" instead of "vs Last Month"
-    const labels = container.querySelectorAll(".text-sm.text-gray-500");
-    const texts = Array.from(labels).map((el) => el.textContent);
-    expect(texts.some((t) => t?.includes("vs Dec 1\u20137"))).toBe(true);
-    expect(texts.some((t) => t?.includes("vs Last Month"))).toBe(false);
+    expect(container.textContent).toContain("vs Dec 1\u20137");
+    expect(container.textContent).not.toContain("vs Last Month");
   });
 
   it("uses MTD partial costs for comparison", () => {
@@ -123,7 +117,7 @@ describe("GlobalSummary", () => {
       />,
     );
     // Total current = 20000, MTD prior = 13000, delta = +7000
-    expect(container.textContent).toContain("+$7,000.00");
+    expect(container.textContent).toContain("+$7,000");
   });
 
   it("suppresses YoY and shows N/A (MTD) when isMtd", () => {
@@ -140,7 +134,7 @@ describe("GlobalSummary", () => {
       <GlobalSummary summary={summary} isMtd={true} />,
     );
     // Uses prev_month total: 14200 + 4800 = 19000, delta = 20000 - 19000 = +1000
-    expect(container.textContent).toContain("+$1,000.00");
+    expect(container.textContent).toContain("+$1,000");
   });
 
   it("excludes split charge cost centers from totals", () => {

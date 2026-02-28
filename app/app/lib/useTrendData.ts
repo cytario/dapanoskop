@@ -3,7 +3,8 @@ import { discoverPeriods, fetchSummary } from "~/lib/data";
 
 export interface TrendPoint {
   period: string;
-  [costCenter: string]: string | number;
+  _isMtd?: boolean;
+  [costCenter: string]: string | number | boolean | undefined;
 }
 
 export interface TrendData {
@@ -48,6 +49,10 @@ export function useTrendData(): TrendData {
 
           const summary = result.value;
           const point: TrendPoint = { period: periods[i] };
+
+          if (summary.is_mtd) {
+            point._isMtd = true;
+          }
 
           for (const cc of summary.cost_centers) {
             point[cc.name] = cc.current_cost_usd;

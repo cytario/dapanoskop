@@ -6,7 +6,7 @@ describe("PeriodSelector", () => {
   const periods = ["2026-01", "2025-12", "2025-11"];
   const onSelect = vi.fn();
 
-  it("renders all period buttons", () => {
+  it("renders all period options", () => {
     render(
       <PeriodSelector
         periods={periods}
@@ -14,8 +14,9 @@ describe("PeriodSelector", () => {
         onSelect={onSelect}
       />,
     );
-    const buttons = screen.getAllByRole("button");
-    expect(buttons).toHaveLength(3);
+    // SegmentedControl renders toggle buttons with role="radio"
+    const radios = screen.getAllByRole("radio");
+    expect(radios).toHaveLength(3);
   });
 
   it("calls onSelect with correct period when clicked", () => {
@@ -26,8 +27,8 @@ describe("PeriodSelector", () => {
         onSelect={onSelect}
       />,
     );
-    const buttons = screen.getAllByRole("button");
-    fireEvent.click(buttons[1]);
+    const radios = screen.getAllByRole("radio");
+    fireEvent.click(radios[1]);
     expect(onSelect).toHaveBeenCalledWith("2025-12");
   });
 

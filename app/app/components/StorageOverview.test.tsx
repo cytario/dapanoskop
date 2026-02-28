@@ -45,15 +45,18 @@ describe("StorageOverview", () => {
     const { container } = renderWithRouter(
       <StorageOverview metrics={metrics} period="2026-01" />,
     );
-    const tooltips = container.querySelectorAll('[role="tooltip"]');
-    expect(tooltips.length).toBe(3);
+    // With React Aria Tooltip, tooltip text is in the aria-label of the trigger button
+    const tooltipButtons = container.querySelectorAll("button[aria-label]");
+    expect(tooltipButtons.length).toBe(3);
 
-    const tooltipTexts = Array.from(tooltips).map((t) => t.textContent);
-    expect(tooltipTexts).toContain("Total cost of S3 storage for this period.");
-    expect(tooltipTexts).toContain(
+    const labels = Array.from(tooltipButtons).map((b) =>
+      b.getAttribute("aria-label"),
+    );
+    expect(labels).toContain("Total cost of S3 storage for this period.");
+    expect(labels).toContain(
       "Total storage cost divided by the total volume of data stored, measured in terabytes (TB). Lower values indicate better storage cost efficiency.",
     );
-    expect(tooltipTexts).toContain(
+    expect(labels).toContain(
       "Percentage of stored data in frequently accessed tiers (e.g., S3 Standard, EFS Standard). High values may indicate optimization opportunities via lifecycle policies.",
     );
   });
@@ -66,9 +69,10 @@ describe("StorageOverview", () => {
         period="2026-01"
       />,
     );
-    const tooltips = container.querySelectorAll('[role="tooltip"]');
-    const tooltipTexts = Array.from(tooltips).map((t) => t.textContent);
-    expect(tooltipTexts).toContain(
+    const labels = Array.from(
+      container.querySelectorAll("button[aria-label]"),
+    ).map((b) => b.getAttribute("aria-label"));
+    expect(labels).toContain(
       "Total cost of S3, EFS, EBS storage for this period.",
     );
   });
@@ -81,11 +85,10 @@ describe("StorageOverview", () => {
         period="2026-01"
       />,
     );
-    const tooltips = container.querySelectorAll('[role="tooltip"]');
-    const tooltipTexts = Array.from(tooltips).map((t) => t.textContent);
-    expect(tooltipTexts).toContain(
-      "Total cost of S3, EFS storage for this period.",
-    );
+    const labels = Array.from(
+      container.querySelectorAll("button[aria-label]"),
+    ).map((b) => b.getAttribute("aria-label"));
+    expect(labels).toContain("Total cost of S3, EFS storage for this period.");
   });
 
   it("renders dynamic tooltip when storageConfig includes only EBS", () => {
@@ -96,11 +99,10 @@ describe("StorageOverview", () => {
         period="2026-01"
       />,
     );
-    const tooltips = container.querySelectorAll('[role="tooltip"]');
-    const tooltipTexts = Array.from(tooltips).map((t) => t.textContent);
-    expect(tooltipTexts).toContain(
-      "Total cost of S3, EBS storage for this period.",
-    );
+    const labels = Array.from(
+      container.querySelectorAll("button[aria-label]"),
+    ).map((b) => b.getAttribute("aria-label"));
+    expect(labels).toContain("Total cost of S3, EBS storage for this period.");
   });
 
   it("renders CostChange for storage cost month-over-month", () => {
@@ -138,13 +140,13 @@ describe("StorageOverview", () => {
     const { container } = renderWithRouter(
       <StorageOverview metrics={metricsWithLens} period="2026-01" />,
     );
-    const tooltips = container.querySelectorAll('[role="tooltip"]');
-    // Should have 4 tooltips now (Storage Cost, Total Stored, Cost/TB, Hot Tier)
-    expect(tooltips.length).toBe(4);
-    const tooltipTexts = Array.from(tooltips).map((t) => t.textContent);
-    expect(
-      tooltipTexts.some((t) => t?.includes("S3 Storage Lens")),
-    ).toBeTruthy();
+    const tooltipButtons = container.querySelectorAll("button[aria-label]");
+    // Should have 4 tooltip triggers now (Storage Cost, Total Stored, Cost/TB, Hot Tier)
+    expect(tooltipButtons.length).toBe(4);
+    const labels = Array.from(tooltipButtons).map((b) =>
+      b.getAttribute("aria-label"),
+    );
+    expect(labels.some((l) => l?.includes("S3 Storage Lens"))).toBeTruthy();
   });
 
   it("renders storage cost card as a link to storage-cost detail", () => {

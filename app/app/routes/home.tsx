@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
+import { Banner } from "@cytario/design";
 import type { CostSummary, MtdComparison } from "~/types/cost-data";
 import { discoverPeriods, fetchSummary } from "~/lib/data";
 import { formatPartialPeriodLabel } from "~/lib/format";
@@ -154,11 +155,7 @@ export default function Home() {
           </div>
         )}
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-            {error}
-          </div>
-        )}
+        {error && <Banner variant="danger">{error}</Banner>}
 
         {summary && !loading && (
           <>
@@ -228,10 +225,9 @@ function MtdBanner({
     ? ` Comparisons are against ${formatPartialPeriodLabel(mtdComparison.prior_partial_start, mtdComparison.prior_partial_end_exclusive)} of the prior month.`
     : "";
   return (
-    <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
-      <span className="font-medium">Month-to-date</span> — data through{" "}
-      {throughDate}. Figures will change as the month progresses.
+    <Banner variant="warning" title="Month-to-date">
+      Data through {throughDate}. Figures will change as the month progresses.
       {comparisonNote}
-    </div>
+    </Banner>
   );
 }

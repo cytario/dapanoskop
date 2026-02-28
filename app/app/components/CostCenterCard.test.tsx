@@ -80,10 +80,11 @@ describe("CostCenterCard", () => {
 
   it("expands to show workload table on chevron click", () => {
     renderCard(costCenter);
-    expect(screen.queryByRole("table")).toBeNull();
+    // React Aria Table renders as role="grid"
+    expect(screen.queryByRole("grid")).toBeNull();
     const expandBtns = screen.getAllByLabelText("Expand");
     fireEvent.click(expandBtns[0]);
-    expect(screen.getAllByRole("table").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole("grid").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("data-pipeline").length).toBeGreaterThanOrEqual(
       1,
     );
@@ -199,7 +200,7 @@ describe("CostCenterCard", () => {
       mtdComparison,
     });
     // Cost center: current=$15000, MTD prior=$10000, delta=+$5000
-    expect(container.textContent).toContain("+$5,000.00");
+    expect(container.textContent).toContain("+$5,000");
   });
 
   it("falls back to standard MoM when isMtd but no mtdComparison", () => {

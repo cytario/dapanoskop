@@ -1,7 +1,6 @@
+import { MetricCard, DeltaIndicator } from "@cytario/design";
 import type { CostSummary, MtdComparison } from "~/types/cost-data";
 import { formatUsd, formatPartialPeriodLabel } from "~/lib/format";
-import { CostChange } from "./CostChange";
-import { InfoTooltip } from "./InfoTooltip";
 
 interface GlobalSummaryProps {
   summary: CostSummary;
@@ -40,46 +39,37 @@ export function GlobalSummary({
     isMtd && mtdComparison
       ? `vs ${formatPartialPeriodLabel(mtdComparison.prior_partial_start, mtdComparison.prior_partial_end_exclusive)}`
       : "vs Last Month";
-  const momTooltip =
-    isMtd && mtdComparison
-      ? `Like-for-like comparison against the same number of days in the prior month (${formatPartialPeriodLabel(mtdComparison.prior_partial_start, mtdComparison.prior_partial_end_exclusive)}).`
-      : "Change in total spend from the previous calendar month. Shows both the absolute dollar difference and the percentage change.";
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-        <div className="text-sm text-gray-500">
-          Total Spend
-          <InfoTooltip text="Total AWS spend across all cost centers for this period." />
-        </div>
-        <div className="text-2xl font-semibold mt-1">
-          {formatUsd(totalCurrent)}
-        </div>
-      </div>
-      <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-        <div className="text-sm text-gray-500">
-          {momLabel}
-          <InfoTooltip text={momTooltip} />
-        </div>
-        <div className="text-lg font-medium mt-1">
-          <CostChange current={totalCurrent} previous={momPrevious} />
-        </div>
-      </div>
-      <div className="bg-white border border-gray-200 rounded-lg p-4 transition-shadow hover:shadow-md">
-        <div className="text-sm text-gray-500">
-          vs Last Year
-          <InfoTooltip text="Change in total spend compared to the same month one year ago. Useful for identifying seasonal trends and long-term cost trajectory." />
-        </div>
-        <div className="text-lg font-medium mt-1">
-          {isMtd ? (
-            <span className="text-gray-400">N/A (MTD)</span>
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-stretch">
+      <MetricCard
+        className="h-full"
+        label="Total Spend"
+        value={formatUsd(totalCurrent)}
+      />
+      <MetricCard
+        className="h-full"
+        label={momLabel}
+        value={<DeltaIndicator current={totalCurrent} previous={momPrevious} />}
+      />
+      <MetricCard
+        className="h-full"
+        label="vs Last Year"
+        value={
+          isMtd ? (
+            <DeltaIndicator
+              current={0}
+              previous={0}
+              unavailable
+              unavailableText="N/A (MTD)"
+            />
           ) : totalYoy > 0 ? (
-            <CostChange current={totalCurrent} previous={totalYoy} />
+            <DeltaIndicator current={totalCurrent} previous={totalYoy} />
           ) : (
-            <span className="text-gray-400">N/A</span>
-          )}
-        </div>
-      </div>
+            <DeltaIndicator current={0} previous={0} unavailable />
+          )
+        }
+      />
     </div>
   );
 }

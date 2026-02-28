@@ -1,4 +1,8 @@
 @import "tailwindcss";
+@import "@cytario/design/tokens/variables.css";
+
+/* Scan cytario-design component source so Tailwind generates their utility classes */
+@source "../node_modules/@cytario/design/dist";
 
 @font-face {
   font-family: "Montserrat";
@@ -13,40 +17,46 @@
     "Montserrat", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
     "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 
-  /* Cytario Primary Purple Palette */
-  --color-primary-50: #f5f3ff;
-  --color-primary-100: #ede9fe;
-  --color-primary-200: #ddd6fe;
-  --color-primary-300: #c4b5fd;
-  --color-primary-400: #a78bfa;
-  --color-primary-500: #8b5cf6;
-  --color-primary-600: #7c3aed;
-  --color-primary-700: #6d28d9;
-  --color-primary-800: #5b21b6;
-  --color-primary-900: #4c1d95;
-  --color-primary-950: #2e1065;
+  /* Map primary-* to cytario purple brand tokens */
+  --color-primary-50: var(--color-purple-50);
+  --color-primary-100: var(--color-purple-100);
+  --color-primary-200: var(--color-purple-200);
+  --color-primary-300: var(--color-purple-300);
+  --color-primary-400: var(--color-purple-400);
+  --color-primary-500: var(--color-purple-500);
+  --color-primary-600: var(--color-purple-600);
+  --color-primary-700: var(--color-purple-700);
+  --color-primary-800: var(--color-purple-800);
+  --color-primary-900: var(--color-purple-900);
 
-  /* Cytario Secondary Teal Palette */
-  --color-secondary-50: #f0fdfa;
-  --color-secondary-100: #ccfbf1;
-  --color-secondary-200: #99f6e4;
-  --color-secondary-300: #5eead4;
-  --color-secondary-400: #2dd4bf;
-  --color-secondary-500: #14b8a6;
-  --color-secondary-600: #0d9488;
-  --color-secondary-700: #0f766e;
-  --color-secondary-800: #115e59;
-  --color-secondary-900: #134e4a;
-  --color-secondary-950: #042f2e;
+  /* Map secondary-* to cytario teal brand tokens */
+  --color-secondary-50: var(--color-teal-50);
+  --color-secondary-100: var(--color-teal-100);
+  --color-secondary-200: var(--color-teal-200);
+  --color-secondary-300: var(--color-teal-300);
+  --color-secondary-400: var(--color-teal-400);
+  --color-secondary-500: var(--color-teal-500);
+  --color-secondary-600: var(--color-teal-600);
+  --color-secondary-700: var(--color-teal-700);
+  --color-secondary-800: var(--color-teal-800);
+  --color-secondary-900: var(--color-teal-900);
 }
 
 @layer utilities {
   .bg-cytario-gradient {
-    background: linear-gradient(135deg, #7c3aed 0%, #2dd4bf 100%);
+    background: linear-gradient(
+      135deg,
+      var(--color-purple-600) 0%,
+      var(--color-teal-400) 100%
+    );
   }
 
   .bg-cytario-gradient-reverse {
-    background: linear-gradient(135deg, #2dd4bf 0%, #7c3aed 100%);
+    background: linear-gradient(
+      135deg,
+      var(--color-teal-400) 0%,
+      var(--color-purple-600) 100%
+    );
   }
 }
 

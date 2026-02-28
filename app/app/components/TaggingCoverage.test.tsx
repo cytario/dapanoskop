@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import { TaggingCoverage } from "./TaggingCoverage";
 
@@ -9,13 +9,11 @@ describe("TaggingCoverage", () => {
     tagged_percentage: 93.3,
   };
 
-  it("renders the percentage bar with correct width", () => {
-    const { container } = render(<TaggingCoverage data={data} />);
-    const bar = container.querySelector(
-      ".bg-primary-600",
-    ) as HTMLElement | null;
-    expect(bar).not.toBeNull();
-    expect(bar!.style.width).toBe("93.3%");
+  it("renders the progress bar with correct aria value", () => {
+    render(<TaggingCoverage data={data} />);
+    const bar = screen.getByRole("progressbar");
+    expect(bar).toBeInTheDocument();
+    expect(bar).toHaveAttribute("aria-valuenow", "93.3");
   });
 
   it("displays tagged percentage and cost text", () => {

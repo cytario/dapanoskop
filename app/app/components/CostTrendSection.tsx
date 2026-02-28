@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react";
+import { Banner } from "@cytario/design";
 import { useTrendData } from "~/lib/useTrendData";
 import type { TrendPoint } from "~/lib/useTrendData";
 
@@ -50,13 +51,13 @@ function TimeRangeToggle({ value, onChange }: TimeRangeToggleProps) {
   );
 }
 
-/** Filter points to the last 12 months when range is "1y". */
+/** Filter points to the last 13 months when range is "1y". */
 function filterPointsByRange(
   points: TrendPoint[],
   range: TimeRange,
 ): TrendPoint[] {
-  if (range === "all" || points.length <= 12) return points;
-  return points.slice(-12);
+  if (range === "all" || points.length <= 13) return points;
+  return points.slice(-13);
 }
 
 interface CostTrendSectionProps {
@@ -84,7 +85,7 @@ export function CostTrendSection({
   const error = externalError !== undefined ? externalError : hookData.error;
 
   const [timeRange, setTimeRange] = useState<TimeRange>("1y");
-  const showToggle = points.length > 12;
+  const showToggle = points.length > 13;
   const filteredPoints = filterPointsByRange(points, timeRange);
 
   return (
@@ -98,11 +99,7 @@ export function CostTrendSection({
 
       {loading && <LoadingSkeleton />}
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <Banner variant="danger">{error}</Banner>}
 
       {!loading && !error && filteredPoints.length > 0 && (
         <Suspense fallback={<LoadingSkeleton />}>

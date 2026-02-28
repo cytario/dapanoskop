@@ -1,3 +1,5 @@
+import { SegmentedControl, SegmentedControlItem, Badge } from "@cytario/design";
+import type { Key } from "react-aria-components";
 import { formatPeriodLabel } from "~/lib/format";
 
 interface PeriodSelectorProps {
@@ -14,28 +16,34 @@ export function PeriodSelector({
   currentMonth,
 }: PeriodSelectorProps) {
   return (
-    <div className="flex gap-1 overflow-x-auto py-2">
-      {periods.map((period) => {
-        const isSelected = period === selected;
-        const isMtd = period === currentMonth;
-        return (
-          <button
-            key={period}
-            onClick={() => onSelect(period)}
-            className={`
-              px-3 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors
-              ${
-                isSelected
-                  ? "bg-primary-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }
-            `}
-          >
-            {formatPeriodLabel(period)}
-            {isMtd && <span className="ml-1 text-xs opacity-75">MTD</span>}
-          </button>
-        );
-      })}
+    <div className="overflow-x-auto pb-1">
+      <SegmentedControl
+        selectedKeys={new Set([selected])}
+        onSelectionChange={(keys: Set<Key>) => {
+          const key = [...keys][0];
+          if (key != null) onSelect(String(key));
+        }}
+        aria-label="Reporting period"
+        className="flex-nowrap"
+      >
+        {periods.map((period) => {
+          const isMtd = period === currentMonth;
+          return (
+            <SegmentedControlItem
+              key={period}
+              id={period}
+              className="shrink-0 whitespace-nowrap"
+            >
+              {formatPeriodLabel(period)}
+              {isMtd && (
+                <Badge variant="amber" size="sm" className="ml-1.5">
+                  MTD
+                </Badge>
+              )}
+            </SegmentedControlItem>
+          );
+        })}
+      </SegmentedControl>
     </div>
   );
 }
