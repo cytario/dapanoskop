@@ -70,15 +70,18 @@ title Dapanoskop - Cost Report Screen
     <b>Storage Overview</b>
     {
       {SI
-        Total Cost
+        Storage Cost
         <b>$4,200</b>
         <color:red>+$150 (+3.7%) ▲</color>
       } | {SI
         Cost / TB
         <b>$23.45</b>
+        <color:red>+$1.20 (+5.4%) ▲</color>
       } | {SI
-        Hot Tier
-        <b>62.3%</b>
+        Storage Volume
+        <b>179.4 TB</b>
+        <color:gray>Hot Tier: 62.3%</color>
+        <color:red>+2.1pp ▲</color>
       }
     }
   }

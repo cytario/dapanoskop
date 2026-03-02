@@ -225,15 +225,15 @@ The system displays the total storage cost as an aggregate across all cost cente
 Refs: URS-DP-10305, URS-DP-10302, URS-DP-30102
 
 **[SRS-DP-310207] Display Cost per TB Stored**
-The system displays the cost per terabyte stored, calculated from total storage cost divided by total storage volume (in decimal terabytes, 10^12 bytes). A tooltip explains the calculation formula: "Total storage cost divided by the total volume of data stored, measured in terabytes (TB). Lower values indicate better storage cost efficiency."
+The system displays the cost per terabyte stored, calculated from total storage cost divided by total storage volume (in decimal terabytes, 10^12 bytes). The card includes a month-over-month DeltaIndicator showing the change in cost efficiency (absolute and percentage) compared to the previous month, using the same color-coded visual direction indicator as other metric cards. A tooltip explains the calculation formula: "Total storage cost divided by the total volume of data stored, measured in terabytes (TB). Lower values indicate better storage cost efficiency."
 Refs: URS-DP-10306, URS-DP-30102
 
-**[SRS-DP-310208] Display Hot Tier Percentage**
-The system displays the percentage of total data volume (in bytes) stored in hot storage tiers (S3 Standard, S3 Intelligent-Tiering Frequent Access, and optionally EFS/EBS depending on configuration). A tooltip explains which tiers are considered "hot" and suggests optimization: "Percentage of stored data in frequently accessed tiers (e.g., S3 Standard, EFS Standard). High values may indicate optimization opportunities via lifecycle policies."
-Refs: URS-DP-10307, URS-DP-30102
+**[SRS-DP-310208] Display Storage Volume with Hot Tier**
+The system always displays a combined "Storage Volume" metric card showing total storage volume as the primary metric and hot tier percentage as secondary information. The total storage volume is sourced from S3 Storage Lens CloudWatch metrics when Storage Lens integration is configured; otherwise it is derived from CE-computed storage volume (the same volume used in the cost-per-TB calculation). The hot tier percentage shows the proportion of data in hot storage tiers (S3 Standard, S3 Intelligent-Tiering Frequent Access, and optionally EFS/EBS depending on configuration), together with a trend indicator showing month-over-month change in hot tier percentage. When Storage Lens data is the source, the card includes a timestamp indicating when the metric was collected. A tooltip explains which tiers are considered "hot" and suggests optimization: "Percentage of stored data in frequently accessed tiers (e.g., S3 Standard, EFS Standard). High values may indicate optimization opportunities via lifecycle policies."
+Refs: URS-DP-10307, URS-DP-10312, URS-DP-30102
 
-**[SRS-DP-310217] Display Actual Total Storage Volume**
-When S3 Storage Lens integration is configured, the system displays an additional storage metric card showing the actual total storage volume (in bytes, formatted as TB) read from S3 Storage Lens CloudWatch metrics. The card includes a timestamp indicating when the metric was collected. If Storage Lens data is unavailable or not configured, this metric is not displayed.
+**[SRS-DP-310217] Display Actual Total Storage Volume** (Superseded by SRS-DP-310208)
+This requirement has been superseded. Total storage volume display (both CE-derived and Storage Lens) is now specified in SRS-DP-310208 as part of the combined Storage Volume card.
 Refs: URS-DP-10312
 
 **[SRS-DP-310218] Navigate to Storage Deep Dive** (Removed)
@@ -242,10 +242,13 @@ Refs: URS-DP-10313
 
 | No | Element | Data type | Value range | Other relevant information |
 |----|---------|-----------|-------------|---------------------------|
-| 1  | Total storage cost | Currency (USD) | ≥ 0 | Aggregated across configured storage services; tooltip present |
-| 2  | Storage cost MoM change | Currency + Percentage | Any | Combined: "+$150 (+3.7%)"; tooltip present |
-| 3  | Cost per TB stored | Currency (USD/TB) | ≥ 0 | Tooltip explains calculation |
-| 4  | Hot tier percentage | Percentage | 0–100% | Based on storage volume (bytes), not cost; tooltip explains tier definitions |
+| 1  | Total storage cost | Currency (USD) | ≥ 0 | Card 1; aggregated across configured storage services; tooltip present |
+| 2  | Storage cost MoM change | Currency + Percentage | Any | Card 1; combined: "+$150 (+3.7%)"; tooltip present |
+| 3  | Cost per TB stored | Currency (USD/TB) | ≥ 0 | Card 2; tooltip explains calculation |
+| 4  | Cost per TB MoM change | Currency + Percentage | Any | Card 2; DeltaIndicator showing efficiency trend |
+| 5  | Total storage volume | Bytes (formatted as TB) | ≥ 0 | Card 3 (primary); CE-derived or Storage Lens when configured |
+| 6  | Hot tier percentage | Percentage | 0–100% | Card 3 (secondary); based on storage volume (bytes), not cost; tooltip explains tier definitions |
+| 7  | Hot tier MoM change | Percentage points | Any | Card 3 (secondary); trend indicator for hot tier percentage |
 
 ##### Report Presentation
 
@@ -490,7 +493,7 @@ When the Cost Explorer `GetCostAndUsage` API returns a response with zero result
 Refs: URS-DP-20402, URS-DP-10105
 
 **[SRS-DP-420108] Query S3 Storage Lens for Actual Storage Volume**
-When S3 Storage Lens integration is configured (via optional `storage_lens_config_id` variable), the system queries S3 Storage Lens CloudWatch metrics to obtain the actual total storage volume (in bytes) across the organization. The system auto-discovers the first available organization-level Storage Lens configuration if no config ID is provided (by calling `s3control:ListStorageLensConfigurations` and `s3control:GetStorageLensConfiguration`), then queries the CloudWatch `AWS/S3/Storage-Lens` namespace for the `StorageBytes` metric (statistic: `Average`) for the reporting period. If Storage Lens data is unavailable or not configured, this step is skipped and storage metrics rely solely on Cost Explorer usage quantities.
+On every pipeline execution (both normal daily run and backfill), the system always attempts to query S3 Storage Lens CloudWatch metrics to obtain the actual total storage volume (in bytes) across the organization. If an explicit `storage_lens_config_id` is provided, it is used directly; otherwise the system auto-discovers the first available organization-level Storage Lens configuration (by calling `s3control:ListStorageLensConfigurations` and `s3control:GetStorageLensConfiguration`). The system then queries the CloudWatch `AWS/S3/Storage-Lens` namespace for the `StorageBytes` metric (statistic: `Average`) for the reporting period. If no organization-level configuration is found or CloudWatch returns no data, the system logs a warning and continues without Storage Lens data — storage metrics fall back to Cost Explorer usage quantities. The `STORAGE_LENS_CONFIG_ID` environment variable (and corresponding `storage_lens_config_id` Terraform variable) are optional overrides; leaving them empty triggers auto-discovery rather than disabling Storage Lens integration.
 Refs: URS-DP-10106, URS-DP-10312
 
 **[SRS-DP-420109] Refresh Month-to-Date Data on Every Daily Run**
@@ -699,3 +702,5 @@ Refs: URS-DP-10101
 | 0.18    | 2026-02-28 | —      | Bug fix documentation: update SRS-DP-420102 to clarify that each selectable period's YoY comparison must use the correct year-ago period for that specific period (not a shared offset year-ago period) — fixes previously ambiguous wording that implied a single shared YoY period sufficed for both the MTD and completed-month entries |
 | 0.19    | 2026-02-28 | —      | Update cost trend chart defaults and behaviors (SRS-DP-310214): change default period window from 12 months to 13 months to enable visual YoY comparison of the last completed month; update time range toggle options accordingly ("13 Months" / "All Time"); add MTD bar visual distinction (reduced opacity); add collapsible legend (hidden by default) |
 | 0.20    | 2026-02-28 | —      | Update global cost summary data source (SRS-DP-310211): total spend and MoM/YoY deltas are now sourced from pre-computed `totals` object in summary.json (computed from raw workload costs, independent of cost category allocation and split charge rules) rather than summed from cost center values |
+| 0.21    | 2026-03-02 | —      | Redesign storage metric cards to always render exactly 3 cards: update SRS-DP-310207 (Cost/TB card now includes MoM DeltaIndicator); update SRS-DP-310208 (combined "Storage Volume" card shows total stored as primary + hot tier % with trend as secondary, always shown using CE-derived volume when Storage Lens not configured); supersede SRS-DP-310217 (standalone Total Stored card replaced by combined card in SRS-DP-310208) |
+| 0.22    | 2026-03-02 | —      | Remove Storage Lens enablement gate: update SRS-DP-420108 — Storage Lens enrichment now always runs on every pipeline execution (normal + backfill); `STORAGE_LENS_CONFIG_ID` / `storage_lens_config_id` are optional explicit-override hints, not enablement flags; auto-discovery runs when empty; graceful skip when no org-level config exists |

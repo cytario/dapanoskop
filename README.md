@@ -165,7 +165,7 @@ See [lambda/BACKFILL.md](lambda/BACKFILL.md) for detailed usage examples.
 | `schedule_expression`       | No       | EventBridge cron (default: `cron(0 6 * * ? *)`)                                          |
 | `include_efs`               | No       | Include EFS in storage metrics (default: `false`)                                        |
 | `include_ebs`               | No       | Include EBS in storage metrics (default: `false`)                                        |
-| `storage_lens_config_id`    | No       | S3 Storage Lens configuration ID (auto-discovers if empty). Leave empty to disable Storage Lens integration. |
+| `storage_lens_config_id`    | No       | S3 Storage Lens configuration ID. Leave empty to use auto-discovery (Storage Lens enrichment always runs; gracefully skipped if no org-level config is found). |
 | `tags`                      | No       | Map of tags to apply to all resources via AWS provider `default_tags`                    |
 | `permissions_boundary`      | No       | ARN of IAM permissions boundary to attach to all IAM roles. Leave empty to skip.         |
 | `enable_access_logging`     | No       | Enable S3 and CloudFront access logging (default: `false`)                               |
@@ -217,7 +217,7 @@ These are set by Terraform automatically:
 | `COST_CATEGORY_NAME`     | No       | AWS Cost Category name (auto-discovers if empty)                              |
 | `INCLUDE_EFS`            | No       | Include EFS in storage metrics                                                |
 | `INCLUDE_EBS`            | No       | Include EBS in storage metrics                                                |
-| `STORAGE_LENS_CONFIG_ID` | No       | S3 Storage Lens configuration ID (optional — auto-discovers if empty)         |
+| `STORAGE_LENS_CONFIG_ID` | No       | S3 Storage Lens configuration ID. Leave empty for auto-discovery. Storage Lens enrichment always runs; gracefully skipped if no org-level config is found. |
 
 ## Testing
 
