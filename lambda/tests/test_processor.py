@@ -145,6 +145,70 @@ def test_storage_metrics() -> None:
     assert sm["cost_per_tb_usd"] == 307.2
 
 
+def test_storage_metrics_prev_month_fields() -> None:
+    """Test that prev_month_cost_per_tb_usd and prev_month_hot_tier_percentage are computed.
+
+    Prev month has:
+      - TimedStorage-ByteHrs: cost=$450, quantity=800 GB-Months (hot tier)
+      - TimedStorage-INT-FA-ByteHrs: cost=$100, quantity=200 GB-Months (hot tier)
+      - TimedStorage-GlacierStaging: cost=$50, quantity=400 GB-Months (not hot tier)
+    Total prev storage cost: $600
+    Prev total GB-Months: 800 + 200 + 400 = 1,400
+    Prev hot GB-Months: 800 + 200 = 1,000
+    Prev hot tier %: 1,000 / 1,400 * 100 = 71.4%
+    Prev total bytes: 1,400 × 2^30 = 1,503,238,553,600
+    Prev cost per TB: $600 / (1,503,238,553,600 / 2^40) = ~$432.0/TB
+    """
+    collected = _make_collected(
+        current_groups=[
+            _make_group("app", "TimedStorage-ByteHrs", 500, 1_000),
+        ],
+        prev_groups=[
+            _make_group("app", "TimedStorage-ByteHrs", 450, 800),
+            _make_group("app", "TimedStorage-INT-FA-ByteHrs", 100, 200),
+            _make_group("app", "TimedStorage-GlacierStaging", 50, 400),
+        ],
+        yoy_groups=[],
+    )
+
+    result = process(collected)
+    sm = result["summary"]["storage_metrics"]
+
+    assert sm["prev_month_cost_usd"] == 600.0
+
+    # Hot tier percentage: (800 + 200) / 1400 * 100 = 71.4%
+    expected_prev_hot = (800 + 200) / 1_400 * 100
+    assert abs(sm["prev_month_hot_tier_percentage"] - round(expected_prev_hot, 1)) < 0.2
+
+    # Cost per TB: $600 / (1,400 GB-Months × 2^30 bytes / 2^40 bytes-per-TB)
+    prev_bytes = 1_400 * (2**30)
+    expected_prev_cost_per_tb = 600.0 / (prev_bytes / (2**40))
+    assert (
+        abs(sm["prev_month_cost_per_tb_usd"] - round(expected_prev_cost_per_tb, 2))
+        < 0.01
+    )
+
+
+def test_storage_metrics_prev_month_zero_volume() -> None:
+    """Test that prev_month fields default to 0 when prev_rows has no storage volume."""
+    collected = _make_collected(
+        current_groups=[
+            _make_group("app", "TimedStorage-ByteHrs", 500, 1_000),
+        ],
+        prev_groups=[
+            _make_group("app", "BoxUsage:t3.micro", 100, 744),
+        ],
+        yoy_groups=[],
+    )
+
+    result = process(collected)
+    sm = result["summary"]["storage_metrics"]
+
+    assert sm["prev_month_cost_usd"] == 0.0
+    assert sm["prev_month_cost_per_tb_usd"] == 0.0
+    assert sm["prev_month_hot_tier_percentage"] == 0.0
+
+
 def test_multiple_cost_centers() -> None:
     """Test grouping workloads into multiple cost centers."""
     collected = _make_collected(
