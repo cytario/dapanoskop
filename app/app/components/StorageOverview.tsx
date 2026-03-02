@@ -65,38 +65,47 @@ export function StorageOverview({
           ) : undefined
         }
       />
-      <MetricCard
-        className="h-full"
-        label={
-          <>
-            Storage Volume{" "}
-            <InfoTooltip
-              text={
-                metrics.storage_lens_total_bytes != null
-                  ? "Actual total storage volume from S3 Storage Lens. Hot tier percentage shows data in frequently accessed tiers."
-                  : "Estimated total storage volume from Cost Explorer usage data. Hot tier percentage shows data in frequently accessed tiers."
-              }
-            />
-          </>
-        }
-        value={formatBytes(totalBytes)}
-        secondary={
-          <>
-            <span className="text-sm text-gray-500">
-              Hot Tier: {metrics.hot_tier_percentage.toFixed(1)}%
-            </span>
-            {metrics.prev_month_hot_tier_percentage != null && (
-              <span className="ml-1">
-                <DeltaIndicator
-                  current={metrics.hot_tier_percentage}
-                  previous={metrics.prev_month_hot_tier_percentage}
-                  format="percentage"
-                />
+      <Link to={`/storage-detail?period=${period}`} className="block">
+        <MetricCard
+          className="h-full"
+          label={
+            <>
+              Storage Volume{" "}
+              <InfoTooltip text="Total storage volume and hot tier percentage. Hot tier shows data in frequently accessed storage classes." />
+            </>
+          }
+          value={
+            <>
+              {formatBytes(totalBytes)}
+              {metrics.prev_month_total_volume_bytes != null && (
+                <span className="ml-2 align-baseline">
+                  <DeltaIndicator
+                    current={metrics.total_volume_bytes}
+                    previous={metrics.prev_month_total_volume_bytes}
+                    format="percentage"
+                  />
+                </span>
+              )}
+            </>
+          }
+          secondary={
+            <>
+              <span className="text-sm text-gray-500">
+                Hot Tier: {metrics.hot_tier_percentage.toFixed(1)}%
               </span>
-            )}
-          </>
-        }
-      />
+              {metrics.prev_month_hot_tier_percentage != null && (
+                <span className="ml-1">
+                  <DeltaIndicator
+                    current={metrics.hot_tier_percentage}
+                    previous={metrics.prev_month_hot_tier_percentage}
+                    format="percentage"
+                  />
+                </span>
+              )}
+            </>
+          }
+        />
+      </Link>
     </div>
   );
 }

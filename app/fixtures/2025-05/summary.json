@@ -17,7 +17,8 @@
     "hot_tier_percentage": 59.6,
     "cost_per_tb_usd": 22.73,
     "prev_month_hot_tier_percentage": 59.6,
-    "prev_month_cost_per_tb_usd": 22.72
+    "prev_month_cost_per_tb_usd": 22.72,
+    "prev_month_total_volume_bytes": 150600000000000
   },
   "cost_centers": [
     {

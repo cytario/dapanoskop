@@ -13,6 +13,7 @@ describe("StorageOverview", () => {
     total_cost_usd: 1234.56,
     prev_month_cost_usd: 1084.56,
     total_volume_bytes: 180000000000000,
+    prev_month_total_volume_bytes: 175000000000000,
     hot_tier_percentage: 62.3,
     prev_month_hot_tier_percentage: 60.1,
     cost_per_tb_usd: 23.33,
@@ -61,6 +62,27 @@ describe("StorageOverview", () => {
     expect(container.textContent).toContain("62.3%");
   });
 
+  it("shows volume change indicator when prev_month_total_volume_bytes is present", () => {
+    const { container } = renderWithRouter(
+      <StorageOverview metrics={metrics} period="2026-01" />,
+    );
+    // 180T -> from 175T = +2.86% change
+    expect(container.textContent).toMatch(/\+2\.9%/);
+  });
+
+  it("does not show volume change indicator when prev_month_total_volume_bytes is absent", () => {
+    const metricsNoPrev: StorageMetrics = {
+      ...metrics,
+      prev_month_total_volume_bytes: undefined,
+    };
+    const { container } = renderWithRouter(
+      <StorageOverview metrics={metricsNoPrev} period="2026-01" />,
+    );
+    // Should still show volume and hot tier, but no volume delta
+    expect(container.textContent).toContain("Storage Volume");
+    expect(container.textContent).toContain("Hot Tier");
+  });
+
   it("shows hot tier trend when prev_month_hot_tier_percentage is present", () => {
     const { container } = renderWithRouter(
       <StorageOverview metrics={metrics} period="2026-01" />,
@@ -92,22 +114,7 @@ describe("StorageOverview", () => {
     expect(container.textContent).toContain("5.0 TiB");
   });
 
-  it("shows Storage Lens tooltip when storage_lens_total_bytes is present", () => {
-    const metricsWithLens: StorageMetrics = {
-      ...metrics,
-      storage_lens_total_bytes: 5 * 1_099_511_627_776,
-    };
-    const { container } = renderWithRouter(
-      <StorageOverview metrics={metricsWithLens} period="2026-01" />,
-    );
-    const tooltipButtons = container.querySelectorAll("button[aria-label]");
-    const labels = Array.from(tooltipButtons).map((b) =>
-      b.getAttribute("aria-label"),
-    );
-    expect(labels.some((l) => l?.includes("Storage Lens"))).toBeTruthy();
-  });
-
-  it("shows Cost Explorer tooltip when storage_lens_total_bytes is absent", () => {
+  it("shows storage volume tooltip", () => {
     const { container } = renderWithRouter(
       <StorageOverview metrics={metrics} period="2026-01" />,
     );
@@ -115,7 +122,9 @@ describe("StorageOverview", () => {
     const labels = Array.from(tooltipButtons).map((b) =>
       b.getAttribute("aria-label"),
     );
-    expect(labels.some((l) => l?.includes("Cost Explorer"))).toBeTruthy();
+    expect(
+      labels.some((l) => l?.includes("Total storage volume")),
+    ).toBeTruthy();
   });
 
   it("always renders exactly 3 cards", () => {
@@ -197,6 +206,17 @@ describe("StorageOverview", () => {
       container.querySelectorAll("button[aria-label]"),
     ).map((b) => b.getAttribute("aria-label"));
     expect(labels).toContain("Total cost of S3, EBS storage for this period.");
+  });
+
+  it("renders storage volume card as a link to storage-detail", () => {
+    const { container } = renderWithRouter(
+      <StorageOverview metrics={metrics} period="2026-01" />,
+    );
+    const link = container.querySelector(
+      'a[href="/storage-detail?period=2026-01"]',
+    );
+    expect(link).toBeTruthy();
+    expect(link?.textContent).toContain("Storage Volume");
   });
 
   it("renders storage cost card as a link to storage-cost detail", () => {
