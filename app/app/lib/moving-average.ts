@@ -12,6 +12,9 @@ export function computeMovingAverage(
   window: number = 3,
 ): (number | null)[] {
   return points.map((_pt, i) => {
+    // Exclude MTD (incomplete) months from the trend line
+    if (points[i]._isMtd) return null;
+
     if (i < window - 1) return null;
 
     let sum = 0;

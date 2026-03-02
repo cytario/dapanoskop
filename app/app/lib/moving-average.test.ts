@@ -112,4 +112,28 @@ describe("computeMovingAverage", () => {
     const result = computeMovingAverage(points, ["A"]);
     expect(result).toEqual([null, null, 200]);
   });
+
+  it("excludes MTD month from trend line (returns null for _isMtd point)", () => {
+    const points: TrendPoint[] = [
+      { period: "2025-01", A: 100 },
+      { period: "2025-02", A: 200 },
+      { period: "2025-03", A: 300 },
+      { period: "2025-04", A: 50, _isMtd: true },
+    ];
+    const result = computeMovingAverage(points, ["A"]);
+    // Index 0,1: not enough data; Index 2: (100+200+300)/3=200; Index 3: MTD excluded
+    expect(result).toEqual([null, null, 200, null]);
+  });
+
+  it("does not affect non-MTD points when MTD is last", () => {
+    const points: TrendPoint[] = [
+      { period: "2025-01", A: 100 },
+      { period: "2025-02", A: 200 },
+      { period: "2025-03", A: 300 },
+      { period: "2025-04", A: 400 },
+      { period: "2025-05", A: 10, _isMtd: true },
+    ];
+    const result = computeMovingAverage(points, ["A"]);
+    expect(result).toEqual([null, null, 200, 300, null]);
+  });
 });
