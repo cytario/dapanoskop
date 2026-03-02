@@ -165,12 +165,12 @@ Refs: URS-DP-10309, URS-DP-10302, URS-DP-30104
 | 6  | Legend | Cost center names | — | Collapsible; hidden by default; one entry per cost center with color indicator |
 
 **[SRS-DP-310215] Display Cost Trend Line**
-The system overlays a dashed line on the cost trend chart showing the 3-month simple moving average of aggregate total cost (sum of all cost centers), enabling users to distinguish short-term volatility from sustained cost trajectory changes. The first two data points have no trend line value (insufficient window). The trend line is not configurable.
+The system overlays a dashed line on the cost trend chart showing the 3-month simple moving average of aggregate total cost (sum of all cost centers), enabling users to distinguish short-term volatility from sustained cost trajectory changes. The moving average calculation excludes the MTD (month-to-date) partial month: since the current in-progress month's cost is inherently lower than a full month's cost, including it would artificially skew the trend line downward and misrepresent cost trajectory. The trend line value is omitted for the MTD bar and for the first two non-MTD data points (insufficient window). The trend line is not configurable.
 Refs: URS-DP-10310
 
 | No | Element | Data type | Value range | Other relevant information |
 |----|---------|-----------|-------------|---------------------------|
-| 1  | Trend line | Line chart overlay | ≥ 0 | 3-month moving average; dashed pink line (pink-700, #be185d); labeled "3-Month Avg" |
+| 1  | Trend line | Line chart overlay | ≥ 0 | 3-month moving average of completed months only; MTD bar has no trend line value; dashed pink line (pink-700, #be185d); labeled "3-Month Avg" |
 
 ##### Cost Center Cards
 
@@ -704,3 +704,4 @@ Refs: URS-DP-10101
 | 0.20    | 2026-02-28 | —      | Update global cost summary data source (SRS-DP-310211): total spend and MoM/YoY deltas are now sourced from pre-computed `totals` object in summary.json (computed from raw workload costs, independent of cost category allocation and split charge rules) rather than summed from cost center values |
 | 0.21    | 2026-03-02 | —      | Redesign storage metric cards to always render exactly 3 cards: update SRS-DP-310207 (Cost/TB card now includes MoM DeltaIndicator); update SRS-DP-310208 (combined "Storage Volume" card shows total stored as primary + hot tier % with trend as secondary, always shown using CE-derived volume when Storage Lens not configured); supersede SRS-DP-310217 (standalone Total Stored card replaced by combined card in SRS-DP-310208) |
 | 0.22    | 2026-03-02 | —      | Remove Storage Lens enablement gate: update SRS-DP-420108 — Storage Lens enrichment now always runs on every pipeline execution (normal + backfill); `STORAGE_LENS_CONFIG_ID` / `storage_lens_config_id` are optional explicit-override hints, not enablement flags; auto-discovery runs when empty; graceful skip when no org-level config exists |
+| 0.23    | 2026-03-02 | —      | Exclude MTD from moving average: update SRS-DP-310215 — the 3-month moving average trend line must exclude the MTD partial month from its window to avoid artificially skewing the trend line downward; the MTD bar has no trend line value |
