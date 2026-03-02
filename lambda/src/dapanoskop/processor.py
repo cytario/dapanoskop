@@ -119,6 +119,7 @@ def _compute_storage_metrics(
         "total_cost_usd": round(total_cost, 2),
         "prev_month_cost_usd": round(prev_total_cost, 2),
         "total_volume_bytes": round(total_bytes),
+        "prev_month_total_volume_bytes": round(prev_total_bytes),
         "hot_tier_percentage": round(hot_pct, 1),
         "cost_per_tb_usd": round(cost_per_tb, 2),
         "prev_month_cost_per_tb_usd": round(prev_cost_per_tb, 2),

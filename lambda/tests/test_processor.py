@@ -138,6 +138,8 @@ def test_storage_metrics() -> None:
     # Total GB-Months: 1,000 + 500 + 1,000 = 2,500
     # Total bytes: 2,500 × 2^30 = 2,684,354,560,000 bytes
     assert sm["total_volume_bytes"] == 2_684_354_560_000
+    # Prev total GB-Months: 960; prev total bytes: 960 × 2^30 = 1,031,798,784,000
+    assert sm["prev_month_total_volume_bytes"] == 960 * (2**30)
     # Hot tier = (ByteHrs + INT-FA) / total = (1000 + 500) / (1000 + 500 + 1000)
     expected_hot = (1_000 + 500) / (1_000 + 500 + 1_000) * 100
     assert abs(sm["hot_tier_percentage"] - round(expected_hot, 1)) < 0.2
@@ -176,12 +178,15 @@ def test_storage_metrics_prev_month_fields() -> None:
 
     assert sm["prev_month_cost_usd"] == 600.0
 
+    # Prev total bytes: 1,400 GB-Months × 2^30 bytes/GiB
+    prev_bytes = 1_400 * (2**30)
+    assert sm["prev_month_total_volume_bytes"] == prev_bytes
+
     # Hot tier percentage: (800 + 200) / 1400 * 100 = 71.4%
     expected_prev_hot = (800 + 200) / 1_400 * 100
     assert abs(sm["prev_month_hot_tier_percentage"] - round(expected_prev_hot, 1)) < 0.2
 
     # Cost per TB: $600 / (1,400 GB-Months × 2^30 bytes / 2^40 bytes-per-TB)
-    prev_bytes = 1_400 * (2**30)
     expected_prev_cost_per_tb = 600.0 / (prev_bytes / (2**40))
     assert (
         abs(sm["prev_month_cost_per_tb_usd"] - round(expected_prev_cost_per_tb, 2))
@@ -205,6 +210,7 @@ def test_storage_metrics_prev_month_zero_volume() -> None:
     sm = result["summary"]["storage_metrics"]
 
     assert sm["prev_month_cost_usd"] == 0.0
+    assert sm["prev_month_total_volume_bytes"] == 0
     assert sm["prev_month_cost_per_tb_usd"] == 0.0
     assert sm["prev_month_hot_tier_percentage"] == 0.0
 
