@@ -24,11 +24,11 @@ export function StorageOverview({
   storageConfig,
   period,
 }: StorageOverviewProps) {
-  const hasStorageLens = metrics.storage_lens_total_bytes != null;
-  const gridCols = hasStorageLens ? "sm:grid-cols-4" : "sm:grid-cols-3";
+  const totalBytes =
+    metrics.storage_lens_total_bytes ?? metrics.total_volume_bytes;
 
   return (
-    <div className={`grid grid-cols-1 ${gridCols} gap-4 items-stretch`}>
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-stretch">
       <Link to={`/storage-cost?period=${period}`} className="block">
         <MetricCard
           className="h-full"
@@ -47,20 +47,6 @@ export function StorageOverview({
           }
         />
       </Link>
-      {hasStorageLens && (
-        <Link to={`/storage-detail?period=${period}`} className="block">
-          <MetricCard
-            className="h-full"
-            label={
-              <>
-                Total Stored{" "}
-                <InfoTooltip text="Actual total storage volume from S3 Storage Lens. This is the precise amount of data stored, measured at the time of the latest metrics snapshot." />
-              </>
-            }
-            value={formatBytes(metrics.storage_lens_total_bytes!)}
-          />
-        </Link>
-      )}
       <MetricCard
         className="h-full"
         label={
@@ -70,16 +56,46 @@ export function StorageOverview({
           </>
         }
         value={formatUsd(metrics.cost_per_tb_usd)}
+        secondary={
+          metrics.prev_month_cost_per_tb_usd != null ? (
+            <DeltaIndicator
+              current={metrics.cost_per_tb_usd}
+              previous={metrics.prev_month_cost_per_tb_usd}
+            />
+          ) : undefined
+        }
       />
       <MetricCard
         className="h-full"
         label={
           <>
-            Hot Tier{" "}
-            <InfoTooltip text="Percentage of stored data in frequently accessed tiers (e.g., S3 Standard, EFS Standard). High values may indicate optimization opportunities via lifecycle policies." />
+            Storage Volume{" "}
+            <InfoTooltip
+              text={
+                metrics.storage_lens_total_bytes != null
+                  ? "Actual total storage volume from S3 Storage Lens. Hot tier percentage shows data in frequently accessed tiers."
+                  : "Estimated total storage volume from Cost Explorer usage data. Hot tier percentage shows data in frequently accessed tiers."
+              }
+            />
           </>
         }
-        value={`${metrics.hot_tier_percentage.toFixed(1)}%`}
+        value={formatBytes(totalBytes)}
+        secondary={
+          <>
+            <span className="text-sm text-gray-500">
+              Hot Tier: {metrics.hot_tier_percentage.toFixed(1)}%
+            </span>
+            {metrics.prev_month_hot_tier_percentage != null && (
+              <span className="ml-1">
+                <DeltaIndicator
+                  current={metrics.hot_tier_percentage}
+                  previous={metrics.prev_month_hot_tier_percentage}
+                  format="percentage"
+                />
+              </span>
+            )}
+          </>
+        }
       />
     </div>
   );

@@ -57,7 +57,9 @@ export interface StorageMetrics {
   prev_month_cost_usd: number;
   total_volume_bytes: number;
   hot_tier_percentage: number;
+  prev_month_hot_tier_percentage?: number;
   cost_per_tb_usd: number;
+  prev_month_cost_per_tb_usd?: number;
   storage_lens_total_bytes?: number;
 }
 
