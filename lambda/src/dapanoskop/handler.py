@@ -183,11 +183,8 @@ def _handle_backfill(
                 collected, include_efs=include_efs, include_ebs=include_ebs
             )
 
-            # Enrich with S3 Storage Lens data if configured
-            if storage_lens_config_id:
-                _enrich_with_storage_lens(
-                    processed, storage_lens_config_id, year, month
-                )
+            # Enrich with S3 Storage Lens data (auto-discovers if no config ID set)
+            _enrich_with_storage_lens(processed, storage_lens_config_id, year, month)
 
             logger.info("Writing to S3 for %s", period_label)
             write_to_s3(processed, bucket, update_index_file=False)
@@ -366,12 +363,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     is_mtd=True,
                 )
 
-                if storage_lens_config_id:
-                    period_label = processed_mtd["summary"]["period"]
-                    p_year, p_month = int(period_label[:4]), int(period_label[5:7])
-                    _enrich_with_storage_lens(
-                        processed_mtd, storage_lens_config_id, p_year, p_month
-                    )
+                period_label = processed_mtd["summary"]["period"]
+                p_year, p_month = int(period_label[:4]), int(period_label[5:7])
+                _enrich_with_storage_lens(
+                    processed_mtd, storage_lens_config_id, p_year, p_month
+                )
 
                 logger.info("Writing MTD period to S3")
                 write_to_s3(processed_mtd, bucket, update_index_file=False)
@@ -395,12 +391,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 is_mtd=False,
             )
 
-            if storage_lens_config_id:
-                pc_year = int(prev_complete_label[:4])
-                pc_month = int(prev_complete_label[5:7])
-                _enrich_with_storage_lens(
-                    processed_prev, storage_lens_config_id, pc_year, pc_month
-                )
+            pc_year = int(prev_complete_label[:4])
+            pc_month = int(prev_complete_label[5:7])
+            _enrich_with_storage_lens(
+                processed_prev, storage_lens_config_id, pc_year, pc_month
+            )
 
             logger.info("Writing prev_complete period to S3")
             write_to_s3(processed_prev, bucket, update_index_file=False)
