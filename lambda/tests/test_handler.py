@@ -87,7 +87,7 @@ def test_handler_integration(
 
 @mock_aws
 def test_handler_backfill_mode(
-    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch, freeze_backfill_now
 ) -> None:
     """Test backfill mode processes multiple months."""
     s3 = boto3.client("s3", region_name="us-east-1")
@@ -172,7 +172,7 @@ def test_handler_backfill_mode(
 
 @mock_aws
 def test_handler_backfill_skip_existing(
-    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch, freeze_backfill_now
 ) -> None:
     """Test backfill skips months that already exist unless force=True."""
     s3 = boto3.client("s3", region_name="us-east-1")
@@ -240,7 +240,7 @@ def test_handler_backfill_skip_existing(
 
 @mock_aws
 def test_handler_backfill_force_reprocess(
-    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch, freeze_backfill_now
 ) -> None:
     """Test backfill force=True reprocesses existing months."""
     s3 = boto3.client("s3", region_name="us-east-1")
@@ -307,7 +307,7 @@ def test_handler_backfill_force_reprocess(
 
 @mock_aws
 def test_handler_backfill_partial_failure(
-    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch, freeze_backfill_now
 ) -> None:
     """Test backfill returns 207 status with mixed results when one month fails."""
     s3 = boto3.client("s3", region_name="us-east-1")
@@ -375,7 +375,7 @@ def test_handler_backfill_partial_failure(
 
 @mock_aws
 def test_handler_backfill_s3_write_failure(
-    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch, freeze_backfill_now
 ) -> None:
     """Test backfill captures S3 write failures per-month."""
     s3 = boto3.client("s3", region_name="us-east-1")
@@ -636,7 +636,7 @@ def test_handler_error_response_no_arn_leak(
 
 @mock_aws
 def test_handler_backfill_skips_unavailable_months(
-    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch, freeze_backfill_now
 ) -> None:
     """Test backfill gracefully skips months with no Cost Explorer data."""
     s3 = boto3.client("s3", region_name="us-east-1")
@@ -805,7 +805,7 @@ def test_handler_storage_lens_recalculates_cost_per_tb(
 
 @mock_aws
 def test_handler_backfill_index_survives_failures(
-    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch, freeze_backfill_now
 ) -> None:
     """Test that index.json is updated even when some months fail."""
     s3 = boto3.client("s3", region_name="us-east-1")
@@ -875,7 +875,7 @@ def test_handler_backfill_index_survives_failures(
 
 @mock_aws
 def test_handler_backfill_skips_empty_ce_response(
-    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch, freeze_backfill_now
 ) -> None:
     """Backfill skips a period when CE returns empty groups (no cost data)."""
     s3 = boto3.client("s3", region_name="us-east-1")
@@ -950,7 +950,7 @@ def test_handler_backfill_skips_empty_ce_response(
 
 @mock_aws
 def test_handler_backfill_empty_ce_response_skipped_even_with_force(
-    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch
+    s3_bucket_env: str, monkeypatch: pytest.MonkeyPatch, freeze_backfill_now
 ) -> None:
     """force=True does not override the empty CE response guard.
 
