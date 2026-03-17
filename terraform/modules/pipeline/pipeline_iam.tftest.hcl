@@ -75,14 +75,22 @@ run "ce_actions_are_exact" {
   assert {
     condition = contains(
       jsondecode(output.iam_policy_json).Statement[0].Action,
+      "ce:GetCostForecast"
+    )
+    error_message = "Policy must include ce:GetCostForecast"
+  }
+
+  assert {
+    condition = contains(
+      jsondecode(output.iam_policy_json).Statement[0].Action,
       "ce:DescribeCostCategoryDefinition"
     )
     error_message = "Policy must include ce:DescribeCostCategoryDefinition"
   }
 
   assert {
-    condition     = length(jsondecode(output.iam_policy_json).Statement[0].Action) == 4
-    error_message = "CE statement must contain exactly 4 actions (GetCostAndUsage, GetCostCategories, ListCostCategoryDefinitions, DescribeCostCategoryDefinition)"
+    condition     = length(jsondecode(output.iam_policy_json).Statement[0].Action) == 5
+    error_message = "CE statement must contain exactly 5 actions (GetCostAndUsage, GetCostCategories, GetCostForecast, ListCostCategoryDefinitions, DescribeCostCategoryDefinition)"
   }
 }
 
