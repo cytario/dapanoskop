@@ -1816,3 +1816,215 @@ def test_yoy_uncategorized_preserved_when_no_cc_sentinel_present() -> None:
     assert global_yoy == 13400.0, (
         f"Global YoY total should be $13,400, got ${global_yoy}"
     )
+
+
+# --- Forecast integration tests ---
+
+
+def test_process_mtd_includes_forecast_fields_when_forecast_present() -> None:
+    """Test that process() with is_mtd=True includes forecast fields in totals
+    when forecast data is present in collected data.
+    """
+    collected = _make_mtd_collected(
+        current_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 800, 200),
+        ],
+        prev_complete_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 2000, 744),
+        ],
+        prev_month_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 900, 720),
+        ],
+        yoy_groups=[],
+        prev_month_partial_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 250, 60),
+        ],
+    )
+    collected["forecast"] = 1200.0  # remaining spend forecast
+
+    result = process(collected, is_mtd=True)
+    totals = result["summary"]["totals"]
+
+    # forecast_total_usd = current MTD ($800) + forecast remaining ($1200)
+    assert totals["forecast_total_usd"] == 2000.0
+
+    # forecast_month_end_delta_pct = (2000 / 2000 - 1) * 100 = 0.0%
+    assert totals["forecast_month_end_delta_pct"] == 0.0
+
+    # prev_complete_total_usd = $2000
+    assert totals["prev_complete_total_usd"] == 2000.0
+
+
+def test_process_mtd_no_forecast_fields_when_forecast_is_none() -> None:
+    """Test that process() with is_mtd=True does NOT include forecast fields
+    when forecast is None (e.g. CE API returned insufficient history).
+    """
+    collected = _make_mtd_collected(
+        current_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 800, 200),
+        ],
+        prev_complete_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 2000, 744),
+        ],
+        prev_month_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 900, 720),
+        ],
+        yoy_groups=[],
+        prev_month_partial_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 250, 60),
+        ],
+    )
+    # No forecast key — simulates None from collected
+
+    result = process(collected, is_mtd=True)
+    totals = result["summary"]["totals"]
+
+    assert "forecast_total_usd" not in totals
+    assert "forecast_month_end_delta_pct" not in totals
+    assert "prev_complete_total_usd" not in totals
+
+
+def test_process_non_mtd_excludes_forecast_fields() -> None:
+    """Test that process() with is_mtd=False never includes forecast fields,
+    even if forecast data were accidentally present in collected.
+    """
+    collected = _make_collected(
+        current_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 1000, 744),
+        ],
+        prev_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 900, 720),
+        ],
+        yoy_groups=[],
+    )
+    # Inject a forecast value (shouldn't matter since is_mtd=False)
+    collected["forecast"] = 500.0
+
+    result = process(collected, is_mtd=False)
+    totals = result["summary"]["totals"]
+
+    assert "forecast_total_usd" not in totals
+    assert "forecast_month_end_delta_pct" not in totals
+
+
+def test_process_mtd_forecast_delta_pct_with_growth() -> None:
+    """Test forecast_month_end_delta_pct shows positive % when forecast > prev_complete."""
+    collected = _make_mtd_collected(
+        current_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 800, 200),
+        ],
+        prev_complete_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 1000, 744),
+        ],
+        prev_month_groups=[],
+        yoy_groups=[],
+        prev_month_partial_groups=[],
+    )
+    collected["forecast"] = 700.0  # remaining spend → total = 800 + 700 = 1500
+
+    result = process(collected, is_mtd=True)
+    totals = result["summary"]["totals"]
+
+    # $1500 forecast vs $1000 prev_complete → +50%
+    assert totals["forecast_total_usd"] == 1500.0
+    assert totals["forecast_month_end_delta_pct"] == 50.0
+    assert totals["prev_complete_total_usd"] == 1000.0
+
+
+# --- Storage MTD comparison tests ---
+
+
+def test_storage_mtd_uses_prior_partial_for_comparison() -> None:
+    """Test that MTD storage comparison uses the prior partial period data (same
+    elapsed days) rather than the two-months-ago (pm2) data.
+
+    Scenario: 8 days into February 2026 (MTD). Storage comparison should use
+    January 1-8 (prior partial) rather than December (prev_month = pm2).
+    """
+    collected = _make_mtd_collected(
+        current_groups=[
+            # Storage: 500 GB-Months in 7 days of Feb
+            _make_group("app", "TimedStorage-ByteHrs", 200, 500),
+        ],
+        prev_complete_groups=[
+            _make_group("app", "TimedStorage-ByteHrs", 350, 800),
+        ],
+        prev_month_groups=[
+            # pm2 (December) — NOT used for storage comparison in MTD mode
+            _make_group("app", "TimedStorage-ByteHrs", 400, 900),
+        ],
+        yoy_groups=[],
+        prev_month_partial_groups=[
+            # Prior partial (Jan 1-8) — SHOULD be used for MTD storage comparison
+            _make_group("app", "TimedStorage-ByteHrs", 150, 400),
+        ],
+    )
+
+    result = process(collected, is_mtd=True)
+    sm = result["summary"]["storage_metrics"]
+
+    # prev_month_cost_usd should reflect the prior partial period ($150), not pm2 ($400)
+    assert sm["prev_month_cost_usd"] == 150.0
+
+    # The prior partial period data has 400 GB-Months, scaled for partial window
+    assert sm["prev_month_total_volume_bytes"] > 0
+
+    # Should have MTD-specific field
+    assert sm["mtd_prior_partial_storage_cost_usd"] == 150.0
+
+
+def test_storage_mtd_volume_scaling_without_storage_lens() -> None:
+    """Test that MTD volume scaling correctly adjusts GB-Months to full-month equivalent.
+
+    CE reports prorated GB-Months for partial month windows. The volume must be
+    scaled by (days_in_month / mtd_days) to represent actual bytes stored.
+
+    Using the default _make_mtd_collected periods: Feb 1-8 (7 MTD days, Feb has 28 days).
+    CE reports 100 GB-Months. Actual volume = 100 * (28/7) * 2^30 bytes.
+    """
+    collected = _make_mtd_collected(
+        current_groups=[
+            _make_group("app", "TimedStorage-ByteHrs", 100, 100),
+        ],
+        prev_complete_groups=[],
+        prev_month_groups=[],
+        yoy_groups=[],
+        prev_month_partial_groups=[],
+    )
+
+    result = process(collected, is_mtd=True)
+    sm = result["summary"]["storage_metrics"]
+
+    # Feb 2026 has 28 days. MTD = 7 days (Feb 1-8). Scale factor = 28/7 = 4.0
+    # total_bytes = 100 GB-Months * 2^30 * 4.0
+    expected_bytes = round(100 * (2**30) * (28 / 7))
+    assert sm["total_volume_bytes"] == expected_bytes
+
+
+def test_completed_month_storage_metrics_unchanged() -> None:
+    """Test that completed month (non-MTD) storage metrics use the standard
+    comparison against prev_month and do NOT apply volume scaling.
+
+    This ensures the storage MTD fix doesn't regress the completed month path.
+    """
+    collected = _make_collected(
+        current_groups=[
+            _make_group("app", "TimedStorage-ByteHrs", 500, 1_000),
+        ],
+        prev_groups=[
+            _make_group("app", "TimedStorage-ByteHrs", 450, 960),
+        ],
+        yoy_groups=[],
+    )
+
+    result = process(collected, is_mtd=False)
+    sm = result["summary"]["storage_metrics"]
+
+    # No scaling — full month values
+    assert sm["total_cost_usd"] == 500.0
+    assert sm["prev_month_cost_usd"] == 450.0
+    assert sm["total_volume_bytes"] == 1_000 * (2**30)
+    assert sm["prev_month_total_volume_bytes"] == 960 * (2**30)
+
+    # No MTD-specific field
+    assert "mtd_prior_partial_storage_cost_usd" not in sm

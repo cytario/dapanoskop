@@ -127,12 +127,32 @@ describe("GlobalSummary", () => {
     expect(container.textContent).toContain("+$7,000");
   });
 
-  it("suppresses YoY and shows N/A (MTD) when isMtd", () => {
+  it("shows forecast unavailable when isMtd but no forecast data", () => {
     const summary = makeSummary();
     const { container } = render(
       <GlobalSummary summary={summary} isMtd={true} />,
     );
-    expect(container.textContent).toContain("N/A (MTD)");
+    expect(container.textContent).toContain("Forecast unavailable");
+    expect(container.textContent).toContain("Forecast Month End");
+  });
+
+  it("shows forecast value when isMtd with forecast data", () => {
+    const summary = makeSummary({
+      totals: {
+        current_cost_usd: 20000,
+        prev_month_cost_usd: 19000,
+        yoy_cost_usd: 14500,
+        forecast_total_usd: 28500,
+        forecast_month_end_delta_pct: 7.2,
+        prev_complete_total_usd: 26590,
+      },
+    });
+    const { container } = render(
+      <GlobalSummary summary={summary} isMtd={true} />,
+    );
+    expect(container.textContent).toContain("$28,500.00");
+    expect(container.textContent).toContain("Forecast Month End");
+    expect(container.textContent).not.toContain("N/A");
   });
 
   it("falls back to standard MoM when isMtd but no mtd_prior_partial_cost_usd", () => {

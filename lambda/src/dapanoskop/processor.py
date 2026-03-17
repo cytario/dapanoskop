@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import calendar
 import io
 import json
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import boto3
@@ -52,12 +53,26 @@ def _compute_storage_metrics(
     prev_rows: list[dict[str, Any]],
     include_efs: bool,
     include_ebs: bool,
+    mtd_period: tuple[str, str] | None = None,
+    prev_is_partial: bool = False,
 ) -> dict[str, Any]:
     """Compute storage volume and hot tier metrics from usage data.
 
     Note: AWS Cost Explorer returns UsageQuantity for TimedStorage-* in GB-Months,
     which represents the average GiB (binary gibibytes, 2^30 bytes) stored during
     the billing period. We convert GB-Months to bytes: GB-Months * 2^30.
+
+    Args:
+        rows: Current period parsed rows.
+        prev_rows: Previous period parsed rows (may be partial for MTD comparisons).
+        include_efs: Include EFS in storage volume.
+        include_ebs: Include EBS in storage volume.
+        mtd_period: When provided, scale volume by (days_in_month / mtd_days) to
+            correct for CE's prorated GB-Months in partial month windows. Tuple of
+            (mtd_start, mtd_end_exclusive) date strings.
+        prev_is_partial: When True, prev_rows come from the prior partial period
+            (same number of days as current MTD), and the same volume scaling is
+            applied to the prev volume using the same scale factor.
     """
     total_cost = 0.0
     prev_total_cost = 0.0
@@ -100,13 +115,33 @@ def _compute_storage_metrics(
             if _is_hot_tier(row["usage_type"]):
                 prev_hot_gb_months += row["usage_quantity"]
 
+    # MTD volume scaling: CE reports prorated GB-Months for partial month windows.
+    # Scale up to full-month equivalent: actual_bytes ≈ gb_months * (days_in_month / mtd_days).
+    # Both current and (when prev_is_partial) prev volumes get the same scale factor.
+    volume_scale = 1.0
+    if mtd_period is not None:
+        mtd_start_date = date.fromisoformat(mtd_period[0])
+        mtd_end_date = date.fromisoformat(mtd_period[1])
+        mtd_days = (mtd_end_date - mtd_start_date).days
+        days_in_month = calendar.monthrange(mtd_start_date.year, mtd_start_date.month)[
+            1
+        ]
+        if mtd_days > 0:
+            volume_scale = days_in_month / mtd_days
+
     # Convert GB-Months to bytes: GB-Months × 2^30 bytes/GiB = average bytes stored (binary)
-    total_bytes = total_gb_months * _BYTES_PER_GB if total_gb_months else 0
+    # Apply MTD volume scale when requested.
+    total_bytes = (
+        total_gb_months * _BYTES_PER_GB * volume_scale if total_gb_months else 0
+    )
     cost_per_tb = total_cost / (total_bytes / _BYTES_PER_TB) if total_bytes else 0
     hot_pct = (hot_gb_months / total_gb_months * 100) if total_gb_months else 0
 
+    prev_volume_scale = volume_scale if prev_is_partial else 1.0
     prev_total_bytes = (
-        prev_total_gb_months * _BYTES_PER_GB if prev_total_gb_months else 0
+        prev_total_gb_months * _BYTES_PER_GB * prev_volume_scale
+        if prev_total_gb_months
+        else 0
     )
     prev_cost_per_tb = (
         prev_total_cost / (prev_total_bytes / _BYTES_PER_TB) if prev_total_bytes else 0
@@ -115,7 +150,7 @@ def _compute_storage_metrics(
         (prev_hot_gb_months / prev_total_gb_months * 100) if prev_total_gb_months else 0
     )
 
-    return {
+    result: dict[str, Any] = {
         "total_cost_usd": round(total_cost, 2),
         "prev_month_cost_usd": round(prev_total_cost, 2),
         "total_volume_bytes": round(total_bytes),
@@ -125,6 +160,9 @@ def _compute_storage_metrics(
         "prev_month_cost_per_tb_usd": round(prev_cost_per_tb, 2),
         "prev_month_hot_tier_percentage": round(prev_hot_pct, 1),
     }
+    if prev_is_partial:
+        result["mtd_prior_partial_storage_cost_usd"] = round(prev_total_cost, 2)
+    return result
 
 
 def _aggregate_workloads(
@@ -605,9 +643,26 @@ def process(
     # Sort cost centers by current cost descending
     cost_centers.sort(key=lambda c: c["current_cost_usd"], reverse=True)
 
-    storage_metrics = _compute_storage_metrics(
-        current_rows, prev_rows, include_efs, include_ebs
-    )
+    periods_raw: dict[str, tuple[str, str]] = collected.get("periods", {})
+
+    # For MTD runs, compare storage against the prior partial period (same elapsed days)
+    # rather than pm2 (two months ago). Also pass the MTD period dates so volumes can be
+    # scaled up from CE's prorated GB-Months to actual-bytes-stored.
+    if is_mtd and "prev_month_partial" in raw_data:
+        storage_prev_rows = _parse_groups(raw_data["prev_month_partial"])
+        mtd_period = periods_raw.get("current")
+        storage_metrics = _compute_storage_metrics(
+            current_rows,
+            storage_prev_rows,
+            include_efs,
+            include_ebs,
+            mtd_period=mtd_period,
+            prev_is_partial=True,
+        )
+    else:
+        storage_metrics = _compute_storage_metrics(
+            current_rows, prev_rows, include_efs, include_ebs
+        )
     tagging_coverage = _compute_tagging_coverage(current_costs)
 
     # Build the summary labels dict — only include the three standard comparison
@@ -628,6 +683,29 @@ def process(
     if partial_costs is not None:
         totals["mtd_prior_partial_cost_usd"] = round(sum(partial_costs.values()), 2)
 
+    # For MTD periods, add forecast data when available.
+    # forecast_total_usd = current MTD spend + forecasted remaining spend.
+    # forecast_month_end_delta_pct = % change vs previous completed month total.
+    # prev_complete_total_usd = previous completed month total (for reference).
+    if is_mtd:
+        forecast_remaining: float | None = collected.get("forecast")
+        if forecast_remaining is not None:
+            current_mtd = totals["current_cost_usd"]
+            forecast_total = current_mtd + forecast_remaining
+
+            # Compute prev_complete total from raw_data if present
+            prev_complete_groups = raw_data.get("prev_complete", [])
+            prev_complete_rows = _parse_groups(prev_complete_groups)
+            prev_complete_costs = _aggregate_workloads(prev_complete_rows)
+            prev_complete_total = sum(prev_complete_costs.values())
+
+            totals["forecast_total_usd"] = round(forecast_total, 2)
+            if prev_complete_total:
+                totals["forecast_month_end_delta_pct"] = round(
+                    (forecast_total / prev_complete_total - 1) * 100, 1
+                )
+            totals["prev_complete_total_usd"] = round(prev_complete_total, 2)
+
     summary: dict[str, Any] = {
         "collected_at": now.isoformat(),
         "period": period_labels["current"],
@@ -643,7 +721,6 @@ def process(
     # When this is the in-progress MTD period and prior partial data is present,
     # compute and attach the mtd_comparison aggregates.
     if is_mtd and "prev_month_partial" in raw_data:
-        periods_raw: dict[str, tuple[str, str]] = collected.get("periods", {})
         partial_dates = periods_raw.get("prev_month_partial", ("", ""))
         partial_allocated = allocated_costs.get("prev_month_partial", {})
 

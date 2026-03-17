@@ -5,8 +5,8 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.20 (Draft)                               |
-| Date                | 2026-02-28                                 |
+| Version             | 0.24 (Draft)                               |
+| Date                | 2026-03-17                                 |
 
 ---
 
@@ -229,7 +229,9 @@ The system displays the cost per terabyte stored, calculated from total storage 
 Refs: URS-DP-10306, URS-DP-30102
 
 **[SRS-DP-310208] Display Storage Volume with Hot Tier**
-The system always displays a combined "Storage Volume" metric card showing total storage volume as the primary metric and hot tier percentage as secondary information. The total storage volume is sourced from S3 Storage Lens CloudWatch metrics when Storage Lens integration is configured; otherwise it is derived from CE-computed storage volume (the same volume used in the cost-per-TB calculation). The hot tier percentage shows the proportion of data in hot storage tiers (S3 Standard, S3 Intelligent-Tiering Frequent Access, and optionally EFS/EBS depending on configuration), together with a trend indicator showing month-over-month change in hot tier percentage. When Storage Lens data is the source, the card includes a timestamp indicating when the metric was collected. A tooltip explains which tiers are considered "hot" and suggests optimization: "Percentage of stored data in frequently accessed tiers (e.g., S3 Standard, EFS Standard). High values may indicate optimization opportunities via lifecycle policies."
+The system always displays a combined "Storage Volume" metric card showing total storage volume as the primary metric and hot tier percentage as secondary information. The total storage volume is sourced from S3 Storage Lens CloudWatch metrics when Storage Lens integration is configured; otherwise it is derived from CE-computed storage volume scaled to reflect actual bytes stored (see SRS-DP-420104). The hot tier percentage shows the proportion of data in hot storage tiers (S3 Standard, S3 Intelligent-Tiering Frequent Access, and optionally EFS/EBS depending on configuration), together with a trend indicator showing month-over-month change in hot tier percentage. When Storage Lens data is the source, the card includes a timestamp indicating when the metric was collected. A tooltip explains which tiers are considered "hot" and suggests optimization: "Percentage of stored data in frequently accessed tiers (e.g., S3 Standard, EFS Standard). High values may indicate optimization opportunities via lifecycle policies."
+
+**MTD storage comparison**: When the MTD period is selected, the storage cost MoM comparison on Card 1 ("Storage Cost") is computed against the equivalent prior partial period rather than against the prior month's full-month storage cost. This follows the same like-for-like approach as the global and cost-center MoM annotations (SRS-DP-310220). The `storage_metrics.mtd_prior_partial_storage_cost_usd` field in summary.json provides the prior partial period storage cost for this computation.
 Refs: URS-DP-10307, URS-DP-10312, URS-DP-30102
 
 **[SRS-DP-310217] Display Actual Total Storage Volume** (Superseded by SRS-DP-310208)
@@ -361,6 +363,20 @@ Refs: URS-DP-10315, URS-DP-10302
 | 2  | Comparison period label | String | — | Displayed as tooltip or inline note, e.g., "vs. Feb 1–7" |
 | 3  | YoY annotation | — | — | Not displayed for MTD period; replaced with "N/A (MTD)" or equivalent |
 
+**[SRS-DP-310221] Display Forecasted Month-End Cost in MTD View**
+When the MTD period is selected and forecast data is available in the fetched summary.json, the system displays a forecasted month-end total cost card in the Global Summary area. The card shows the projected full-month cost (combining actual MTD spend to date with the AWS Cost Explorer forecast for the remaining days) and the percentage change versus the most recently completed month. The card is labeled "Forecast" or equivalent to clearly distinguish it from actual cost figures. If forecast data is absent from the summary.json (e.g., CE forecast API failed or insufficient history), the card is not displayed. Forecast data is only present for MTD periods; the card is never shown for completed months.
+Refs: URS-DP-10301, URS-DP-10302, URS-DP-10314
+
+| No | Element | Data type | Value range | Other relevant information |
+|----|---------|-----------|-------------|---------------------------|
+| 1  | Forecasted month-end cost | Currency (USD) | ≥ 0 | `totals.forecast_total_usd`; projected full-month total = actual MTD + CE forecast remainder |
+| 2  | Forecast vs. prior completed month change | Percentage | Any | `totals.forecast_month_end_delta_pct`; percentage change of forecast_total vs prior completed month total |
+| 3  | Prior completed month total | Currency (USD) | ≥ 0 | `totals.prev_complete_total_usd`; used as the comparison baseline for the forecast delta |
+
+**[SRS-DP-310222] Forecast InfoTooltip Explanation**
+The forecast card displays an `<InfoTooltip>` icon that, on hover or keyboard focus, explains: "Projected full-month cost based on your spend to date plus the AWS Cost Explorer forecast for the remaining days of the month. Accuracy improves as the month progresses." The tooltip is rendered using the shared `<InfoTooltip>` component (SDS-DP-010212) and follows the same keyboard-accessibility standards as other metric card tooltips.
+Refs: URS-DP-10301, URS-DP-10308
+
 ---
 
 ## 4. System Interfaces
@@ -477,7 +493,7 @@ The system queries the Cost Explorer `ListCostCategoryDefinitions` and `Describe
 Refs: URS-DP-10403
 
 **[SRS-DP-420104] Query Storage Volume**
-The system queries Cost Explorer for `TimedStorage-*` usage types (and optionally EFS/EBS usage types depending on configuration) with metric `UsageQuantity` to calculate total storage volume and hot tier distribution.
+The system queries Cost Explorer for `TimedStorage-*` usage types (and optionally EFS/EBS usage types depending on configuration) with metric `UsageQuantity` to calculate total storage volume and hot tier distribution. For MTD periods, the CE `UsageQuantity` for `TimedStorage-*` types reflects a prorated GB-Month value (proportional to the number of days elapsed in the month). When Storage Lens data is not available, the system scales the CE-derived GB-Month value to estimate actual average bytes stored by multiplying by `(days_in_month / mtd_days)`. This scaling is a fallback for MTD periods only; completed months use the standard GB-Month-to-bytes conversion. When Storage Lens data is available, it provides the actual total bytes stored and no scaling is required.
 Refs: URS-DP-10306, URS-DP-10307
 
 **[SRS-DP-420105] Categorize Usage Types**
@@ -705,3 +721,4 @@ Refs: URS-DP-10101
 | 0.21    | 2026-03-02 | —      | Redesign storage metric cards to always render exactly 3 cards: update SRS-DP-310207 (Cost/TB card now includes MoM DeltaIndicator); update SRS-DP-310208 (combined "Storage Volume" card shows total stored as primary + hot tier % with trend as secondary, always shown using CE-derived volume when Storage Lens not configured); supersede SRS-DP-310217 (standalone Total Stored card replaced by combined card in SRS-DP-310208) |
 | 0.22    | 2026-03-02 | —      | Remove Storage Lens enablement gate: update SRS-DP-420108 — Storage Lens enrichment now always runs on every pipeline execution (normal + backfill); `STORAGE_LENS_CONFIG_ID` / `storage_lens_config_id` are optional explicit-override hints, not enablement flags; auto-discovery runs when empty; graceful skip when no org-level config exists |
 | 0.23    | 2026-03-02 | —      | Exclude MTD from moving average: update SRS-DP-310215 — the 3-month moving average trend line must exclude the MTD partial month from its window to avoid artificially skewing the trend line downward; the MTD bar has no trend line value |
+| 0.24    | 2026-03-17 | —      | Add forecast feature and storage MTD fix: add SRS-DP-310221 (display forecasted month-end cost card in MTD view); add SRS-DP-310222 (forecast InfoTooltip explanation); update SRS-DP-310208 (storage MTD comparison uses prior partial period via `mtd_prior_partial_storage_cost_usd`); update SRS-DP-420104 (MTD CE storage volume scaling when Storage Lens unavailable) |

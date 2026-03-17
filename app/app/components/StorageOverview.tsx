@@ -8,6 +8,7 @@ interface StorageOverviewProps {
   metrics: StorageMetrics;
   storageConfig?: CostSummary["storage_config"];
   period: string;
+  isMtd?: boolean;
 }
 
 function buildStorageCostTooltip(
@@ -23,9 +24,15 @@ export function StorageOverview({
   metrics,
   storageConfig,
   period,
+  isMtd,
 }: StorageOverviewProps) {
   const totalBytes =
     metrics.storage_lens_total_bytes ?? metrics.total_volume_bytes;
+
+  const storageCostPrevious =
+    isMtd && metrics.mtd_prior_partial_storage_cost_usd != null
+      ? metrics.mtd_prior_partial_storage_cost_usd
+      : metrics.prev_month_cost_usd;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-stretch">
@@ -42,7 +49,7 @@ export function StorageOverview({
           secondary={
             <DeltaIndicator
               current={metrics.total_cost_usd}
-              previous={metrics.prev_month_cost_usd}
+              previous={storageCostPrevious}
             />
           }
         />

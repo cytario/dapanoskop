@@ -154,6 +154,33 @@ def _period_label(start: str) -> str:
     return start[:7]
 
 
+def get_cost_forecast(
+    ce_client: Any,
+    start: str,
+    end: str,
+) -> float | None:
+    """Call GetCostForecast to get remaining spend for the period.
+
+    Args:
+        start: Start date string "YYYY-MM-DD" (today — CE requires start >= today).
+        end: Exclusive end date string "YYYY-MM-DD" (first day of next month).
+
+    Returns:
+        Forecasted remaining cost as a float, or None on failure.
+        CE requires ~30 days of history; returns None if the API call fails.
+    """
+    try:
+        response = ce_client.get_cost_forecast(
+            TimePeriod={"Start": start, "End": end},
+            Metric="NET_AMORTIZED_COST",
+            Granularity="MONTHLY",
+        )
+        return float(response["Total"]["Amount"])
+    except Exception:
+        logger.warning("GetCostForecast failed (insufficient history?)", exc_info=True)
+        return None
+
+
 def get_cost_and_usage(
     ce_client: Any,
     start: str,
@@ -466,6 +493,24 @@ def collect(
                 ce_client, resolved_cc_name, partial_start, partial_end
             )
 
+    # Get cost forecast for MTD periods only.
+    # The forecast covers today → first-of-next-month (remaining days).
+    # CE requires Start >= today, so we use mtd_end (today) as the start.
+    forecast: float | None = None
+    if is_mtd and "current" in periods:
+        mtd_end_str = periods["current"][1]  # today (exclusive end of MTD window)
+        # End is the first day of the month after the current MTD month
+        mtd_start_str = periods["current"][0]
+        mtd_start_date = date.fromisoformat(mtd_start_str)
+        if mtd_start_date.month == 12:
+            month_end_exclusive = f"{mtd_start_date.year + 1:04d}-01-01"
+        else:
+            month_end_exclusive = (
+                f"{mtd_start_date.year:04d}-{mtd_start_date.month + 1:02d}-01"
+            )
+        forecast = get_cost_forecast(ce_client, mtd_end_str, month_end_exclusive)
+        logger.info("Cost forecast for remaining period: %s", forecast)
+
     return {
         "now": now,
         "is_mtd": is_mtd,
@@ -477,4 +522,5 @@ def collect(
         "split_charge_categories": split_charge_categories,
         "split_charge_rules": split_charge_rules,
         "allocated_costs": allocated_costs,
+        "forecast": forecast,
     }

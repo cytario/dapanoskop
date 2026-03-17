@@ -3,6 +3,9 @@ export interface Totals {
   prev_month_cost_usd: number;
   yoy_cost_usd: number;
   mtd_prior_partial_cost_usd?: number;
+  forecast_total_usd?: number;
+  forecast_month_end_delta_pct?: number;
+  prev_complete_total_usd?: number;
 }
 
 /** Matches SDS-DP-040002 summary.json schema */
@@ -62,6 +65,7 @@ export interface StorageMetrics {
   cost_per_tb_usd: number;
   prev_month_cost_per_tb_usd?: number;
   storage_lens_total_bytes?: number;
+  mtd_prior_partial_storage_cost_usd?: number;
 }
 
 export interface CostCenter {

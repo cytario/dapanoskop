@@ -182,6 +182,7 @@ export default function Home() {
               metrics={summary.storage_metrics}
               storageConfig={summary.storage_config}
               period={selectedPeriod}
+              isMtd={summary.is_mtd}
             />
 
             {/* Tagging Coverage */}

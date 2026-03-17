@@ -5,8 +5,8 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.29 (Draft)                               |
-| Date                | 2026-02-28                                 |
+| Version             | 0.34 (Draft)                               |
+| Date                | 2026-03-17                                 |
 
 ---
 
@@ -177,8 +177,8 @@ The Report Renderer fetches `{year}-{month}/summary.json` for the selected repor
 
 **MTD default selection**: After reading `index.json`, the Report Renderer identifies the default reporting period as the most recently completed month. The first entry in `index.json` (the current month) is the MTD period and is detected by inspecting the `is_mtd` field of its summary.json, or by comparing the period string to the current calendar month. The default period is set to the first entry in `index.json` whose `is_mtd` flag is `false` (i.e., the most recently completed month). The MTD period is selectable but not the default, consistent with SRS-DP-310501. When the MTD period is selected, the Report Renderer reads the `is_mtd` field from the fetched summary.json and passes it as a prop to layout components, which conditionally render the MTD indicator banner (SRS-DP-310219).
 
-**GlobalSummary data source**: The `GlobalSummary` component receives the `totals` object from the fetched summary.json as a prop and uses `totals.current_cost_usd`, `totals.prev_month_cost_usd`, `totals.yoy_cost_usd`, and (for MTD) `totals.mtd_prior_partial_cost_usd` to render the three global metric cards. It does not sum cost center values.
-Refs: SRS-DP-310201, SRS-DP-310211, SRS-DP-310219, SRS-DP-430102, SRS-DP-310501
+**GlobalSummary data source**: The `GlobalSummary` component receives the `totals` object from the fetched summary.json as a prop and uses `totals.current_cost_usd`, `totals.prev_month_cost_usd`, `totals.yoy_cost_usd`, and (for MTD) `totals.mtd_prior_partial_cost_usd` to render the three global metric cards. It does not sum cost center values. When `is_mtd` is `true` and `totals.forecast_total_usd` is present, the `GlobalSummary` component additionally renders a forecast card (SRS-DP-310221) alongside the standard three metric cards. The forecast card is conditionally rendered and never shown for completed months.
+Refs: SRS-DP-310201, SRS-DP-310211, SRS-DP-310219, SRS-DP-310221, SRS-DP-430102, SRS-DP-310501
 
 **[SDS-DP-010202] Render Cost Center Cards**
 The Report Renderer renders each cost center as an expandable card with summary (total, MoM, YoY, workload count, top mover) from summary.json. The cost center name is rendered as a `<Link to={/cost-center/${encodeURIComponent(name)}?period=${period}}>` component, navigating to the cost center detail page while preserving the current reporting period. The workload breakdown table is rendered within the expanded card.
@@ -195,7 +195,9 @@ Card 1 — "Storage Cost": displays total storage cost with MoM DeltaIndicator. 
 
 Card 2 — "Cost / TB": displays cost per terabyte with a MoM DeltaIndicator computed from `storage.cost_per_tb_usd` (current) and `storage.prev_month_cost_per_tb_usd` (prior month, newly added Lambda output field). Uses the same color-coded direction indicator as other delta cards.
 
-Card 3 — "Storage Volume": always rendered. Displays total storage volume as primary metric: uses `storage.storage_lens.total_bytes` when Storage Lens is configured, otherwise falls back to CE-derived `storage.total_volume_bytes`. Displays hot tier percentage as secondary information, with a MoM trend indicator computed from `storage.hot_tier_percentage` (current) and `storage.prev_month_hot_tier_percentage` (prior month, newly added Lambda output field). When Storage Lens is the data source, includes a timestamp. Rendered as a clickable `<Link to={/storage-detail?period=${period}}>` navigating to the storage tier breakdown detail page.
+Card 3 — "Storage Volume": always rendered. Displays total storage volume as primary metric: uses `storage.storage_lens.total_bytes` when Storage Lens is configured, otherwise falls back to CE-derived `storage.total_volume_bytes` (scaled for MTD via SDS-DP-020203). Displays hot tier percentage as secondary information, with a MoM trend indicator computed from `storage.hot_tier_percentage` (current) and `storage.prev_month_hot_tier_percentage` (prior month, newly added Lambda output field). When Storage Lens is the data source, includes a timestamp. Rendered as a clickable `<Link to={/storage-detail?period=${period}}>` navigating to the storage tier breakdown detail page.
+
+**Storage MTD comparison (Card 1)**: When `is_mtd` is `true` and `storage_metrics.mtd_prior_partial_storage_cost_usd` is present in summary.json, Card 1 ("Storage Cost") computes its MoM DeltaIndicator using `mtd_prior_partial_storage_cost_usd` as the comparison baseline instead of `storage_metrics.prev_month_cost_usd`. The `StorageOverview` component renders a comparison label (e.g., "vs. Feb 1–7") using the same `prior_partial_start` / `prior_partial_end_exclusive` date strings from the `mtd_comparison` object, consistent with how other like-for-like MTD annotations are labeled (SDS-DP-010221). When `mtd_prior_partial_storage_cost_usd` is absent (e.g., data written by an older pipeline version), Card 1 falls back to `storage_metrics.prev_month_cost_usd` for the comparison.
 Refs: SRS-DP-310206, SRS-DP-310207, SRS-DP-310208
 
 **[SDS-DP-010206] Query Parquet via DuckDB-wasm httpfs S3**
@@ -350,6 +352,17 @@ The Cost Collector computes the date range for the prior month's equivalent part
 The computed `(prior_month_start, prior_partial_end_exclusive)` pair is passed to `GetCostAndUsage` as `TimePeriod.Start` and `TimePeriod.End`. Both queries (workload/usage-type with `UnblendedCost`, and cost-center with `NetAmortizedCost`) use this same time range. The `_get_periods()` function includes the prior partial period alongside the other periods in its return value, clearly labeled (e.g., as `prev_month_partial`) so the processor can identify it for storage in the `mtd_comparison` summary.json field (SDS-DP-020211).
 Refs: SRS-DP-420110
 
+**[SDS-DP-020213] Query GetCostForecast for MTD Periods**
+During MTD runs only, the Cost Collector calls a `get_cost_forecast(ce_client, today_str, month_end_exclusive_str)` function that invokes the AWS Cost Explorer `GetCostForecast` API:
+
+- `TimePeriod.Start`: today's date (the forecast start must be today or in the future)
+- `TimePeriod.End`: first day of the following month (exclusive end — same end date as the MTD summary period)
+- `Metric`: `NET_AMORTIZED_COST`
+- `Granularity`: `MONTHLY`
+
+The function returns `Total.Amount` as a float representing the forecasted remaining spend for the current month from today through the end of the month. The call is wrapped in a `try/except`: if the CE API raises an exception (e.g., insufficient history — CE requires ≥30 days of prior data to generate a forecast), the function logs a warning and returns `None`. The `collect()` function calls `get_cost_forecast()` only when `is_mtd=True` and stores the result in the returned `collected` dict under key `"forecast"` (value is `None` when the API call fails). Completed-month runs do not call `get_cost_forecast()` and do not include a `"forecast"` key in the collected dict.
+Refs: SRS-DP-310221
+
 ##### 3.2.2 C-2.2: Data Processor & Writer
 
 **Purpose / Responsibility**: Processes raw Cost Explorer responses, categorizes usage types, computes aggregates (totals, storage metrics, comparisons), and writes structured JSON files to S3.
@@ -388,10 +401,20 @@ Refs: SRS-DP-420103, SRS-DP-420107
 
 **[SDS-DP-020203] Compute Storage Volume and Hot Tier Metrics**
 The Data Processor computes total storage volume from S3 `TimedStorage-*` usage quantities and calculates the hot tier percentage as: `(TimedStorage-ByteHrs + TimedStorage-INT-FA-ByteHrs) / total TimedStorage-*-ByteHrs`. Usage type matching uses substring checks (`in` for storage volume, `endswith` for hot tier) rather than exact match or prefix match, because AWS Cost Explorer returns usage types with region prefixes (e.g. `USE1-TimedStorage-ByteHrs`, `EUW1-TimedStorage-INT-FA-ByteHrs`). EFS/EBS types are checked first (via `EFS:` / `EBS:` substring) to prevent false matches when EFS types contain "TimedStorage" in their name (e.g. `EFS:TimedStorage-ByteHrs`). When configured, EFS and EBS storage usage types are included in the totals. **AWS Cost Explorer returns `UsageQuantity` for TimedStorage-* in GB-hours, not byte-hours.** The processor converts GB-hours to average bytes stored by multiplying by 1,000,000,000 (bytes per GB) and then dividing by the number of hours in the reporting month. The processor uses decimal terabytes (TB = 10^12 bytes) for all volume conversions, consistent with AWS Cost Explorer and billing practices. Note: Prior to v1.5.0, the constant `_BYTES_PER_TB` incorrectly used tebibytes (TiB = 2^40 = 1,099,511,627,776) instead of terabytes, causing a ~10% overstatement in cost per TB values. This was corrected to 1,000,000,000,000 (10^12). Prior to v1.6.0, the processor incorrectly treated GB-hours as byte-hours, producing storage volumes ~1 billion times too large and cost-per-TB values ~1 billion times too small.
+
+**MTD volume scaling (Storage Lens unavailable)**: For MTD periods, the CE `UsageQuantity` for `TimedStorage-*` types represents a GB-Month value prorated to the number of days elapsed in the current month. When Storage Lens data is not available, the `_compute_storage_metrics()` function scales this value to estimate the actual average bytes stored using:
+
+```
+actual_bytes = total_gb_months * BYTES_PER_GB * (days_in_month / mtd_days)
+```
+
+where `mtd_days` = number of days elapsed in the current MTD window and `days_in_month` = total days in the current calendar month. This scaling is applied when `is_mtd=True` and Storage Lens data is absent (the Storage Lens enrichment in the handler (SDS-DP-020204) applies the same scaling to the prior partial period storage rows for consistency). When Storage Lens data is present, the `storage_lens_total_bytes` value is used directly for the total volume, and no scaling is applied (Storage Lens reports the actual instantaneous volume, not a billing-prorated figure). This scaling does NOT apply to completed months.
 Refs: SRS-DP-420104
 
 **[SDS-DP-020204] Write Summary JSON with Storage Lens Data and MTD Comparison**
 The Data Processor writes `{year}-{month}/summary.json` containing pre-computed aggregates for the 1-page report: a `totals` object (see below), cost center totals (current, prev month, YoY), workload breakdown per cost center (sorted by cost descending, with MoM/YoY), storage metrics (total cost, cost/TB, hot tier %), a `collected_at` ISO 8601 timestamp, and optionally a `storage_lens` object containing organization-wide storage data from C-2.3 when Storage Lens integration is configured. The `storage_lens` object includes: `total_bytes` and `storage_lens_date` (timestamp from CloudWatch metric). Cost centers with `is_split_charge: true` are included in the `cost_centers` array but excluded from global summary calculations.
+
+**Storage MTD comparison**: When `is_mtd=True`, `_compute_storage_metrics()` is called with storage usage rows from the `prev_month_partial` period (SDS-DP-020210) instead of the full `prev_month` period for computing the `prev_month_cost_usd` comparison field. This ensures the storage cost DeltaIndicator on the "Storage Cost" card compares the current MTD storage cost against the equivalent prior partial period, consistent with the like-for-like approach for global and cost-center comparisons (SRS-DP-310220). The resulting storage metrics also include `mtd_prior_partial_storage_cost_usd` (the prior partial period's total storage cost in USD) so the frontend can display the appropriate comparison label (e.g., "vs. Feb 1–7"). For completed months, the full prior month's storage rows continue to be used for the comparison.
 
 The processor computes the `totals` object by summing `UnblendedCost` workload-level data across all cost centers for each period, independent of cost category allocation and split charge rules: `totals.current_cost_usd` = sum of all workload costs for `current`; `totals.prev_month_cost_usd` = sum for `prev_month`; `totals.yoy_cost_usd` = sum for `yoy`. When `is_mtd` is `true`, `totals.mtd_prior_partial_cost_usd` = sum of all workload costs for the prior partial period (SDS-DP-020210); otherwise it is `null`. This computation uses the workload-level `UnblendedCost` data already collected by C-2.1 — no additional AWS API calls are required.
 
@@ -425,6 +448,16 @@ Refs: SRS-DP-420110, SRS-DP-310220
 **[SDS-DP-020212] Guard Against Empty CE Response Before Writing**
 Before invoking `process()` and `write_to_s3()` for any period, the Lambda handler (both backfill and daily modes) inspects the raw Cost Explorer response returned by `collect()`. Specifically, it checks whether `raw_data["current"]["ResultsByTime"][0]["Groups"]` is empty (i.e., the CE API returned a valid response with zero cost groups for the primary period). If the list is empty, the handler skips processing and writing for that period. In backfill mode the skipped month is added to the `skipped` list in the multi-status response. In daily mode the empty-response condition is logged as a warning and the run exits without writing. This guard is evaluated after the existing `DataUnavailableException` catch — a CE exception continues to be caught and treated as a skip with a log entry, while an empty response (no exception, zero groups) is now also treated as a skip rather than proceeding to write a zero-cost summary.json that would overwrite valid historical data.
 Refs: SRS-DP-420111
+
+**[SDS-DP-020214] Compute Forecast Fields for MTD Summary**
+When `is_mtd=True` and the collected dict contains a non-None `"forecast"` value (the CE `GetCostForecast` remainder amount — see SDS-DP-020213), the Data Processor computes three additional fields and adds them to the `totals` object in summary.json:
+
+- `forecast_total_usd`: `totals.current_cost_usd` + `collected["forecast"]` — the projected full-month total combining actual MTD spend with the forecasted remaining spend.
+- `forecast_month_end_delta_pct`: percentage change of `forecast_total_usd` relative to `prev_complete_total_usd` — `(forecast_total_usd − prev_complete_total_usd) / prev_complete_total_usd × 100`. If `prev_complete_total_usd` is zero, this field is omitted.
+- `prev_complete_total_usd`: the sum of all workload `UnblendedCost` values for the most recently completed calendar month (`prev_complete` period in the collected dict), used as the comparison baseline for the forecast delta. This value is computed from `raw_data["prev_complete"]` workload rows.
+
+When `is_mtd=False` or the forecast value is `None`, these three fields are omitted entirely from `totals` (not set to null). Completed-month summary.json files never contain forecast fields.
+Refs: SRS-DP-310221
 
 ##### 3.2.3 C-2.3: Storage Lens Reader
 
@@ -599,6 +632,10 @@ The `is_mtd` field indicates whether the reporting period is the current in-prog
 
 The `totals` object contains pre-computed global cost figures derived from raw workload costs across all cost centers. These values are computed from `UnblendedCost` workload-level data, summing all workloads regardless of cost category assignment, split charge rules, or cost center name changes. This makes the global dashboard figures (Total Spend, MoM delta, YoY delta) stable and self-consistent: `current_cost_usd` is the sum of all workload costs for the current period; `prev_month_cost_usd` is the sum for the previous month; `yoy_cost_usd` is the sum for the year-ago equivalent period; `mtd_prior_partial_cost_usd` is the sum for the prior month's equivalent partial period (populated only when `is_mtd` is `true`, otherwise `null`). The `GlobalSummary` component reads exclusively from this object for its three metric cards — it does not sum cost center values.
 
+When `is_mtd` is `true` and forecast data is available (SDS-DP-020213/020214), the `totals` object additionally contains: `forecast_total_usd` — the projected full-month cost (actual MTD spend + CE forecast remainder); `forecast_month_end_delta_pct` — the percentage change of `forecast_total_usd` versus `prev_complete_total_usd`; and `prev_complete_total_usd` — the sum of all workload costs for the most recently completed calendar month, used as the comparison baseline. These three fields are omitted entirely (not null) when `is_mtd` is `false` or when the CE `GetCostForecast` API call fails. The `GlobalSummary` component renders a forecast card (SRS-DP-310221) when these fields are present.
+
+The `storage_metrics.mtd_prior_partial_storage_cost_usd` field is populated only when `is_mtd` is `true`. It contains the total storage cost for the equivalent prior partial period (same date range as `mtd_comparison`), enabling the `StorageOverview` component to compute a like-for-like MoM DeltaIndicator on the Storage Cost card (SDS-DP-010204). The field is omitted for completed months.
+
 The `mtd_comparison` field is present only when `is_mtd` is `true`. It contains pre-computed cost center and workload totals for the prior month's equivalent partial period (same number of days into the prior month as the MTD window covers in the current month), enabling the SPA to render like-for-like change annotations without additional API calls. The `prior_partial_start` and `prior_partial_end_exclusive` fields (ISO 8601 date strings) record the exact date range queried so the SPA can construct human-readable comparison labels.
 
 ```json
@@ -615,12 +652,16 @@ The `mtd_comparison` field is present only when `is_mtd` is `true`. It contains 
     "current_cost_usd": 16500.00,
     "prev_month_cost_usd": 15200.00,
     "yoy_cost_usd": 12000.00,
-    "mtd_prior_partial_cost_usd": 3350.00
+    "mtd_prior_partial_cost_usd": 3350.00,
+    "forecast_total_usd": 28500.00,
+    "forecast_month_end_delta_pct": 7.2,
+    "prev_complete_total_usd": 26590.00
   },
   "storage_config": { "include_efs": true, "include_ebs": false },
   "storage_metrics": {
     "total_cost_usd": 1234.56,
     "prev_month_cost_usd": 1084.56,
+    "mtd_prior_partial_storage_cost_usd": 287.45,
     "total_volume_bytes": 5497558138880,
     "hot_tier_percentage": 62.3,
     "cost_per_tb_usd": 23.45
@@ -1401,3 +1442,5 @@ How should Dapanoskop obtain actual storage volume data (in bytes) to supplement
 | 0.30    | 2026-03-02 | —      | Redesign storage metric cards to always exactly 3 cards: update SDS-DP-010204 (StorageOverview always renders 3 cards — Storage Cost, Cost/TB with MoM DeltaIndicator, and combined Storage Volume card with total stored + hot tier % + hot tier trend; Cost/TB delta reads `prev_month_cost_per_tb_usd`; hot tier trend reads `prev_month_hot_tier_percentage`; Storage Volume card replaces separate Total Stored and Hot Tier cards); update SDS-DP-010220 (Storage Tier Breakdown route accessed from "Storage Volume" card, not "Total Stored" card) |
 | 0.31    | 2026-03-02 | —      | Remove Storage Lens env-var gate: update C-2.3 (SDS-DP-020301) Inbound interface — Storage Lens Reader is now invoked unconditionally on every Lambda execution (normal + backfill); `STORAGE_LENS_CONFIG_ID` is an optional hint, not an enablement gate; update Variability — the component always runs and gracefully skips when no org-level config is found |
 | 0.32    | 2026-03-02 | —      | Exclude MTD from moving average: update SDS-DP-010208 — `computeMovingAverage` receives `null` for the MTD data point so the window slides over completed months only; the MTD bar's own moving average output is `null` (no trend line point rendered); first two non-MTD points also have `null` values (insufficient window) |
+| 0.33    | 2026-03-17 | —      | Add GetCostForecast API integration: add SDS-DP-020213 (Cost Collector calls `GetCostForecast` for MTD periods only, with try/except returning None on failure); add SDS-DP-020214 (processor computes `forecast_total_usd`, `forecast_month_end_delta_pct`, `prev_complete_total_usd` in `totals` when forecast data present); update SDS-DP-040002 summary.json schema (add three forecast fields to `totals`, present only in MTD periods when forecast succeeds); update SDS-DP-010201 (GlobalSummary conditionally renders forecast card when fields present) |
+| 0.34    | 2026-03-17 | —      | Storage MTD comparison fix: update SDS-DP-020203 (MTD volume scaling — when Storage Lens unavailable and is_mtd=True, scale CE GB-Month value by days_in_month/mtd_days to estimate actual bytes stored); update SDS-DP-020204 (storage MTD comparison — call `_compute_storage_metrics()` with `prev_month_partial` rows instead of `prev_month` rows when is_mtd=True; output `mtd_prior_partial_storage_cost_usd` in storage_metrics); update SDS-DP-040002 schema (add `storage_metrics.mtd_prior_partial_storage_cost_usd`, present only for MTD periods); update SDS-DP-010204 (StorageOverview reads `mtd_prior_partial_storage_cost_usd` for Card 1 MoM delta when is_mtd=True, with graceful fallback) |

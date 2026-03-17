@@ -1,6 +1,7 @@
 import { MetricCard, DeltaIndicator } from "@cytario/design";
 import type { CostSummary, MtdComparison } from "~/types/cost-data";
 import { formatUsd, formatPartialPeriodLabel } from "~/lib/format";
+import { InfoTooltip } from "./InfoTooltip";
 
 interface GlobalSummaryProps {
   summary: CostSummary;
@@ -41,24 +42,43 @@ export function GlobalSummary({
         label={momLabel}
         value={<DeltaIndicator current={totalCurrent} previous={momPrevious} />}
       />
-      <MetricCard
-        className="h-full"
-        label="vs Last Year"
-        value={
-          isMtd ? (
-            <DeltaIndicator
-              current={0}
-              previous={0}
-              unavailable
-              unavailableText="N/A (MTD)"
-            />
-          ) : totalYoy != null ? (
-            <DeltaIndicator current={totalCurrent} previous={totalYoy} />
-          ) : (
-            <DeltaIndicator current={0} previous={0} unavailable />
-          )
-        }
-      />
+      {isMtd ? (
+        <MetricCard
+          className="h-full"
+          label={
+            <>
+              Forecast Month End{" "}
+              <InfoTooltip text="Forecasted month-end total based on AWS Cost Explorer's ML-based forecast model. Compares the projected total against the previous completed month." />
+            </>
+          }
+          value={
+            totals.forecast_total_usd != null
+              ? formatUsd(totals.forecast_total_usd)
+              : "Forecast unavailable"
+          }
+          secondary={
+            totals.forecast_total_usd != null &&
+            totals.prev_complete_total_usd != null ? (
+              <DeltaIndicator
+                current={totals.forecast_total_usd}
+                previous={totals.prev_complete_total_usd}
+              />
+            ) : undefined
+          }
+        />
+      ) : (
+        <MetricCard
+          className="h-full"
+          label="vs Last Year"
+          value={
+            totalYoy != null ? (
+              <DeltaIndicator current={totalCurrent} previous={totalYoy} />
+            ) : (
+              <DeltaIndicator current={0} previous={0} unavailable />
+            )
+          }
+        />
+      )}
     </div>
   );
 }

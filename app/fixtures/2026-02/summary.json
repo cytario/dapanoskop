@@ -11,7 +11,10 @@
     "current_cost_usd": 22200.0,
     "prev_month_cost_usd": 22200.0,
     "yoy_cost_usd": 17750.0,
-    "mtd_prior_partial_cost_usd": 20800.0
+    "mtd_prior_partial_cost_usd": 20800.0,
+    "forecast_total_usd": 28500.0,
+    "forecast_month_end_delta_pct": 7.2,
+    "prev_complete_total_usd": 26590.0
   },
   "storage_config": {
     "include_efs": false,
@@ -19,13 +22,14 @@
   },
   "storage_metrics": {
     "total_cost_usd": 3900.0,
-    "prev_month_cost_usd": 4200.0,
+    "prev_month_cost_usd": 3800.0,
     "total_volume_bytes": 182000000000000,
     "hot_tier_percentage": 61.8,
-    "prev_month_hot_tier_percentage": 62.3,
+    "prev_month_hot_tier_percentage": 61.2,
     "cost_per_tb_usd": 21.43,
-    "prev_month_cost_per_tb_usd": 23.33,
-    "prev_month_total_volume_bytes": 180000000000000
+    "prev_month_cost_per_tb_usd": 20.88,
+    "prev_month_total_volume_bytes": 182000000000000,
+    "mtd_prior_partial_storage_cost_usd": 3800.0
   },
   "cost_centers": [
     {

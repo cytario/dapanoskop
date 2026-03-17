@@ -15,6 +15,7 @@ from dapanoskop.collector import (
     get_allocated_costs_by_category,
     get_cost_and_usage,
     get_cost_categories,
+    get_cost_forecast,
     get_split_charge_categories,
 )
 
@@ -982,3 +983,90 @@ def test_collect_auto_discovers_category_name() -> None:
 
     # cc_mapping should also reflect the auto-discovered category
     assert result["cc_mapping"] == {"api": "Platform"}
+
+
+def test_get_cost_forecast_returns_amount_on_success() -> None:
+    """Test that get_cost_forecast returns forecasted amount when CE API succeeds."""
+    mock_client = MagicMock()
+    mock_client.get_cost_forecast.return_value = {
+        "Total": {"Amount": "4500.50", "Unit": "USD"},
+        "ForecastResultsByTime": [],
+    }
+
+    result = get_cost_forecast(mock_client, "2026-03-10", "2026-04-01")
+
+    assert result == 4500.50
+    # Verify correct API call
+    call_kwargs = mock_client.get_cost_forecast.call_args[1]
+    assert call_kwargs["TimePeriod"] == {"Start": "2026-03-10", "End": "2026-04-01"}
+    assert call_kwargs["Metric"] == "NET_AMORTIZED_COST"
+    assert call_kwargs["Granularity"] == "MONTHLY"
+
+
+def test_get_cost_forecast_returns_none_on_exception() -> None:
+    """Test that get_cost_forecast returns None when CE API raises an exception.
+
+    This happens when the account has less than ~30 days of history or
+    the API is otherwise unavailable (e.g. DataUnavailableException).
+    """
+    mock_client = MagicMock()
+    mock_client.get_cost_forecast.side_effect = RuntimeError(
+        "DataUnavailableException: Insufficient history"
+    )
+
+    result = get_cost_forecast(mock_client, "2026-03-10", "2026-04-01")
+
+    assert result is None
+
+
+def test_collect_includes_forecast_for_mtd_runs() -> None:
+    """Test that collect() includes forecast key only for MTD runs (not backfill)."""
+    from unittest.mock import patch
+
+    mock_ce_client = MagicMock()
+    empty_period = {"ResultsByTime": [{"Groups": []}]}
+
+    # All get_cost_and_usage calls return empty
+    mock_ce_client.get_cost_and_usage.return_value = empty_period
+    mock_ce_client.get_cost_categories.return_value = {"CostCategoryNames": []}
+    mock_ce_client.list_cost_category_definitions.return_value = {
+        "CostCategoryReferences": []
+    }
+    # GetCostForecast returns a value
+    mock_ce_client.get_cost_forecast.return_value = {
+        "Total": {"Amount": "3000.0", "Unit": "USD"},
+    }
+
+    with patch("boto3.client", return_value=mock_ce_client):
+        result = collect(cost_category_name="")
+
+    # MTD run should include forecast
+    assert result["is_mtd"] is True
+    assert result["forecast"] == 3000.0
+
+
+def test_collect_backfill_excludes_forecast() -> None:
+    """Test that collect() does NOT call GetCostForecast for backfill runs."""
+    from unittest.mock import patch
+
+    mock_ce_client = MagicMock()
+    empty_period = {"ResultsByTime": [{"Groups": []}]}
+
+    mock_ce_client.get_cost_and_usage.return_value = empty_period
+    mock_ce_client.get_cost_categories.return_value = {"CostCategoryNames": []}
+    mock_ce_client.list_cost_category_definitions.return_value = {
+        "CostCategoryReferences": []
+    }
+
+    with patch("boto3.client", return_value=mock_ce_client):
+        result = collect(
+            cost_category_name="",
+            target_year=2025,
+            target_month=6,
+        )
+
+    # Backfill should not include forecast
+    assert result["is_mtd"] is False
+    assert result["forecast"] is None
+    # GetCostForecast should not have been called
+    mock_ce_client.get_cost_forecast.assert_not_called()
