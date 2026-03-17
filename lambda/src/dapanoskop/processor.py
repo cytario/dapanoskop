@@ -117,8 +117,11 @@ def _compute_storage_metrics(
 
     # MTD volume scaling: CE reports prorated GB-Months for partial month windows.
     # Scale up to full-month equivalent: actual_bytes ≈ gb_months * (days_in_month / mtd_days).
-    # Both current and (when prev_is_partial) prev volumes get the same scale factor.
+    # The prev partial covers the same number of elapsed days but in the *prior* month,
+    # which may have a different total number of days (e.g. Feb=28 vs Mar=31), so the
+    # prev scale factor must use the prior month's days-in-month.
     volume_scale = 1.0
+    prev_volume_scale = 1.0
     if mtd_period is not None:
         mtd_start_date = date.fromisoformat(mtd_period[0])
         mtd_end_date = date.fromisoformat(mtd_period[1])
@@ -128,6 +131,17 @@ def _compute_storage_metrics(
         ]
         if mtd_days > 0:
             volume_scale = days_in_month / mtd_days
+            if prev_is_partial:
+                # Prior month's days-in-month for correct scaling
+                if mtd_start_date.month == 1:
+                    prev_month_days = calendar.monthrange(mtd_start_date.year - 1, 12)[
+                        1
+                    ]
+                else:
+                    prev_month_days = calendar.monthrange(
+                        mtd_start_date.year, mtd_start_date.month - 1
+                    )[1]
+                prev_volume_scale = prev_month_days / mtd_days
 
     # Convert GB-Months to bytes: GB-Months × 2^30 bytes/GiB = average bytes stored (binary)
     # Apply MTD volume scale when requested.
@@ -136,8 +150,6 @@ def _compute_storage_metrics(
     )
     cost_per_tb = total_cost / (total_bytes / _BYTES_PER_TB) if total_bytes else 0
     hot_pct = (hot_gb_months / total_gb_months * 100) if total_gb_months else 0
-
-    prev_volume_scale = volume_scale if prev_is_partial else 1.0
     prev_total_bytes = (
         prev_total_gb_months * _BYTES_PER_GB * prev_volume_scale
         if prev_total_gb_months

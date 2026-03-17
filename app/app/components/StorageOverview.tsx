@@ -87,7 +87,7 @@ export function StorageOverview({
               {metrics.prev_month_total_volume_bytes != null && (
                 <span className="ml-2 align-baseline">
                   <DeltaIndicator
-                    current={metrics.total_volume_bytes}
+                    current={totalBytes}
                     previous={metrics.prev_month_total_volume_bytes}
                     format="percentage"
                   />
