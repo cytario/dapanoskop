@@ -12,8 +12,8 @@
     "typecheck": "react-router typegen && tsc"
   },
   "dependencies": {
-    "@aws-sdk/client-cognito-identity": "^3.989.0",
-    "@aws-sdk/client-s3": "^3.989.0",
+    "@aws-sdk/client-cognito-identity": "^3.997.0",
+    "@aws-sdk/client-s3": "^3.997.0",
     "@cytario/design": "^1.13.1",
     "@duckdb/duckdb-wasm": "^1.33.1-dev18.0",
     "@react-router/node": "7.12.0",
@@ -32,7 +32,7 @@
     "@tailwindcss/vite": "^4.1.18",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
-    "@types/node": "^22",
+    "@types/node": "^25.3.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.4",
@@ -45,7 +45,7 @@
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.55.0",
     "vite": "^7.1.7",
-    "vite-tsconfig-paths": "^5.1.4",
+    "vite-tsconfig-paths": "^6.1.0",
     "vitest": "^4.0.18"
   }
 }
