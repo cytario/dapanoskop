@@ -159,14 +159,15 @@ def get_cost_forecast(
     start: str,
     end: str,
 ) -> float | None:
-    """Call GetCostForecast to get remaining spend for the period.
+    """Call GetCostForecast to get the full month-end cost projection.
 
     Args:
         start: Start date string "YYYY-MM-DD" (today — CE requires start >= today).
         end: Exclusive end date string "YYYY-MM-DD" (first day of next month).
 
     Returns:
-        Forecasted remaining cost as a float, or None on failure.
+        Forecasted total month-end cost as a float, or None on failure.
+        MONTHLY granularity returns the full month projection (not just remaining days).
         CE requires ~30 days of history; returns None if the API call fails.
     """
     try:

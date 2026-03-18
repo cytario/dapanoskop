@@ -357,7 +357,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             else:
                 forecast = collected.get("forecast")
                 logger.info(
-                    "Processing MTD period data (forecast=%s)",
+                    "Processing MTD period data (forecast_month_end=%s)",
                     forecast,
                 )
                 processed_mtd = process(

@@ -696,14 +696,15 @@ def process(
         totals["mtd_prior_partial_cost_usd"] = round(sum(partial_costs.values()), 2)
 
     # For MTD periods, add forecast data when available.
-    # forecast_total_usd = current MTD spend + forecasted remaining spend.
+    # forecast_total_usd = full month-end cost projection from GetCostForecast.
+    # The MONTHLY granularity API already returns the full month projection, not
+    # just the remaining days — so we use the value directly without adding MTD.
     # forecast_month_end_delta_pct = % change vs previous completed month total.
     # prev_complete_total_usd = previous completed month total (for reference).
     if is_mtd:
-        forecast_remaining: float | None = collected.get("forecast")
-        if forecast_remaining is not None:
-            current_mtd = totals["current_cost_usd"]
-            forecast_total = current_mtd + forecast_remaining
+        forecast_amount: float | None = collected.get("forecast")
+        if forecast_amount is not None:
+            forecast_total = forecast_amount
 
             # Compute prev_complete total from raw_data if present
             prev_complete_groups = raw_data.get("prev_complete", [])

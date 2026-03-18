@@ -1840,16 +1840,16 @@ def test_process_mtd_includes_forecast_fields_when_forecast_present() -> None:
             _make_group("web-app", "BoxUsage:m5.xlarge", 250, 60),
         ],
     )
-    collected["forecast"] = 1200.0  # remaining spend forecast
+    collected["forecast"] = 1200.0  # full month-end forecast from GetCostForecast
 
     result = process(collected, is_mtd=True)
     totals = result["summary"]["totals"]
 
-    # forecast_total_usd = current MTD ($800) + forecast remaining ($1200)
-    assert totals["forecast_total_usd"] == 2000.0
+    # forecast_total_usd = API's full month projection ($1200), not MTD + remaining
+    assert totals["forecast_total_usd"] == 1200.0
 
-    # forecast_month_end_delta_pct = (2000 / 2000 - 1) * 100 = 0.0%
-    assert totals["forecast_month_end_delta_pct"] == 0.0
+    # forecast_month_end_delta_pct = (1200 / 2000 - 1) * 100 = -40.0%
+    assert totals["forecast_month_end_delta_pct"] == -40.0
 
     # prev_complete_total_usd = $2000
     assert totals["prev_complete_total_usd"] == 2000.0
@@ -1920,7 +1920,7 @@ def test_process_mtd_forecast_delta_pct_with_growth() -> None:
         yoy_groups=[],
         prev_month_partial_groups=[],
     )
-    collected["forecast"] = 700.0  # remaining spend → total = 800 + 700 = 1500
+    collected["forecast"] = 1500.0  # full month-end forecast → total = $1500
 
     result = process(collected, is_mtd=True)
     totals = result["summary"]["totals"]
