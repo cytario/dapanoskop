@@ -355,7 +355,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     "Skipping MTD period (no cost data returned by Cost Explorer)"
                 )
             else:
-                logger.info("Processing MTD period data")
+                forecast = collected.get("forecast")
+                logger.info(
+                    "Processing MTD period data (forecast=%s)",
+                    forecast,
+                )
                 processed_mtd = process(
                     collected,
                     include_efs=include_efs,
