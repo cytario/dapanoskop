@@ -1070,3 +1070,152 @@ def test_collect_backfill_excludes_forecast() -> None:
     assert result["forecast"] is None
     # GetCostForecast should not have been called
     mock_ce_client.get_cost_forecast.assert_not_called()
+
+
+# --- P1: get_split_charge_categories error paths ---
+
+
+def test_get_split_charge_categories_list_exception_returns_empty() -> None:
+    """list_cost_category_definitions exception → returns ([], [])."""
+    mock_client = MagicMock()
+    mock_client.list_cost_category_definitions.side_effect = RuntimeError(
+        "AccessDenied"
+    )
+
+    sources, rules = get_split_charge_categories(mock_client, "CostCenter")
+
+    assert sources == []
+    assert rules == []
+
+
+def test_get_split_charge_categories_describe_exception_returns_empty() -> None:
+    """describe_cost_category_definition exception → returns ([], [])."""
+    mock_client = MagicMock()
+    mock_client.list_cost_category_definitions.return_value = {
+        "CostCategoryReferences": [
+            {
+                "Name": "CostCenter",
+                "CostCategoryArn": "arn:aws:ce::123456789012:costcategory/abc-123",
+            }
+        ]
+    }
+    mock_client.describe_cost_category_definition.side_effect = RuntimeError(
+        "ThrottlingException"
+    )
+
+    sources, rules = get_split_charge_categories(mock_client, "CostCenter")
+
+    assert sources == []
+    assert rules == []
+
+
+def test_get_split_charge_categories_name_not_found_returns_empty() -> None:
+    """CostCategoryReferences exists but none match requested name → ([], [])."""
+    mock_client = MagicMock()
+    mock_client.list_cost_category_definitions.return_value = {
+        "CostCategoryReferences": [
+            {
+                "Name": "OtherCategory",
+                "CostCategoryArn": "arn:aws:ce::123456789012:costcategory/other",
+            }
+        ]
+    }
+
+    sources, rules = get_split_charge_categories(mock_client, "CostCenter")
+
+    assert sources == []
+    assert rules == []
+    # describe should not have been called since ARN was never found
+    mock_client.describe_cost_category_definition.assert_not_called()
+
+
+def test_get_split_charge_categories_paginated_arn_discovery() -> None:
+    """ARN is on the second page of list_cost_category_definitions results."""
+    mock_client = MagicMock()
+    mock_client.list_cost_category_definitions.side_effect = [
+        # First page: doesn't contain the target, but has NextToken
+        {
+            "CostCategoryReferences": [
+                {
+                    "Name": "OtherCategory",
+                    "CostCategoryArn": "arn:aws:ce::123456789012:costcategory/other",
+                }
+            ],
+            "NextToken": "page2token",
+        },
+        # Second page: contains the target
+        {
+            "CostCategoryReferences": [
+                {
+                    "Name": "CostCenter",
+                    "CostCategoryArn": "arn:aws:ce::123456789012:costcategory/abc-456",
+                }
+            ]
+        },
+    ]
+    mock_client.describe_cost_category_definition.return_value = {
+        "CostCategory": {
+            "Name": "CostCenter",
+            "SplitChargeRules": [
+                {
+                    "Source": "Shared",
+                    "Targets": ["Eng"],
+                    "Method": "PROPORTIONAL",
+                }
+            ],
+        }
+    }
+
+    sources, rules = get_split_charge_categories(mock_client, "CostCenter")
+
+    assert sources == ["Shared"]
+    assert len(rules) == 1
+    # Verify the second page was fetched with the NextToken
+    second_call = mock_client.list_cost_category_definitions.call_args_list[1]
+    assert second_call[1].get("NextToken") == "page2token"
+
+
+# --- December edge case: forecast end date wraps to next year ---
+
+
+def test_collect_december_mtd_forecast_wraps_year() -> None:
+    """In December, forecast end date must be 2026-01-01 (next year), not 2025-13-01.
+
+    collector.py:507 computes the month_end_exclusive date from mtd_start_date.
+    When mtd_start_date.month == 12, the end must roll over to Jan of next year.
+    """
+    from unittest.mock import patch
+
+    mock_ce_client = MagicMock()
+    empty_period = {"ResultsByTime": [{"Groups": []}]}
+
+    mock_ce_client.get_cost_and_usage.return_value = empty_period
+    mock_ce_client.get_cost_categories.return_value = {"CostCategoryNames": []}
+    mock_ce_client.list_cost_category_definitions.return_value = {
+        "CostCategoryReferences": []
+    }
+    mock_ce_client.get_cost_forecast.return_value = {
+        "Total": {"Amount": "5000.0", "Unit": "USD"},
+    }
+
+    # Freeze datetime to a date in December
+    frozen = datetime(2025, 12, 15, 12, 0, 0, tzinfo=timezone.utc)
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return frozen
+
+    with patch("boto3.client", return_value=mock_ce_client):
+        with patch("dapanoskop.collector.datetime", FrozenDatetime):
+            result = collect(cost_category_name="")
+
+    # Forecast should have been retrieved
+    assert result["forecast"] == 5000.0
+
+    # Verify the forecast call used end=2026-01-01 (not 2025-13-01)
+    forecast_call = mock_ce_client.get_cost_forecast.call_args[1]
+    assert forecast_call["TimePeriod"]["End"] == "2026-01-01", (
+        "December forecast must wrap year: expected 2026-01-01"
+    )
+    assert forecast_call["TimePeriod"]["Start"] == "2025-12-15"

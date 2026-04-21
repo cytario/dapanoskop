@@ -1297,3 +1297,24 @@ def test_handler_normal_mode_skips_empty_mtd(
     assert not any(k.startswith("2026-02/summary") for k in keys)
     # prev_complete should still be written
     assert "2026-01/summary.json" in keys
+
+
+# --- P3: handler._month_exists_in_s3 exception path ---
+
+
+def test_month_exists_s3_client_error_returns_false() -> None:
+    """_month_exists_in_s3 returns False (not raises) when list_objects_v2 raises."""
+    from unittest.mock import MagicMock
+
+    from botocore.exceptions import ClientError
+
+    from dapanoskop.handler import _month_exists_in_s3
+
+    mock_s3 = MagicMock()
+    mock_s3.list_objects_v2.side_effect = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": "Denied"}},
+        "ListObjectsV2",
+    )
+
+    result = _month_exists_in_s3(mock_s3, "my-bucket", 2026, 1)
+    assert result is False
