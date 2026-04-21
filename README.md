@@ -2,8 +2,8 @@
 [![Release](https://github.com/cytario/dapanoskop/actions/workflows/release.yml/badge.svg)](https://github.com/cytario/dapanoskop/actions/workflows/release.yml)
 [![GitHub release](https://img.shields.io/github/v/release/cytario/dapanoskop)](https://github.com/cytario/dapanoskop/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-![Frontend Tests](https://img.shields.io/badge/frontend_tests-71-blue)
-![Python Tests](https://img.shields.io/badge/python_tests-61-blue)
+![Frontend Tests](https://img.shields.io/badge/frontend_tests-175-blue)
+![Python Tests](https://img.shields.io/badge/python_tests-116-blue)
 ![Python Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)
 
 # Dapanoskop
@@ -48,9 +48,9 @@ The module creates and manages a Cognito User Pool for you:
 
 ```hcl
 module "dapanoskop" {
-  source = "git::https://github.com/cytario/dapanoskop.git//terraform?ref=v1.3.0"
+  source = "git::https://github.com/cytario/dapanoskop.git//terraform?ref=v3.1.0"
 
-  release_version       = "v1.3.0"
+  release_version       = "v3.1.0"
   cognito_domain_prefix = "dapanoskop-myorg"
 }
 ```
@@ -73,9 +73,9 @@ If you already have a Cognito User Pool:
 
 ```hcl
 module "dapanoskop" {
-  source = "git::https://github.com/cytario/dapanoskop.git//terraform?ref=v1.3.0"
+  source = "git::https://github.com/cytario/dapanoskop.git//terraform?ref=v3.1.0"
 
-  release_version      = "v1.3.0"
+  release_version      = "v3.1.0"
   cognito_user_pool_id = "eu-west-1_XXXXXXX"
   cognito_domain       = "https://auth.example.com"
 }
@@ -87,9 +87,9 @@ Add SAML federation to the managed pool for single sign-on:
 
 ```hcl
 module "dapanoskop" {
-  source = "git::https://github.com/cytario/dapanoskop.git//terraform?ref=v1.3.0"
+  source = "git::https://github.com/cytario/dapanoskop.git//terraform?ref=v3.1.0"
 
-  release_version       = "v1.3.0"
+  release_version       = "v3.1.0"
   cognito_domain_prefix = "dapanoskop-myorg"
 
   saml_provider_name = "AzureAD"
@@ -157,7 +157,7 @@ See [lambda/BACKFILL.md](lambda/BACKFILL.md) for detailed usage examples.
 | `oidc_issuer`               | No       | OIDC issuer URL                                                                          |
 | `oidc_client_id`            | No       | OIDC client ID                                                                           |
 | `oidc_client_secret`        | No       | OIDC client secret (sensitive — prefer SAML to avoid secrets in state)                   |
-| `release_version`           | No       | GitHub release tag (e.g. `v1.3.0`). Stages pre-built artifacts in a dedicated S3 bucket. |
+| `release_version`           | No       | GitHub release tag (e.g. `v3.1.0`). Stages pre-built artifacts in a dedicated S3 bucket. |
 | `github_repo`               | No       | GitHub repo for release artifacts (default: `cytario/dapanoskop`)                        |
 | `cost_category_name`        | No       | AWS Cost Category for cost center mapping                                                |
 | `domain_name`               | No       | Custom domain for CloudFront                                                             |
@@ -225,8 +225,8 @@ The project maintains automated tests across all three sub-systems, run in CI on
 
 | Sub-system | Framework                | Tests | Coverage |
 | ---------- | ------------------------ | ----: | -------- |
-| Frontend   | Vitest + Testing Library |    71 | —        |
-| Lambda     | pytest + moto            |    61 | 98%      |
+| Frontend   | Vitest + Testing Library |   175 | —        |
+| Lambda     | pytest + moto            |   116 | 98%      |
 | Terraform  | checkov + tofu test      |    15 | —        |
 
 **Frontend** — Unit tests for utility functions (`format.ts`, `aggregate.ts`, `auth.ts`, `config.ts`, `duckdb-config.ts`, `data.ts`) and component tests for key UI elements (`WorkloadTable`, `CostCenterCard`, `PeriodSelector`, `ErrorBoundary`, `SummaryHeader`, `Layout`).

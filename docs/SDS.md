@@ -5,8 +5,8 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.34 (Draft)                               |
-| Date                | 2026-03-17                                 |
+| Version             | 0.35 (Draft)                               |
+| Date                | 2026-04-21                                 |
 
 ---
 
@@ -315,7 +315,7 @@ Refs: SRS-DP-310210, SRS-DP-310213
 
 ##### 3.2.1 C-2.1: Cost Collector
 
-**Purpose / Responsibility**: Queries the AWS Cost Explorer API to retrieve raw cost and usage data for three completed reporting periods: the most recently completed month, the month before that, and the same month of the previous year.
+**Purpose / Responsibility**: Queries the AWS Cost Explorer API to retrieve raw cost and usage data for six time periods per normal daily invocation: the current in-progress month (MTD), the prior month's equivalent partial period, the two most recently completed months, and the year-ago period for each of the MTD and most recently completed months.
 
 **Interfaces**:
 - **Inbound**: Invoked by the Data Processor (C-2.2) or directly by the Lambda handler
@@ -565,7 +565,7 @@ Refs: SRS-DP-450101, SRS-DP-520003, SRS-DP-530004
 **Purpose / Responsibility**: Provisions the Lambda function for cost data collection, its IAM role (with Cost Explorer and S3 permissions), and the EventBridge scheduled rule.
 
 **[SDS-DP-030301] Provision Lambda, IAM Role, and Schedule with Storage Lens Support**
-The module creates a Lambda function (Python runtime) from a packaged deployment artifact, an IAM role with permissions for `ce:GetCostAndUsage`, `ce:GetCostCategories`, `ce:ListCostCategoryDefinitions`, `ce:DescribeCostCategoryDefinition` (for split charge detection), `s3:PutObject` (to the data bucket), `s3:ListBucket` (on the data bucket for index.json generation), `s3control:ListStorageLensConfigurations`, `s3control:GetStorageLensConfiguration` (for Storage Lens discovery), `cloudwatch:GetMetricData` (for querying Storage Lens metrics), and an EventBridge rule to trigger the Lambda on a daily schedule.
+The module creates a Lambda function (Python runtime) from a packaged deployment artifact, an IAM role with permissions for `ce:GetCostAndUsage`, `ce:GetCostCategories`, `ce:GetCostForecast` (for MTD period forecast — see SDS-DP-020213), `ce:ListCostCategoryDefinitions`, `ce:DescribeCostCategoryDefinition` (for split charge detection), `s3:PutObject` (to the data bucket), `s3:ListBucket` (on the data bucket for index.json generation), `s3control:ListStorageLensConfigurations`, `s3control:GetStorageLensConfiguration` (for Storage Lens discovery), `cloudwatch:GetMetricData` (for querying Storage Lens metrics), and an EventBridge rule to trigger the Lambda on a daily schedule.
 When S3 artifact references are provided (from C-3.5), the Lambda function is deployed using `s3_bucket`, `s3_key`, and `s3_object_version` — an `s3_object_version` change triggers a Lambda code update. Otherwise, the Lambda is packaged from the local source directory via Terraform's `archive_file` data source and deployed using `filename` and `source_code_hash`. The Lambda IAM role optionally includes a permissions boundary (via `var.permissions_boundary`) if configured. Environment variables include `DATA_BUCKET`, `COST_CATEGORY_NAME`, `INCLUDE_EFS`, `INCLUDE_EBS`, and `STORAGE_LENS_CONFIG_ID` (the latter optional — auto-discovers if empty). Memory: 256 MB. Timeout: 5 minutes. EventBridge schedule: `cron(0 6 * * ? *)` (daily at 06:00 UTC).
 Refs: SRS-DP-510002, SRS-DP-520002, SRS-DP-530001, SRS-DP-430103, SRS-DP-420107, SRS-DP-420108, SRS-DP-530004
 
@@ -1443,4 +1443,5 @@ How should Dapanoskop obtain actual storage volume data (in bytes) to supplement
 | 0.31    | 2026-03-02 | —      | Remove Storage Lens env-var gate: update C-2.3 (SDS-DP-020301) Inbound interface — Storage Lens Reader is now invoked unconditionally on every Lambda execution (normal + backfill); `STORAGE_LENS_CONFIG_ID` is an optional hint, not an enablement gate; update Variability — the component always runs and gracefully skips when no org-level config is found |
 | 0.32    | 2026-03-02 | —      | Exclude MTD from moving average: update SDS-DP-010208 — `computeMovingAverage` receives `null` for the MTD data point so the window slides over completed months only; the MTD bar's own moving average output is `null` (no trend line point rendered); first two non-MTD points also have `null` values (insufficient window) |
 | 0.33    | 2026-03-17 | —      | Add GetCostForecast API integration: add SDS-DP-020213 (Cost Collector calls `GetCostForecast` for MTD periods only, with try/except returning None on failure); add SDS-DP-020214 (processor computes `forecast_total_usd`, `forecast_month_end_delta_pct`, `prev_complete_total_usd` in `totals` when forecast data present); update SDS-DP-040002 summary.json schema (add three forecast fields to `totals`, present only in MTD periods when forecast succeeds); update SDS-DP-010201 (GlobalSummary conditionally renders forecast card when fields present) |
+| 0.35    | 2026-04-21 | —      | Doc sync: add `ce:GetCostForecast` to SDS-DP-030301 IAM permission list (already granted in Terraform since v0.33); fix stale C-2.1 intro prose that described three periods instead of six (the numbered list in SDS-DP-020101 was already correct) |
 | 0.34    | 2026-03-17 | —      | Storage MTD comparison fix: update SDS-DP-020203 (MTD volume scaling — when Storage Lens unavailable and is_mtd=True, scale CE GB-Month value by days_in_month/mtd_days to estimate actual bytes stored); update SDS-DP-020204 (storage MTD comparison — call `_compute_storage_metrics()` with `prev_month_partial` rows instead of `prev_month` rows when is_mtd=True; output `mtd_prior_partial_storage_cost_usd` in storage_metrics); update SDS-DP-040002 schema (add `storage_metrics.mtd_prior_partial_storage_cost_usd`, present only for MTD periods); update SDS-DP-010204 (StorageOverview reads `mtd_prior_partial_storage_cost_usd` for Card 1 MoM delta when is_mtd=True, with graceful fallback) |
