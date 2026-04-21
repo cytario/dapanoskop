@@ -78,6 +78,9 @@ export default defineConfig(({ command }) => ({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
+  resolve: {
+    dedupe: ["react", "react-dom", "react-aria-components"],
+  },
   plugins: [
     copyDuckDbBundles(),
     tailwindcss(),
