@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { Banner } from "@cytario/design";
-import type { CostSummary, MtdComparison } from "~/types/cost-data";
+import type { CostSummary } from "~/types/cost-data";
 import { discoverPeriods, fetchSummary } from "~/lib/data";
-import { formatPartialPeriodLabel } from "~/lib/format";
 import {
   initAuth,
   isAuthenticated,
@@ -20,6 +19,7 @@ import { CostTrendSection } from "~/components/CostTrendSection";
 import { Header } from "~/components/Header";
 import { Footer } from "~/components/Footer";
 import { DeltaLogo } from "~/components/DeltaLogo";
+import { MtdBanner } from "~/components/MtdBanner";
 
 export function meta() {
   return [
@@ -207,28 +207,5 @@ export default function Home() {
       {/* Footer */}
       <Footer />
     </div>
-  );
-}
-
-function MtdBanner({
-  collectedAt,
-  mtdComparison,
-}: {
-  collectedAt: string;
-  mtdComparison?: MtdComparison;
-}) {
-  const date = new Date(collectedAt);
-  const throughDate = date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
-  const comparisonNote = mtdComparison
-    ? ` Comparisons are against ${formatPartialPeriodLabel(mtdComparison.prior_partial_start, mtdComparison.prior_partial_end_exclusive)} of the prior month.`
-    : "";
-  return (
-    <Banner variant="warning" title="Month-to-date">
-      Data through {throughDate}. Figures will change as the month progresses.
-      {comparisonNote}
-    </Banner>
   );
 }
