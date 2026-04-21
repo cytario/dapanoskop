@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import boto3
@@ -44,8 +44,6 @@ def _enrich_with_storage_lens(
             else:
                 end_dt = datetime(target_year, target_month + 1, 1, tzinfo=timezone.utc)
             # Storage Lens data may lag a few days; use a 14-day window
-            from datetime import timedelta
-
             start_dt = end_dt - timedelta(days=14)
             sl_kwargs["start_time"] = start_dt
             sl_kwargs["end_time"] = end_dt
@@ -107,6 +105,7 @@ def _month_exists_in_s3(s3_client: Any, bucket: str, year: int, month: int) -> b
         response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=1)
         return "Contents" in response and len(response["Contents"]) > 0
     except Exception:
+        logger.warning("Failed to check S3 for existing period data", exc_info=True)
         return False
 
 
