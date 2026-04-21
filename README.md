@@ -2,8 +2,8 @@
 [![Release](https://github.com/cytario/dapanoskop/actions/workflows/release.yml/badge.svg)](https://github.com/cytario/dapanoskop/actions/workflows/release.yml)
 [![GitHub release](https://img.shields.io/github/v/release/cytario/dapanoskop)](https://github.com/cytario/dapanoskop/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-![Frontend Tests](https://img.shields.io/badge/frontend_tests-175-blue)
-![Python Tests](https://img.shields.io/badge/python_tests-116-blue)
+![Frontend Tests](https://img.shields.io/badge/frontend_tests-208-blue)
+![Python Tests](https://img.shields.io/badge/python_tests-171-blue)
 ![Python Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)
 
 # Dapanoskop
@@ -225,8 +225,8 @@ The project maintains automated tests across all three sub-systems, run in CI on
 
 | Sub-system | Framework                | Tests | Coverage |
 | ---------- | ------------------------ | ----: | -------- |
-| Frontend   | Vitest + Testing Library |   175 | —        |
-| Lambda     | pytest + moto            |   116 | 98%      |
+| Frontend   | Vitest + Testing Library |   208 | —        |
+| Lambda     | pytest + moto            |   171 | 98%      |
 | Terraform  | checkov + tofu test      |    15 | —        |
 
 **Frontend** — Unit tests for utility functions (`format.ts`, `aggregate.ts`, `auth.ts`, `config.ts`, `duckdb-config.ts`, `data.ts`) and component tests for key UI elements (`WorkloadTable`, `CostCenterCard`, `PeriodSelector`, `ErrorBoundary`, `SummaryHeader`, `Layout`).
