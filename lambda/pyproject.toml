@@ -3,7 +3,7 @@ name = "dapanoskop"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "pyarrow",
+    "pyarrow<24",
     "boto3",
 ]
 
@@ -28,7 +28,7 @@ target-version = "py312"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=dapanoskop --cov-report=term-missing --cov-report=html --cov-fail-under=70"
+addopts = "--cov=dapanoskop --cov-report=term-missing --cov-report=html --cov-fail-under=85"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dapanoskop"]

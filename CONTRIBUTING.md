@@ -120,12 +120,14 @@ uv run pytest
 
 - Formatting: `tofu fmt`
 - Linting: [TFLint](https://github.com/terraform-linters/tflint)
+- Security scanning: [Checkov](https://www.checkov.io/)
 
 ```bash
 cd terraform
 tofu fmt -check -recursive
 tofu init -backend=false && tofu validate
 tflint --recursive
+checkov -d .
 ```
 
 ## Making Changes

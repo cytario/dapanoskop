@@ -25,6 +25,9 @@ coverage.xml
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+# Track the root lockfile for reproducible provider versions;
+# per-module lockfiles are redundant and stay ignored.
+!/terraform/.terraform.lock.hcl
 *.tfplan
 *.tfvars
 !*.tfvars.example

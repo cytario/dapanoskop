@@ -1,5 +1,8 @@
 # Cytario Design Guide
 
+> **Note**: This file documents Cytario brand tokens (color palette, typography, and UI patterns) used in Dapanoskop's frontend. It is not an architectural design document for Dapanoskop. For system architecture and design decisions, see [`docs/SDS.md`](docs/SDS.md).
+
+
 ## Color Scheme
 
 ### Brand Colors
