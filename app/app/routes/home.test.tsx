@@ -174,14 +174,15 @@ describe("Home route", () => {
 
     renderHome("/");
 
+    // fetchSummary must be called for the defaulted period, not MTD.
+    // Wait on the downstream effect — the period-selector may render before
+    // the summary-load useEffect has flushed.
     await waitFor(() =>
-      expect(screen.getByTestId("period-selector")).toBeTruthy(),
+      expect(mockedData.fetchSummary).toHaveBeenCalledWith("2026-01"),
     );
     expect(screen.getByTestId("period-selector").textContent).toContain(
       "selected=2026-01",
     );
-    // fetchSummary must be called for the defaulted period, not MTD
-    expect(mockedData.fetchSummary).toHaveBeenCalledWith("2026-01");
   });
 
   it("falls back to the only period when discovery returns a single month", async () => {
@@ -195,12 +196,11 @@ describe("Home route", () => {
     renderHome();
 
     await waitFor(() =>
-      expect(screen.getByTestId("period-selector")).toBeTruthy(),
+      expect(mockedData.fetchSummary).toHaveBeenCalledWith(currentMonth),
     );
     expect(screen.getByTestId("period-selector").textContent).toContain(
       `selected=${currentMonth}`,
     );
-    expect(mockedData.fetchSummary).toHaveBeenCalledWith(currentMonth);
   });
 
   it("uses the ?period= URL parameter when it matches a discovered period", async () => {
@@ -216,12 +216,11 @@ describe("Home route", () => {
     renderHome("/?period=2025-12");
 
     await waitFor(() =>
-      expect(screen.getByTestId("period-selector")).toBeTruthy(),
+      expect(mockedData.fetchSummary).toHaveBeenCalledWith("2025-12"),
     );
     expect(screen.getByTestId("period-selector").textContent).toContain(
       "selected=2025-12",
     );
-    expect(mockedData.fetchSummary).toHaveBeenCalledWith("2025-12");
   });
 
   it("ignores ?period= when it does not match any discovered period", async () => {
