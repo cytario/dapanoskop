@@ -1,4 +1,4 @@
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, fireEvent } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import { InfoTooltip } from "./InfoTooltip";
 
@@ -17,10 +17,15 @@ describe("InfoTooltip", () => {
   it("shows tooltip on focus", async () => {
     render(<InfoTooltip text="Explanation" />);
     const trigger = screen.getByRole("button", { name: "Explanation" });
+    // react-aria-components only shows the tooltip on :focus-visible, which
+    // requires keyboard-originated focus. A bare programmatic `.focus()` in
+    // jsdom doesn't qualify, so emulate the Tab keydown that would precede
+    // focus in a real keyboard interaction.
     await act(async () => {
+      fireEvent.keyDown(document.body, { key: "Tab" });
       trigger.focus();
     });
-    const tooltip = await screen.findByRole("tooltip");
+    const tooltip = await screen.findByRole("tooltip", {}, { timeout: 3000 });
     expect(tooltip).toBeInTheDocument();
     expect(tooltip.textContent).toBe("Explanation");
   });
