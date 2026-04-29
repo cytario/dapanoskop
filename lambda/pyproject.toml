@@ -15,7 +15,7 @@ dev = [
     "boto3-stubs",
     "ruff",
     "pip-audit",
-    "cryptography>=46.0.5",
+    "cryptography>=47.0.0",
 ]
 
 [build-system]
