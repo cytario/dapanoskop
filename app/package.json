@@ -17,7 +17,7 @@
     "@cytario/design": "^3.2.0",
     "@duckdb/duckdb-wasm": "^1.33.1-dev45.0",
     "@react-router/node": "7.14.1",
-    "@react-router/serve": "7.14.1",
+    "@react-router/serve": "7.14.2",
     "isbot": "^5.1.39",
     "lucide-react": "^0.575.0",
     "react": "^19.2.5",
