@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC
 
 import boto3
 import pytest
@@ -18,13 +19,13 @@ def test_handler_integration(
     s3.create_bucket(Bucket=s3_bucket_env)
 
     # Mock the collector to return test data
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
     def mock_collect(cost_category_name: str = "") -> dict:
         return {
-            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
             "period_labels": {
                 "current": "2026-01",
                 "prev_month": "2025-12",
@@ -93,7 +94,7 @@ def test_handler_backfill_mode(
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=s3_bucket_env)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
@@ -111,7 +112,7 @@ def test_handler_backfill_mode(
             period = f"{target_year:04d}-{target_month:02d}"
             collected_periods.append(period)
         return {
-            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
             "period_labels": {
                 "current": f"{target_year:04d}-{target_month:02d}"
                 if target_year and target_month
@@ -185,7 +186,7 @@ def test_handler_backfill_skip_existing(
         Body=json.dumps({"period": "2026-01"}).encode(),
     )
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
@@ -198,7 +199,7 @@ def test_handler_backfill_skip_existing(
     ) -> dict:
         call_count[0] += 1
         return {
-            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
             "period_labels": {
                 "current": f"{target_year:04d}-{target_month:02d}"
                 if target_year and target_month
@@ -253,7 +254,7 @@ def test_handler_backfill_force_reprocess(
         Body=json.dumps({"period": "2026-01"}).encode(),
     )
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
@@ -266,7 +267,7 @@ def test_handler_backfill_force_reprocess(
     ) -> dict:
         call_count[0] += 1
         return {
-            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
             "period_labels": {
                 "current": f"{target_year:04d}-{target_month:02d}"
                 if target_year and target_month
@@ -313,7 +314,7 @@ def test_handler_backfill_partial_failure(
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=s3_bucket_env)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
@@ -330,7 +331,7 @@ def test_handler_backfill_partial_failure(
             raise RuntimeError("Simulated collection failure")
 
         return {
-            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
             "period_labels": {
                 "current": f"{target_year:04d}-{target_month:02d}"
                 if target_year and target_month
@@ -381,7 +382,7 @@ def test_handler_backfill_s3_write_failure(
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=s3_bucket_env)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
@@ -391,7 +392,7 @@ def test_handler_backfill_s3_write_failure(
         target_month: int | None = None,
     ) -> dict:
         return {
-            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
             "period_labels": {
                 "current": f"{target_year:04d}-{target_month:02d}"
                 if target_year and target_month
@@ -473,7 +474,7 @@ def test_handler_enriches_with_storage_lens(
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=s3_bucket_env)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
@@ -481,7 +482,7 @@ def test_handler_enriches_with_storage_lens(
 
     def mock_collect(cost_category_name: str = "") -> dict:
         return {
-            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
             "period_labels": {
                 "current": "2026-01",
                 "prev_month": "2025-12",
@@ -539,7 +540,7 @@ def test_handler_continues_when_storage_lens_fails(
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=s3_bucket_env)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
@@ -547,7 +548,7 @@ def test_handler_continues_when_storage_lens_fails(
 
     def mock_collect(cost_category_name: str = "") -> dict:
         return {
-            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
             "period_labels": {
                 "current": "2026-01",
                 "prev_month": "2025-12",
@@ -642,7 +643,7 @@ def test_handler_backfill_skips_unavailable_months(
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=s3_bucket_env)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
@@ -662,7 +663,7 @@ def test_handler_backfill_skips_unavailable_months(
 
         # 2026-01 succeeds
         return {
-            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
             "period_labels": {
                 "current": f"{target_year:04d}-{target_month:02d}"
                 if target_year and target_month
@@ -725,7 +726,7 @@ def test_handler_storage_lens_recalculates_cost_per_tb(
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=s3_bucket_env)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
@@ -733,7 +734,7 @@ def test_handler_storage_lens_recalculates_cost_per_tb(
 
     def mock_collect(cost_category_name: str = "") -> dict:
         return {
-            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
             "period_labels": {
                 "current": "2026-01",
                 "prev_month": "2025-12",
@@ -811,7 +812,7 @@ def test_handler_backfill_index_survives_failures(
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=s3_bucket_env)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
@@ -826,7 +827,7 @@ def test_handler_backfill_index_survives_failures(
 
         # 2026-01 succeeds
         return {
-            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
             "period_labels": {
                 "current": f"{target_year:04d}-{target_month:02d}"
                 if target_year and target_month
@@ -881,7 +882,7 @@ def test_handler_backfill_skips_empty_ce_response(
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=s3_bucket_env)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
@@ -908,7 +909,7 @@ def test_handler_backfill_skips_empty_ce_response(
             ]
         )
         return {
-            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
             "period_labels": {
                 "current": f"{target_year:04d}-{target_month:02d}"
                 if target_year and target_month
@@ -960,7 +961,7 @@ def test_handler_backfill_empty_ce_response_skipped_even_with_force(
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=s3_bucket_env)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
@@ -970,7 +971,7 @@ def test_handler_backfill_empty_ce_response_skipped_even_with_force(
         target_month: int | None = None,
     ) -> dict:
         return {
-            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
             "period_labels": {
                 "current": f"{target_year:04d}-{target_month:02d}"
                 if target_year and target_month
@@ -1013,13 +1014,13 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=s3_bucket_env)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
     def mock_collect(cost_category_name: str = "") -> dict:
         return {
-            "now": datetime(2026, 2, 8, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 8, 6, 0, 0, tzinfo=UTC),
             "is_mtd": True,
             "periods": {
                 "current": ("2026-02-01", "2026-02-08"),
@@ -1153,14 +1154,14 @@ def test_handler_normal_mode_first_of_month(
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=s3_bucket_env)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
     def mock_collect(cost_category_name: str = "") -> dict:
         # On the 1st, _get_periods() omits "current", "yoy", "prev_month_partial"
         return {
-            "now": datetime(2026, 3, 1, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 3, 1, 6, 0, 0, tzinfo=UTC),
             "is_mtd": True,
             "periods": {
                 "prev_complete": ("2026-02-01", "2026-03-01"),
@@ -1231,13 +1232,13 @@ def test_handler_normal_mode_skips_empty_mtd(
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.create_bucket(Bucket=s3_bucket_env)
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from dapanoskop import handler as handler_module
 
     def mock_collect(cost_category_name: str = "") -> dict:
         return {
-            "now": datetime(2026, 2, 8, 6, 0, 0, tzinfo=timezone.utc),
+            "now": datetime(2026, 2, 8, 6, 0, 0, tzinfo=UTC),
             "is_mtd": True,
             "periods": {
                 "current": ("2026-02-01", "2026-02-08"),

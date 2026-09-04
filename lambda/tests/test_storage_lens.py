@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 from botocore.exceptions import ClientError as _ClientError
@@ -12,7 +12,7 @@ from dapanoskop.storage_lens import get_storage_lens_metrics
 
 def test_storage_lens_successful_retrieval() -> None:
     """Test successful retrieval of Storage Lens metrics."""
-    timestamp = datetime(2026, 2, 15, 12, 0, 0, tzinfo=timezone.utc)
+    timestamp = datetime(2026, 2, 15, 12, 0, 0, tzinfo=UTC)
 
     # Mock the boto3 clients and responses
     with patch("dapanoskop.storage_lens.boto3.client") as mock_client:
@@ -103,7 +103,7 @@ def test_storage_lens_successful_retrieval() -> None:
 
 def test_storage_lens_specific_config_id() -> None:
     """Test querying with a specific config ID."""
-    timestamp = datetime(2026, 2, 15, 12, 0, 0, tzinfo=timezone.utc)
+    timestamp = datetime(2026, 2, 15, 12, 0, 0, tzinfo=UTC)
 
     with patch("dapanoskop.storage_lens.boto3.client") as mock_client:
         mock_sts = MagicMock()
@@ -348,7 +348,7 @@ def test_storage_lens_empty_metrics() -> None:
 
 def test_storage_lens_aggregates_across_dimensions() -> None:
     """Test that metrics split across storage classes/regions are summed correctly."""
-    timestamp = datetime(2026, 2, 15, 12, 0, 0, tzinfo=timezone.utc)
+    timestamp = datetime(2026, 2, 15, 12, 0, 0, tzinfo=UTC)
 
     with patch("dapanoskop.storage_lens.boto3.client") as mock_client:
         mock_sts = MagicMock()
@@ -727,7 +727,7 @@ def test_storage_lens_get_metric_data_client_error_returns_none() -> None:
 
 def test_storage_lens_object_count_present_but_storage_bytes_missing() -> None:
     """When StorageBytes has no datapoints but ObjectCount does, timestamp from ObjectCount."""
-    ts = datetime(2026, 2, 15, 12, 0, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 2, 15, 12, 0, 0, tzinfo=UTC)
 
     with patch("dapanoskop.storage_lens.boto3.client") as mock_client:
         mock_sts = MagicMock()

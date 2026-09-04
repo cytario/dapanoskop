@@ -8,7 +8,7 @@ interface TaggingCoverageProps {
 
 export function TaggingCoverage({ data }: TaggingCoverageProps) {
   return (
-    <Card padding="md">
+    <Card>
       <ProgressBar
         value={data.tagged_percentage}
         label="Tagging Coverage"

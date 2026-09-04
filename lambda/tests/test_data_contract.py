@@ -12,7 +12,7 @@ this test must be updated in lockstep.
 from __future__ import annotations
 
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import boto3
 import pyarrow as pa
@@ -65,7 +65,7 @@ def _make_group(app: str, usage_type: str, cost: float, quantity: float) -> dict
 
 def _make_collected() -> dict:
     return {
-        "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+        "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
         "period_labels": {
             "current": "2026-01",
             "prev_month": "2025-12",

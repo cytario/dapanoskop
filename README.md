@@ -4,7 +4,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 ![Frontend Tests](https://img.shields.io/badge/frontend_tests-208-blue)
 ![Python Tests](https://img.shields.io/badge/python_tests-171-blue)
-![Python Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)
+![Python Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)
 
 # Dapanoskop
 
@@ -231,7 +231,7 @@ The project maintains automated tests across all three sub-systems, run in CI on
 
 **Frontend** — Unit tests for utility functions (`format.ts`, `aggregate.ts`, `auth.ts`, `config.ts`, `duckdb-config.ts`, `data.ts`) and component tests for key UI elements (`WorkloadTable`, `CostCenterCard`, `PeriodSelector`, `ErrorBoundary`, `SummaryHeader`, `Layout`).
 
-**Lambda** — Full handler integration tests with moto-mocked AWS services, plus unit tests for the collector, processor, and category modules. Coverage is enforced at 70% minimum via `pytest-cov`.
+**Lambda** — Full handler integration tests with moto-mocked AWS services, plus unit tests for the collector, processor, and category modules. Coverage is enforced at 85% minimum via `pytest-cov`.
 
 **Terraform** — Checkov security scanning, TFLint linting, and `.tftest.hcl` contract tests using `mock_provider` for CSP header construction, auth input validations, and IAM policy least-privilege regression.
 

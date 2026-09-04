@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import boto3
@@ -55,8 +55,7 @@ def _get_prior_partial_period(
     prior_partial_end = prior_month_start + timedelta(days=mtd_days)
 
     # Clamp to the boundary of the prior month (= first day of current month = mtd_start)
-    if prior_partial_end > start_date:
-        prior_partial_end = start_date
+    prior_partial_end = min(prior_partial_end, start_date)
 
     return prior_month_start.isoformat(), prior_partial_end.isoformat()
 
@@ -202,8 +201,7 @@ def get_cost_and_usage(
     while True:
         response = ce_client.get_cost_and_usage(**kwargs)
         for result_by_time in response.get("ResultsByTime", []):
-            for group in result_by_time.get("Groups", []):
-                results.append(group)
+            results.extend(result_by_time.get("Groups", []))
         token = response.get("NextPageToken")
         if not token:
             break
@@ -413,7 +411,7 @@ def collect(
     is_mtd = target_year is None and target_month is None
 
     ce_client = boto3.client("ce")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     periods = _get_periods(now, target_year, target_month)
 
     period_labels = {k: _period_label(v[0]) for k, v in periods.items()}

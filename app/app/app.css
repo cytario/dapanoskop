@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "@cytario/design/tokens/variables.css";
+@import "@cytario/design/styles/theme.css";
 
 /* Scan cytario-design component source so Tailwind generates their utility classes */
 @source "../node_modules/@cytario/design/dist";

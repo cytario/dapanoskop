@@ -36,19 +36,15 @@ aws lambda invoke \
 import boto3
 import json
 
-lambda_client = boto3.client('lambda')
+lambda_client = boto3.client("lambda")
 
 response = lambda_client.invoke(
-    FunctionName='dapanoskop-pipeline',
-    InvocationType='RequestResponse',
-    Payload=json.dumps({
-        'backfill': True,
-        'months': 13,
-        'force': False
-    })
+    FunctionName="dapanoskop-pipeline",
+    InvocationType="RequestResponse",
+    Payload=json.dumps({"backfill": True, "months": 13, "force": False}),
 )
 
-result = json.loads(response['Payload'].read())
+result = json.loads(response["Payload"].read())
 print(json.dumps(result, indent=2))
 ```
 

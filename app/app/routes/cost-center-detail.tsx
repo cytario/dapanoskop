@@ -265,7 +265,7 @@ export default function CostCenterDetail() {
             />
 
             {/* Workload breakdown */}
-            <Card padding="md">
+            <Card>
               <h3 className="text-lg font-semibold mb-4">Workload Breakdown</h3>
               <WorkloadTable
                 workloads={costCenter.workloads}

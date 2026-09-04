@@ -30,10 +30,10 @@ module "hosting" {
   cognito_client_id         = module.auth.client_id
   user_pool_id              = module.auth.user_pool_id
   identity_pool_id          = module.auth.identity_pool_id
-  aws_region                = data.aws_region.current.id
+  aws_region                = data.aws_region.current.region
   data_bucket_name          = module.data_store.bucket_name
   data_bucket_s3_endpoint   = "https://${module.data_store.bucket_regional_domain_name}"
-  cognito_identity_endpoint = "https://cognito-identity.${data.aws_region.current.id}.amazonaws.com"
+  cognito_identity_endpoint = "https://cognito-identity.${data.aws_region.current.region}.amazonaws.com"
   tags                      = var.tags
 }
 
