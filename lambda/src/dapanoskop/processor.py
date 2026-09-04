@@ -89,14 +89,12 @@ def _compute_storage_metrics(
         if "EBS:" in usage_type:
             return include_ebs
         # CE returns usage types with region prefixes (e.g. USE1-TimedStorage-ByteHrs)
-        if "TimedStorage" in usage_type:
-            return True
-        return False
+        return "TimedStorage" in usage_type
 
     def _is_hot_tier(usage_type: str) -> bool:
         # Match region-prefixed usage types (e.g. USE1-TimedStorage-ByteHrs)
-        return usage_type.endswith("TimedStorage-ByteHrs") or usage_type.endswith(
-            "TimedStorage-INT-FA-ByteHrs"
+        return usage_type.endswith(
+            ("TimedStorage-ByteHrs", "TimedStorage-INT-FA-ByteHrs")
         )
 
     for row in rows:

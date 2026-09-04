@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.95"
+      version = ">= 6.0"
     }
     archive = {
       source  = "hashicorp/archive"
@@ -140,7 +140,7 @@ resource "aws_lambda_function" "pipeline" {
   depends_on = [aws_cloudwatch_log_group.lambda]
 
   layers = [
-    "arn:aws:lambda:${data.aws_region.current.id}:336392948345:layer:AWSSDKPandas-Python312:17"
+    "arn:aws:lambda:${data.aws_region.current.region}:336392948345:layer:AWSSDKPandas-Python312:17"
   ]
 
   environment {

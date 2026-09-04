@@ -8,7 +8,7 @@ with CloudWatch metrics export enabled.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import boto3
@@ -249,7 +249,7 @@ def get_storage_lens_metrics(
 
     # Default time range: last 7 days
     if end_time is None:
-        end_time = datetime.now()
+        end_time = datetime.now(UTC)
     if start_time is None:
         start_time = end_time - timedelta(days=7)
 
@@ -281,12 +281,12 @@ def get_storage_lens_metrics(
     object_count = 0
     timestamp = None
 
-    if "StorageBytes" in results and results["StorageBytes"]:
+    if results.get("StorageBytes"):
         latest = results["StorageBytes"][-1]
         total_bytes = int(latest["Value"])
         timestamp = latest["Timestamp"]
 
-    if "ObjectCount" in results and results["ObjectCount"]:
+    if results.get("ObjectCount"):
         latest = results["ObjectCount"][-1]
         object_count = int(latest["Value"])
         if timestamp is None:

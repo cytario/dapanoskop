@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 from moto import mock_aws
@@ -34,7 +34,7 @@ def test_month_range_december() -> None:
 
 def test_get_periods_mid_month() -> None:
     """On Feb 10, current period (MTD) should be February, prev_complete is January."""
-    now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=UTC)
     periods = _get_periods(now)
 
     # current = in-progress MTD month (Feb 2026, end = today exclusive)
@@ -54,7 +54,7 @@ def test_get_periods_mid_month() -> None:
 
 def test_get_periods_first_of_month() -> None:
     """On Mar 1, MTD window has zero width — skip current, only prev_complete."""
-    now = datetime(2026, 3, 1, 6, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 3, 1, 6, 0, 0, tzinfo=UTC)
     periods = _get_periods(now)
 
     # No MTD period on the 1st (zero-width window)
@@ -69,7 +69,7 @@ def test_get_periods_first_of_month() -> None:
 
 def test_get_periods_january() -> None:
     """On Jan 15, current (MTD) is January, prev_complete is December."""
-    now = datetime(2026, 1, 15, 6, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 15, 6, 0, 0, tzinfo=UTC)
     periods = _get_periods(now)
 
     assert periods["current"][0] == "2026-01-01"
@@ -84,7 +84,7 @@ def test_get_periods_january() -> None:
 
 def test_get_periods_january_first() -> None:
     """On Jan 1, MTD window has zero width — skip current, only prev_complete."""
-    now = datetime(2026, 1, 1, 6, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 1, 6, 0, 0, tzinfo=UTC)
     periods = _get_periods(now)
 
     # No MTD period on the 1st (zero-width window)
@@ -99,7 +99,7 @@ def test_get_periods_january_first() -> None:
 
 def test_get_periods_with_target_month() -> None:
     """Explicit target month overrides now parameter (backfill mode)."""
-    now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=UTC)
     # Request data for March 2025
     periods = _get_periods(now, target_year=2025, target_month=3)
 
@@ -113,7 +113,7 @@ def test_get_periods_with_target_month() -> None:
 
 def test_get_periods_with_target_january() -> None:
     """Target January handles year rollover correctly (backfill mode)."""
-    now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=UTC)
     periods = _get_periods(now, target_year=2025, target_month=1)
 
     assert periods["current"][0] == "2025-01-01"
@@ -1199,16 +1199,18 @@ def test_collect_december_mtd_forecast_wraps_year() -> None:
     }
 
     # Freeze datetime to a date in December
-    frozen = datetime(2025, 12, 15, 12, 0, 0, tzinfo=timezone.utc)
+    frozen = datetime(2025, 12, 15, 12, 0, 0, tzinfo=UTC)
 
     class FrozenDatetime(datetime):
         @classmethod
         def now(cls, tz=None):
             return frozen
 
-    with patch("boto3.client", return_value=mock_ce_client):
-        with patch("dapanoskop.collector.datetime", FrozenDatetime):
-            result = collect(cost_category_name="")
+    with (
+        patch("boto3.client", return_value=mock_ce_client),
+        patch("dapanoskop.collector.datetime", FrozenDatetime),
+    ):
+        result = collect(cost_category_name="")
 
     # Forecast should have been retrieved
     assert result["forecast"] == 5000.0

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import boto3
@@ -40,9 +40,9 @@ def _enrich_with_storage_lens(
         if target_year is not None and target_month is not None:
             # Query around the end of the target month
             if target_month == 12:
-                end_dt = datetime(target_year + 1, 1, 1, tzinfo=timezone.utc)
+                end_dt = datetime(target_year + 1, 1, 1, tzinfo=UTC)
             else:
-                end_dt = datetime(target_year, target_month + 1, 1, tzinfo=timezone.utc)
+                end_dt = datetime(target_year, target_month + 1, 1, tzinfo=UTC)
             # Storage Lens data may lag a few days; use a 14-day window
             start_dt = end_dt - timedelta(days=14)
             sl_kwargs["start_time"] = start_dt
@@ -114,7 +114,7 @@ def _generate_backfill_months(months: int) -> list[tuple[int, int]]:
 
     Returns months from current month back N months, in reverse chronological order.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     result: list[tuple[int, int]] = []
     year, month = now.year, now.month
 

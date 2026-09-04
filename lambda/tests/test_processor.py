@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from moto import mock_aws
 
@@ -31,7 +31,7 @@ def _make_collected(
     cc_mapping: dict[str, str] | None = None,
 ) -> dict:
     return {
-        "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=timezone.utc),
+        "now": datetime(2026, 2, 1, 6, 0, 0, tzinfo=UTC),
         "period_labels": {
             "current": "2026-01",
             "prev_month": "2025-12",
@@ -316,7 +316,6 @@ def test_write_to_s3_creates_all_files() -> None:
     import io
 
     import boto3
-
     import pyarrow.parquet as pq
 
     from dapanoskop.processor import write_to_s3
@@ -441,7 +440,6 @@ def test_write_to_s3_parquet_schema() -> None:
     import io
 
     import boto3
-
     import pyarrow as pa
     import pyarrow.parquet as pq
 
@@ -1165,7 +1163,7 @@ def _make_mtd_collected(
 ) -> dict:
     """Build a collected dict simulating normal daily (MTD) run output."""
     return {
-        "now": datetime(2026, 2, 8, 6, 0, 0, tzinfo=timezone.utc),
+        "now": datetime(2026, 2, 8, 6, 0, 0, tzinfo=UTC),
         "is_mtd": True,
         "periods": {
             "current": ("2026-02-01", "2026-02-08"),

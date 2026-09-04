@@ -36,7 +36,7 @@ export function PeriodSelector({
             >
               {formatPeriodLabel(period)}
               {isMtd && (
-                <Badge variant="amber" size="sm" className="ml-1.5">
+                <Badge color="amber" size="sm" className="ml-1.5">
                   MTD
                 </Badge>
               )}

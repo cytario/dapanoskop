@@ -28,7 +28,7 @@ function categoryBadgeVariant(category: string) {
     case "Support":
       return "slate" as const;
     default:
-      return "neutral" as const;
+      return "slate" as const;
   }
 }
 
@@ -61,7 +61,7 @@ export function UsageTypeTable({
               <span className="font-mono text-xs">{row.usage_type}</span>
             </Cell>
             <Cell>
-              <Badge variant={categoryBadgeVariant(row.category)} size="sm">
+              <Badge color={categoryBadgeVariant(row.category)} size="sm">
                 {row.category}
               </Badge>
             </Cell>

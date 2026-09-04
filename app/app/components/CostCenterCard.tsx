@@ -74,7 +74,7 @@ export function CostCenterCard({
   const detailUrl = `/cost-center/${encodeURIComponent(costCenter.name)}?period=${period}`;
 
   return (
-    <Card padding="none">
+    <Card>
       <div className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -97,7 +97,7 @@ export function CostCenterCard({
               {costCenter.name}
             </Link>
             {costCenter.is_split_charge && (
-              <Badge variant="slate">Split Charge</Badge>
+              <Badge color="slate">Split Charge</Badge>
             )}
           </div>
           <span className="text-xl font-semibold">

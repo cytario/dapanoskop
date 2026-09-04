@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.95"
+      version = ">= 6.0"
     }
   }
 }
@@ -24,7 +24,7 @@ locals {
     local.has_oidc ? [var.oidc_provider_name] : [],
   )
 
-  cognito_domain = local.create_user_pool ? "https://${var.cognito_domain_prefix}.auth.${data.aws_region.current.id}.amazoncognito.com" : ""
+  cognito_domain = local.create_user_pool ? "https://${var.cognito_domain_prefix}.auth.${data.aws_region.current.region}.amazoncognito.com" : ""
 }
 
 resource "aws_cognito_user_pool" "managed" {
@@ -165,7 +165,7 @@ resource "aws_cognito_identity_pool" "main" {
 
   cognito_identity_providers {
     client_id               = aws_cognito_user_pool_client.app.id
-    provider_name           = "cognito-idp.${data.aws_region.current.id}.amazonaws.com/${local.user_pool_id}"
+    provider_name           = "cognito-idp.${data.aws_region.current.region}.amazonaws.com/${local.user_pool_id}"
     server_side_token_check = true
   }
 }

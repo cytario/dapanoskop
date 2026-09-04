@@ -20,7 +20,7 @@ output "saml_entity_id" {
 
 output "saml_acs_url" {
   description = "SAML ACS URL for IdP configuration"
-  value       = local.create_user_pool && var.cognito_domain_prefix != "" ? "https://${var.cognito_domain_prefix}.auth.${data.aws_region.current.id}.amazoncognito.com/saml2/idpresponse" : ""
+  value       = local.create_user_pool && var.cognito_domain_prefix != "" ? "https://${var.cognito_domain_prefix}.auth.${data.aws_region.current.region}.amazoncognito.com/saml2/idpresponse" : ""
 }
 
 output "identity_pool_id" {

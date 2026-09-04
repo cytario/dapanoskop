@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
@@ -47,7 +47,7 @@ def freeze_backfill_now():
     (e.g. months=3 -> Jan 2026, Dec 2025, Nov 2025).
     Without this fixture the tests break whenever the real calendar advances.
     """
-    frozen = datetime(2026, 2, 15, 12, 0, 0, tzinfo=timezone.utc)
+    frozen = datetime(2026, 2, 15, 12, 0, 0, tzinfo=UTC)
     real_datetime = datetime
 
     class FrozenDatetime(real_datetime):
