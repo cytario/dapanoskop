@@ -186,6 +186,7 @@ def test_get_cost_and_usage_pagination_logic() -> None:
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
                                 "NetAmortizedCost": {"Amount": "100.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "100.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "744.0", "Unit": "N/A"},
                             },
                         }
@@ -202,6 +203,7 @@ def test_get_cost_and_usage_pagination_logic() -> None:
                             "Keys": ["App$api", "BoxUsage:t3.medium"],
                             "Metrics": {
                                 "NetAmortizedCost": {"Amount": "50.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "50.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "372.0", "Unit": "N/A"},
                             },
                         }
@@ -274,13 +276,15 @@ def test_get_cost_categories_discovers_first_category() -> None:
                     {
                         "Keys": ["App$web-app", "Environment$Production"],
                         "Metrics": {
-                            "NetAmortizedCost": {"Amount": "100.0", "Unit": "USD"}
+                            "NetAmortizedCost": {"Amount": "100.0", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "100.0", "Unit": "USD"},
                         },
                     },
                     {
                         "Keys": ["App$api", "Environment$Development"],
                         "Metrics": {
-                            "NetAmortizedCost": {"Amount": "50.0", "Unit": "USD"}
+                            "NetAmortizedCost": {"Amount": "50.0", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "50.0", "Unit": "USD"},
                         },
                     },
                 ]
@@ -333,6 +337,7 @@ def test_collect_integration() -> None:
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
                                 "NetAmortizedCost": {"Amount": "1000.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "1000.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "744.0", "Unit": "Hrs"},
                             },
                         },
@@ -340,6 +345,7 @@ def test_collect_integration() -> None:
                             "Keys": ["App$api", "TimedStorage-ByteHrs"],
                             "Metrics": {
                                 "NetAmortizedCost": {"Amount": "100.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "100.0", "Unit": "USD"},
                                 "UsageQuantity": {
                                     "Amount": "1000000.0",
                                     "Unit": "GB-Mo",
@@ -359,6 +365,7 @@ def test_collect_integration() -> None:
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
                                 "NetAmortizedCost": {"Amount": "950.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "950.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "744.0", "Unit": "Hrs"},
                             },
                         }
@@ -375,6 +382,7 @@ def test_collect_integration() -> None:
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
                                 "NetAmortizedCost": {"Amount": "900.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "900.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "720.0", "Unit": "Hrs"},
                             },
                         }
@@ -391,6 +399,7 @@ def test_collect_integration() -> None:
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
                                 "NetAmortizedCost": {"Amount": "800.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "800.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "700.0", "Unit": "Hrs"},
                             },
                         }
@@ -407,6 +416,7 @@ def test_collect_integration() -> None:
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
                                 "NetAmortizedCost": {"Amount": "750.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "750.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "680.0", "Unit": "Hrs"},
                             },
                         }
@@ -423,6 +433,7 @@ def test_collect_integration() -> None:
                             "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                             "Metrics": {
                                 "NetAmortizedCost": {"Amount": "250.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "250.0", "Unit": "USD"},
                                 "UsageQuantity": {"Amount": "200.0", "Unit": "Hrs"},
                             },
                         }
@@ -438,13 +449,15 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["App$web-app", "CostCenter$Engineering"],
                             "Metrics": {
-                                "NetAmortizedCost": {"Amount": "1000.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "1000.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "1000.0", "Unit": "USD"},
                             },
                         },
                         {
                             "Keys": ["App$api", "CostCenter$Engineering"],
                             "Metrics": {
-                                "NetAmortizedCost": {"Amount": "100.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "100.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "100.0", "Unit": "USD"},
                             },
                         },
                     ]
@@ -459,7 +472,8 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["App$web-app", "CostCenter$Engineering"],
                             "Metrics": {
-                                "NetAmortizedCost": {"Amount": "950.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "950.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "950.0", "Unit": "USD"},
                             },
                         }
                     ]
@@ -474,7 +488,8 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["App$web-app", "CostCenter$Engineering"],
                             "Metrics": {
-                                "NetAmortizedCost": {"Amount": "900.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "900.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "900.0", "Unit": "USD"},
                             },
                         }
                     ]
@@ -489,7 +504,8 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["App$web-app", "CostCenter$Engineering"],
                             "Metrics": {
-                                "NetAmortizedCost": {"Amount": "800.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "800.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "800.0", "Unit": "USD"},
                             },
                         }
                     ]
@@ -504,7 +520,8 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["App$web-app", "CostCenter$Engineering"],
                             "Metrics": {
-                                "NetAmortizedCost": {"Amount": "750.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "750.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "750.0", "Unit": "USD"},
                             },
                         }
                     ]
@@ -519,7 +536,8 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["CostCenter$Engineering"],
                             "Metrics": {
-                                "NetAmortizedCost": {"Amount": "1100.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "1100.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "1100.0", "Unit": "USD"},
                             },
                         }
                     ]
@@ -534,7 +552,8 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["CostCenter$Engineering"],
                             "Metrics": {
-                                "NetAmortizedCost": {"Amount": "950.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "950.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "950.0", "Unit": "USD"},
                             },
                         }
                     ]
@@ -549,7 +568,8 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["CostCenter$Engineering"],
                             "Metrics": {
-                                "NetAmortizedCost": {"Amount": "900.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "900.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "900.0", "Unit": "USD"},
                             },
                         }
                     ]
@@ -564,7 +584,8 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["CostCenter$Engineering"],
                             "Metrics": {
-                                "NetAmortizedCost": {"Amount": "800.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "800.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "800.0", "Unit": "USD"},
                             },
                         }
                     ]
@@ -579,7 +600,8 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["CostCenter$Engineering"],
                             "Metrics": {
-                                "NetAmortizedCost": {"Amount": "750.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "750.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "750.0", "Unit": "USD"},
                             },
                         }
                     ]
@@ -594,7 +616,8 @@ def test_collect_integration() -> None:
                         {
                             "Keys": ["CostCenter$Engineering"],
                             "Metrics": {
-                                "NetAmortizedCost": {"Amount": "250.0", "Unit": "USD"}
+                                "NetAmortizedCost": {"Amount": "250.0", "Unit": "USD"},
+                                "UnblendedCost": {"Amount": "250.0", "Unit": "USD"},
                             },
                         }
                     ]
@@ -814,6 +837,7 @@ def test_get_allocated_costs_uses_net_amortized() -> None:
                         "Keys": ["CostCenter$Engineering"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "1500.0", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "1500.0", "Unit": "USD"},
                         },
                     }
                 ]
@@ -841,13 +865,15 @@ def test_get_cost_categories_untagged_resources() -> None:
                     {
                         "Keys": ["App$web-app", "CostCenter$Engineering"],
                         "Metrics": {
-                            "NetAmortizedCost": {"Amount": "100.0", "Unit": "USD"}
+                            "NetAmortizedCost": {"Amount": "100.0", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "100.0", "Unit": "USD"},
                         },
                     },
                     {
                         "Keys": ["App$", "CostCenter$Shared"],
                         "Metrics": {
-                            "NetAmortizedCost": {"Amount": "50.0", "Unit": "USD"}
+                            "NetAmortizedCost": {"Amount": "50.0", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "50.0", "Unit": "USD"},
                         },
                     },
                 ]
@@ -882,7 +908,8 @@ def test_collect_auto_discovers_category_name() -> None:
                     {
                         "Keys": ["App$api", "CostCenter$Platform"],
                         "Metrics": {
-                            "NetAmortizedCost": {"Amount": "200.0", "Unit": "USD"}
+                            "NetAmortizedCost": {"Amount": "200.0", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "200.0", "Unit": "USD"},
                         },
                     }
                 ]
@@ -898,7 +925,8 @@ def test_collect_auto_discovers_category_name() -> None:
                     {
                         "Keys": ["CostCenter$Platform"],
                         "Metrics": {
-                            "NetAmortizedCost": {"Amount": "200.0", "Unit": "USD"}
+                            "NetAmortizedCost": {"Amount": "200.0", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "200.0", "Unit": "USD"},
                         },
                     }
                 ]

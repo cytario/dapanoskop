@@ -11,9 +11,12 @@ import type { UsageTypeCostRow } from "~/types/cost-data";
  * - Category badge rendering for all 4 categories
  * - CostChange vs N/A fallback logic for prev/yoy columns
  * - Correct aggregation integration (rows sorted by current cost desc)
+ * - Gross (cost_usd) primary display with optional net (net_cost_usd)
+ *   secondary "after credits" figure
  *
  * Used by both workload-detail and storage-cost-detail routes.
  */
+
 describe("UsageTypeTable", () => {
   const currentPeriod = "2026-01";
   const prevPeriod = "2025-12";
@@ -174,5 +177,157 @@ describe("UsageTypeTable", () => {
     const usageTypeCells = container.querySelectorAll("tbody td:first-child");
     const order = Array.from(usageTypeCells).map((td) => td.textContent);
     expect(order).toEqual(["Expensive-Type", "Mid-Type", "Cheap-Type"]);
+  });
+
+  describe("gross vs net", () => {
+    it("shows gross (cost_usd) as the primary Current value", () => {
+      const rows = [
+        makeRow({
+          period: currentPeriod,
+          cost_usd: 115, // gross
+          net_cost_usd: 100, // net
+        }),
+      ];
+      const { container } = render(
+        <UsageTypeTable
+          rows={rows}
+          currentPeriod={currentPeriod}
+          prevPeriod={prevPeriod}
+          yoyPeriod={yoyPeriod}
+        />,
+      );
+      // Gross primary
+      expect(container.textContent).toContain("$115.00");
+      // Net secondary "after credits"
+      expect(container.textContent).toContain("After credits: $100.00");
+    });
+
+    it("shows no net secondary when net equals gross within $0.01", () => {
+      const rows = [
+        makeRow({
+          period: currentPeriod,
+          cost_usd: 100,
+          net_cost_usd: 99.995,
+        }),
+      ];
+      const { container } = render(
+        <UsageTypeTable
+          rows={rows}
+          currentPeriod={currentPeriod}
+          prevPeriod={prevPeriod}
+          yoyPeriod={yoyPeriod}
+        />,
+      );
+      expect(container.textContent).toContain("$100.00");
+      expect(container.textContent).not.toContain("After credits");
+    });
+
+    it("falls back to cost_usd alone when net absent (old data)", () => {
+      const rows = [makeRow({ period: currentPeriod, cost_usd: 100 })];
+      const { container } = render(
+        <UsageTypeTable
+          rows={rows}
+          currentPeriod={currentPeriod}
+          prevPeriod={prevPeriod}
+          yoyPeriod={yoyPeriod}
+        />,
+      );
+      expect(container.textContent).toContain("$100.00");
+      expect(container.textContent).not.toContain("After credits");
+    });
+
+    it("shows net secondary at exactly $0.01 gross/net difference", () => {
+      const rows = [
+        makeRow({
+          period: currentPeriod,
+          cost_usd: 100.01,
+          net_cost_usd: 100,
+        }),
+      ];
+      const { container } = render(
+        <UsageTypeTable
+          rows={rows}
+          currentPeriod={currentPeriod}
+          prevPeriod={prevPeriod}
+          yoyPeriod={yoyPeriod}
+        />,
+      );
+      expect(container.textContent).toContain("After credits: $100.00");
+    });
+
+    it("computes the MoM delta gross-to-gross (cost_usd sums)", () => {
+      const rows = [
+        makeRow({
+          period: currentPeriod,
+          cost_usd: 170, // gross
+          net_cost_usd: 150,
+        }),
+        makeRow({
+          period: prevPeriod,
+          cost_usd: 100, // gross prev
+          net_cost_usd: 100,
+        }),
+      ];
+      const { container } = render(
+        <UsageTypeTable
+          rows={rows}
+          currentPeriod={currentPeriod}
+          prevPeriod={prevPeriod}
+          yoyPeriod={yoyPeriod}
+        />,
+      );
+      // Gross delta: 170 - 100 = +$70 (net delta would be +$50)
+      expect(container.textContent).toContain("+$70.00");
+      expect(container.textContent).not.toContain("+$50.00");
+    });
+
+    it("computes the YoY delta gross-to-gross (cost_usd sums)", () => {
+      const rows = [
+        makeRow({
+          period: currentPeriod,
+          cost_usd: 170,
+          net_cost_usd: 150,
+        }),
+        makeRow({
+          period: yoyPeriod,
+          cost_usd: 110,
+          net_cost_usd: 120,
+        }),
+      ];
+      const { container } = render(
+        <UsageTypeTable
+          rows={rows}
+          currentPeriod={currentPeriod}
+          prevPeriod={prevPeriod}
+          yoyPeriod={yoyPeriod}
+        />,
+      );
+      // Gross delta: 170 - 110 = +$60 (net delta would be +$30)
+      expect(container.textContent).toContain("+$60.00");
+      expect(container.textContent).not.toContain("+$30.00");
+    });
+
+    it("mixes rows with and without net across periods", () => {
+      const rows = [
+        makeRow({
+          period: currentPeriod,
+          cost_usd: 120,
+          net_cost_usd: 100,
+        }),
+        makeRow({ period: prevPeriod, cost_usd: 80 }), // old-format row
+      ];
+      const { container } = render(
+        <UsageTypeTable
+          rows={rows}
+          currentPeriod={currentPeriod}
+          prevPeriod={prevPeriod}
+          yoyPeriod={yoyPeriod}
+        />,
+      );
+      // Gross MoM: 120 - 80 = +$40
+      expect(container.textContent).toContain("+$40.00");
+      // Net secondary: old row contributes its cost_usd, so net = 100
+      expect(container.textContent).toContain("After credits: $100.00");
+    });
   });
 });

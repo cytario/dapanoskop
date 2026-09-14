@@ -111,4 +111,125 @@ describe("aggregateUsageTypes", () => {
     expect(result[0].current).toBe(100);
     expect(result[0].prev).toBe(80);
   });
+
+  describe("net handling (cost_usd is gross)", () => {
+    test("old data without net_cost_usd: both figures are net, no secondary", () => {
+      const rows: UsageTypeCostRow[] = [
+        makeRow({ usage_type: "S3-Requests", period: CURRENT, cost_usd: 100 }),
+        makeRow({ usage_type: "S3-Requests", period: PREV, cost_usd: 80 }),
+        makeRow({ usage_type: "S3-Requests", period: YOY, cost_usd: 60 }),
+      ];
+
+      const result = aggregateUsageTypes(rows, CURRENT, PREV, YOY);
+      // cost_usd sums are the (only) figures — no net secondary surfaces
+      expect(result[0].current).toBe(100);
+      expect(result[0].prev).toBe(80);
+      expect(result[0].yoy).toBe(60);
+      expect(result[0].net).toBeNull();
+    });
+
+    test("net is surfaced only when it differs from gross by >= $0.01", () => {
+      const rows: UsageTypeCostRow[] = [
+        makeRow({
+          usage_type: "S3-Requests",
+          period: CURRENT,
+          cost_usd: 110, // gross
+          net_cost_usd: 100, // net
+        }),
+        makeRow({
+          usage_type: "S3-Requests",
+          period: PREV,
+          cost_usd: 88,
+          net_cost_usd: 80,
+        }),
+        makeRow({
+          usage_type: "S3-Requests",
+          period: YOY,
+          cost_usd: 66,
+          net_cost_usd: 60,
+        }),
+      ];
+
+      const result = aggregateUsageTypes(rows, CURRENT, PREV, YOY);
+      // cost_usd (gross) sums are the primary figures
+      expect(result[0].current).toBe(110);
+      expect(result[0].prev).toBe(88);
+      expect(result[0].yoy).toBe(66);
+      // net differs by >= 0.01 => net secondary is surfaced
+      expect(result[0].net).toBe(100);
+    });
+
+    test("surfaces net at exactly $0.01 difference", () => {
+      const rows: UsageTypeCostRow[] = [
+        makeRow({
+          usage_type: "S3-Requests",
+          period: CURRENT,
+          cost_usd: 100.01,
+          net_cost_usd: 100,
+        }),
+      ];
+
+      const result = aggregateUsageTypes(rows, CURRENT, PREV, YOY);
+      expect(result[0].net).toBe(100);
+    });
+
+    test("suppresses net secondary when gross equals net within $0.01", () => {
+      const rows: UsageTypeCostRow[] = [
+        makeRow({
+          usage_type: "S3-Requests",
+          period: CURRENT,
+          cost_usd: 100,
+          net_cost_usd: 99.995,
+        }),
+      ];
+
+      const result = aggregateUsageTypes(rows, CURRENT, PREV, YOY);
+      expect(result[0].net).toBeNull();
+    });
+
+    test("mixes old rows (no net) with new rows (net) per period", () => {
+      const rows: UsageTypeCostRow[] = [
+        // old-format row: no net_cost_usd — contributes cost_usd to net sum
+        makeRow({ usage_type: "Mixed", period: CURRENT, cost_usd: 100 }),
+        makeRow({ usage_type: "Mixed", period: PREV, cost_usd: 50 }),
+        // new-format row: gross 120, net 80
+        makeRow({
+          usage_type: "Mixed",
+          period: CURRENT,
+          cost_usd: 120,
+          net_cost_usd: 80,
+        }),
+      ];
+
+      const result = aggregateUsageTypes(rows, CURRENT, PREV, YOY);
+      // gross sums
+      expect(result[0].current).toBe(220);
+      // net sum: 100 (old row falls back to cost_usd) + 80
+      expect(result[0].net).toBe(180);
+      // prev row has no net column => net falls back to gross 50, equals it
+      expect(result[0].prev).toBe(50);
+    });
+
+    test("deltas on current/prev are gross-to-gross automatically", () => {
+      const rows: UsageTypeCostRow[] = [
+        makeRow({
+          usage_type: "S3-Requests",
+          period: CURRENT,
+          cost_usd: 165, // gross current
+          net_cost_usd: 100,
+        }),
+        makeRow({
+          usage_type: "S3-Requests",
+          period: PREV,
+          cost_usd: 88, // gross prev
+          net_cost_usd: 80,
+        }),
+      ];
+
+      const result = aggregateUsageTypes(rows, CURRENT, PREV, YOY);
+      // Consumers compute the MoM delta as current - prev (both gross sums)
+      const delta = result[0].current - result[0].prev!;
+      expect(delta).toBe(77); // 165 - 88, not 100 - 80
+    });
+  });
 });

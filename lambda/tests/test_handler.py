@@ -37,6 +37,7 @@ def test_handler_integration(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "1000", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "1000", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "744", "Unit": "Hrs"},
                         },
                     }
@@ -46,6 +47,7 @@ def test_handler_integration(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "900", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "900", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "720", "Unit": "Hrs"},
                         },
                     }
@@ -126,6 +128,7 @@ def test_handler_backfill_mode(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -213,6 +216,7 @@ def test_handler_backfill_skip_existing(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -281,6 +285,7 @@ def test_handler_backfill_force_reprocess(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -345,6 +350,7 @@ def test_handler_backfill_partial_failure(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -406,6 +412,7 @@ def test_handler_backfill_s3_write_failure(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -494,6 +501,7 @@ def test_handler_enriches_with_storage_lens(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -560,6 +568,7 @@ def test_handler_continues_when_storage_lens_fails(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -677,6 +686,7 @@ def test_handler_backfill_skips_unavailable_months(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -747,6 +757,7 @@ def test_handler_storage_lens_recalculates_cost_per_tb(
                         "Keys": ["App$web-app", "TimedStorage-ByteHrs"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "200", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "200", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "5000", "Unit": "GB-Mo"},
                         },
                     },
@@ -755,6 +766,7 @@ def test_handler_storage_lens_recalculates_cost_per_tb(
                         "Keys": ["App$web-app", "Requests-Tier1"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "30", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "30", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "1000000", "Unit": "Requests"},
                         },
                     },
@@ -841,6 +853,7 @@ def test_handler_backfill_index_survives_failures(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "100", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                         },
                     }
@@ -903,6 +916,7 @@ def test_handler_backfill_skips_empty_ce_response(
                     "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                     "Metrics": {
                         "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
+                        "UnblendedCost": {"Amount": "100", "Unit": "USD"},
                         "UsageQuantity": {"Amount": "100", "Unit": "Hrs"},
                     },
                 }
@@ -1044,6 +1058,7 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "800", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "800", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "200", "Unit": "Hrs"},
                         },
                     }
@@ -1053,6 +1068,7 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "1000", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "1000", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "744", "Unit": "Hrs"},
                         },
                     }
@@ -1062,6 +1078,7 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "900", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "900", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "720", "Unit": "Hrs"},
                         },
                     }
@@ -1072,6 +1089,7 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "850", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "850", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "700", "Unit": "Hrs"},
                         },
                     }
@@ -1081,6 +1099,7 @@ def test_handler_normal_mode_writes_mtd_and_prev_complete(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "250", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "250", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "60", "Unit": "Hrs"},
                         },
                     }
@@ -1179,6 +1198,7 @@ def test_handler_normal_mode_first_of_month(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "1000", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "1000", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "744", "Unit": "Hrs"},
                         },
                     }
@@ -1188,6 +1208,7 @@ def test_handler_normal_mode_first_of_month(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "900", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "900", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "720", "Unit": "Hrs"},
                         },
                     }
@@ -1264,6 +1285,7 @@ def test_handler_normal_mode_skips_empty_mtd(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "1000", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "1000", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "744", "Unit": "Hrs"},
                         },
                     }
@@ -1273,6 +1295,7 @@ def test_handler_normal_mode_skips_empty_mtd(
                         "Keys": ["App$web-app", "BoxUsage:m5.xlarge"],
                         "Metrics": {
                             "NetAmortizedCost": {"Amount": "900", "Unit": "USD"},
+                            "UnblendedCost": {"Amount": "900", "Unit": "USD"},
                             "UsageQuantity": {"Amount": "720", "Unit": "Hrs"},
                         },
                     }

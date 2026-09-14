@@ -7,6 +7,13 @@ The expected schemas below are derived from the DuckDB SELECT column lists in:
 
 If either the SPA query or the Lambda writer changes a column name or type,
 this test must be updated in lockstep.
+
+Since the gross/net dual-metric change the SPA SELECTs are:
+  SELECT workload, usage_type, category, period, cost_usd, net_cost_usd, usage_quantity
+  FROM read_parquet(...)
+
+with a fallback to the legacy projection (without net_cost_usd) for older
+parquet files written before the dual-metric change.
 """
 
 from __future__ import annotations
@@ -34,6 +41,7 @@ EXPECTED_USAGE_TYPE_SCHEMA: dict[str, pa.DataType] = {
     "category": pa.string(),
     "period": pa.string(),
     "cost_usd": pa.float64(),
+    "net_cost_usd": pa.float64(),
     "usage_quantity": pa.float64(),
 }
 
@@ -45,6 +53,7 @@ EXPECTED_WORKLOAD_SCHEMA: dict[str, pa.DataType] = {
     "workload": pa.string(),
     "period": pa.string(),
     "cost_usd": pa.float64(),
+    "net_cost_usd": pa.float64(),
 }
 
 

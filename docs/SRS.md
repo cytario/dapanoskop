@@ -5,8 +5,8 @@
 | Document ID         | SRS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.24 (Draft)                               |
-| Date                | 2026-03-17                                 |
+| Version             | 0.25 (Draft)                               |
+| Date                | 2026-04-21                                 |
 
 ---
 
@@ -34,8 +34,10 @@ Dapanoskop is a web-based AWS cloud cost monitoring application. This document d
 | Cost Explorer | AWS Cost Explorer API for querying cost and usage data |
 | Cost Category | A single AWS Cost Category whose values represent cost centers |
 | App tag | AWS resource tag with key `App` (or `user:App`) |
-| UnblendedCost | AWS cost metric showing the on-demand cost of each usage type, without RI/SP amortization or enterprise discount adjustments; used for per-workload and per-usage-type data stored in parquet files |
-| NetAmortizedCost | AWS cost metric that distributes RI and Savings Plan fees across the period and includes enterprise discount adjustments; matches the "Total allocated cost" column in the AWS Cost Categories console; used for cost center totals in summary.json when allocated costs are available |
+| UnblendedCost | AWS cost metric showing the on-demand (gross) cost of each usage type, before credits, RI/SP amortization, and discount program adjustments; the primary cost figure stored per row in the parquet files (`cost_usd`) and the basis of the additive `gross_*` summary.json fields |
+| NetAmortizedCost | AWS cost metric that distributes RI and Savings Plan fees across the period and includes enterprise discount and credit adjustments; matches the "Total allocated cost" column in the AWS Cost Categories console; stored per row in the parquet files (`net_cost_usd`) and used for cost center allocated totals in summary.json when Cost Categories are configured |
+| Gross cost | On-demand cost before credits, RI/SP amortization, and discount programs (UnblendedCost) — the primary figure displayed in the report |
+| Net cost | Cost after credits, RI/SP amortization, and discount programs (NetAmortizedCost) — displayed as a secondary "after credits/discounts" figure where it differs from gross |
 | TimedStorage-ByteHrs | AWS usage type metric measuring S3 storage volume over time |
 | Identity Pool | Amazon Cognito Identity Pool — exchanges Cognito ID tokens for temporary AWS credentials via the enhanced (simplified) authflow |
 | httpfs | DuckDB extension enabling SQL queries against remote files via HTTP(S) or S3 protocols |
@@ -140,14 +142,23 @@ This is the primary screen of the application. It presents a single-page cost re
 ##### Global Summary
 
 **[SRS-DP-310211] Display Global Cost Summary**
-The system displays a summary bar at the top of the report showing three metrics: total spend for the current period, the MoM change (absolute and percentage combined), and the YoY change (absolute and percentage combined). On viewports narrower than 640px (Tailwind `sm` breakpoint), the three metrics stack vertically in a single column. The total spend and comparison deltas are sourced from the pre-computed `totals` object in summary.json (see SDS-DP-040002), which is computed from raw workload costs independent of cost category allocation, split charge rules, and cost category renames. This ensures the global totals remain stable across cost category configuration changes and correctly account for 100% of spend regardless of how cost centers are defined.
-Refs: URS-DP-10301, URS-DP-10302, URS-DP-30104
+The system displays a summary bar at the top of the report showing three metrics: total spend for the current period, the MoM change (absolute and percentage combined), and the YoY change (absolute and percentage combined). On viewports narrower than 640px (Tailwind `sm` breakpoint), the three metrics stack vertically in a single column. The total spend and comparison deltas are sourced from the pre-computed `totals` object in summary.json (see SDS-DP-040002), which is computed from raw workload costs independent of cost category allocation, split charge rules, and cost category renames. This ensures the global totals remain stable across cost category configuration changes and correctly account for 100% of spend regardless of how cost centers are defined. The primary total spend figure is the gross (UnblendedCost) total (`totals.gross_current_cost_usd` when present, falling back to `totals.current_cost_usd` for legacy data — see SRS-DP-310224); MoM and YoY deltas are computed from the corresponding gross fields. When the gross total exceeds the net total by $0.01 or more, the secondary "after credits/discounts" figure is shown per SRS-DP-310223.
+Refs: URS-DP-10301, URS-DP-10302, URS-DP-30104, URS-DP-10316
 
 | No | Element | Data type | Value range | Other relevant information |
 |----|---------|-----------|-------------|---------------------------|
-| 1  | Total spend | Currency (USD) | ≥ 0 | Pre-computed from raw workload costs (`totals.current_cost_usd`), formatted with 2 decimal places |
-| 2  | MoM change | Currency + Percentage | Any | Derived from `totals.current_cost_usd` and `totals.prev_month_cost_usd`; combined display: "+$1,300 (+5.9%)" |
-| 3  | YoY change | Currency + Percentage | Any | Derived from `totals.current_cost_usd` and `totals.yoy_cost_usd`; shows "N/A" if prior year data unavailable |
+| 1  | Total spend | Currency (USD) | ≥ 0 | Gross figure: `totals.gross_current_cost_usd` when present, falling back to `totals.current_cost_usd` for legacy data (SRS-DP-310224); formatted with 2 decimal places |
+| 2  | MoM change | Currency + Percentage | Any | Derived from `totals.gross_current_cost_usd` and `totals.gross_prev_month_cost_usd` (net fallback for legacy data); combined display: "+$1,300 (+5.9%)" |
+| 3  | YoY change | Currency + Percentage | Any | Derived from `totals.gross_current_cost_usd` and `totals.gross_yoy_cost_usd` (net fallback for legacy data); shows "N/A" if prior year data unavailable |
+
+**[SRS-DP-310223] Display Gross Cost as Primary Figure with Net Cost After Credits as Secondary**
+The system displays the gross cost (UnblendedCost — on-demand cost before credits, RI/SP amortization, and discount programs) as the primary cost figure throughout the report (e.g., "Total Spend", cost center card totals, workload table costs). When the gross cost exceeds the net cost (NetAmortizedCost) by $0.01 or more for a displayed figure, the system additionally displays the net cost as a secondary "after credits/discounts" figure adjacent to the primary figure. When gross and net are equal (difference below $0.01), no secondary figure is displayed. The secondary figure is labeled so the user understands it is the post-credit/post-discount amount.
+Refs: URS-DP-10316, URS-DP-10301, URS-DP-10302
+
+| No | Element | Data type | Value range | Other relevant information |
+|----|---------|-----------|-------------|---------------------------|
+| 1  | Primary cost figure | Currency (USD) | ≥ 0 | Gross (UnblendedCost); e.g. "Total Spend", cost center total, workload row cost |
+| 2  | Secondary "after credits/discounts" figure | Currency (USD) | ≥ 0 | Net (NetAmortizedCost); displayed only when gross − net ≥ $0.01 |
 
 ##### Cost Trend Chart
 
@@ -175,8 +186,8 @@ Refs: URS-DP-10310
 ##### Cost Center Cards
 
 **[SRS-DP-310201] Display Cost Center Summary Cards**
-The system displays each cost center as a card showing the cost center name, current period total, workload count, and the top mover (the workload with the highest absolute MoM change). The cost center name is a clickable link that navigates to the cost center detail page, preserving the current reporting period as a query parameter. Cost centers using AWS Cost Category split charge rules display a "Split Charge" badge and show "Allocated" instead of a dollar amount, with explanatory text that costs are allocated to other cost centers.
-Refs: URS-DP-10301, URS-DP-10311, URS-DP-10403
+The system displays each cost center as a card showing the cost center name, current period total, workload count, and the top mover (the workload with the highest absolute MoM change). The current period total is the gross (UnblendedCost) figure (`gross_current_cost_usd` when present, falling back to `current_cost_usd` for legacy data); when it exceeds the net figure by $0.01 or more, the net cost is shown as the secondary "after credits/discounts" figure per SRS-DP-310223. The cost center name is a clickable link that navigates to the cost center detail page, preserving the current reporting period as a query parameter. Cost centers using AWS Cost Category split charge rules display a "Split Charge" badge and show "Allocated" instead of a dollar amount, with explanatory text that costs are allocated to other cost centers.
+Refs: URS-DP-10301, URS-DP-10311, URS-DP-10403, URS-DP-10316
 
 **[SRS-DP-310202] Display MoM Cost Comparison**
 Each cost center card displays the MoM change as a single combined element showing absolute difference and percentage change (e.g., "+$800 (+5.6%)").
@@ -202,8 +213,8 @@ Refs: URS-DP-10303
 ##### Workload Breakdown Table
 
 **[SRS-DP-310204] Display Workload Cost Table**
-Within an expanded cost center card, the system displays a table of all workloads (App tag values) sorted by current month cost descending. Each row shows the workload name, current month cost, MoM change (absolute and percentage combined), and YoY change (absolute and percentage combined). Workload names are clickable to navigate to the drill-down.
-Refs: URS-DP-10303, URS-DP-10304
+Within an expanded cost center card, the system displays a table of all workloads (App tag values) sorted by current month cost (gross when available) descending. Each row shows the workload name, current month cost, MoM change (absolute and percentage combined), and YoY change (absolute and percentage combined). Workload names are clickable to navigate to the drill-down. Costs are gross (UnblendedCost) as the primary figure; when the gross cost exceeds the net cost by $0.01 or more, the net cost is shown as the secondary "after credits/discounts" figure per SRS-DP-310223.
+Refs: URS-DP-10303, URS-DP-10304, URS-DP-10316
 
 **[SRS-DP-310205] Display Untagged Cost Row**
 The system includes a row labeled "Untagged" (or equivalent) showing the cost of resources without an App tag within the cost center, so that tagging gaps are visible.
@@ -275,8 +286,8 @@ Wireframes: See `docs/wireframes/cost-report.puml` and `docs/wireframes/workload
 #### 3.1.3 Workload Detail Screen
 
 **[SRS-DP-310301] Display Workload Usage Type Breakdown**
-When a user selects a workload from the cost report, the system displays a breakdown of that workload's cost by usage type, sorted by cost descending. Each usage type row shows current month cost, MoM change (absolute and percentage combined), and YoY change (absolute and percentage combined).
-Refs: URS-DP-10401
+When a user selects a workload from the cost report, the system displays a breakdown of that workload's cost by usage type, sorted by cost (gross when available) descending. Each usage type row shows current month cost, MoM change (absolute and percentage combined), and YoY change (absolute and percentage combined). Costs are gross (UnblendedCost) as the primary figure; when the gross cost exceeds the net cost by $0.01 or more, the net cost is shown as the secondary "after credits/discounts" figure per SRS-DP-310223.
+Refs: URS-DP-10401, URS-DP-10316
 
 | No | Element | Data type | Value range | Other relevant information |
 |----|---------|-----------|-------------|---------------------------|
@@ -293,8 +304,8 @@ When a user navigates to a cost center detail page (via clickable cost center na
 Refs: URS-DP-10311
 
 **[SRS-DP-310303] Display Cost Center Summary Metrics**
-The cost center detail page displays three summary cards showing the cost center's total spend for the selected period, MoM change (absolute and percentage combined), and YoY change (absolute and percentage combined).
-Refs: URS-DP-10311
+The cost center detail page displays three summary cards showing the cost center's total spend for the selected period, MoM change (absolute and percentage combined), and YoY change (absolute and percentage combined). The total spend is the gross (UnblendedCost) figure when available (SRS-DP-310223).
+Refs: URS-DP-10311, URS-DP-10316
 
 | No | Element | Data type | Value range | Other relevant information |
 |----|---------|-----------|-------------|---------------------------|
@@ -376,6 +387,10 @@ Refs: URS-DP-10301, URS-DP-10302, URS-DP-10314
 **[SRS-DP-310222] Forecast InfoTooltip Explanation**
 The forecast card displays an `<InfoTooltip>` icon that, on hover or keyboard focus, explains: "Projected full-month cost based on your spend to date plus the AWS Cost Explorer forecast for the remaining days of the month. Accuracy improves as the month progresses." The tooltip is rendered using the shared `<InfoTooltip>` component (SDS-DP-010212) and follows the same keyboard-accessibility standards as other metric card tooltips.
 Refs: URS-DP-10301, URS-DP-10308
+
+**[SRS-DP-310224] Fall Back to Net Figures for Legacy Data Without Gross Fields**
+When the system renders a report from data files that lack the gross cost fields (summary.json `gross_*` fields and/or the parquet `net_cost_usd` column — e.g., data written by an older pipeline version), it falls back to displaying the existing net-based figures (`current_cost_usd`, `cost_usd`) without errors, missing values, or broken layouts. Pre-existing data files remain renderable after the pipeline is upgraded to the dual-metric output.
+Refs: URS-DP-10316, URS-DP-20401
 
 ---
 
@@ -477,8 +492,8 @@ Refs: URS-DP-10104
 #### 4.2.1 Endpoints
 
 **[SRS-DP-420101] Query Cost by App Tag and Usage Type**
-The system queries the Cost Explorer `GetCostAndUsage` API grouped by App tag (workload) and `USAGE_TYPE` to retrieve per-workload, per-usage-type cost data. Metric: `UnblendedCost` and `UsageQuantity`. Granularity: `MONTHLY`.
-Refs: URS-DP-10301, URS-DP-10303, URS-DP-10401
+The system queries the Cost Explorer `GetCostAndUsage` API grouped by App tag (workload) and `USAGE_TYPE` to retrieve per-workload, per-usage-type cost data. Metrics: `UnblendedCost`, `NetAmortizedCost`, and `UsageQuantity`. Granularity: `MONTHLY`. Each result row carries both the gross (UnblendedCost) and net (NetAmortizedCost) cost figures so that accounts receiving credits do not appear as zero-cost.
+Refs: URS-DP-10301, URS-DP-10303, URS-DP-10401, URS-DP-10316
 
 **[SRS-DP-420102] Query Cost Data for Completed Months and Current Month-to-Date**
 The system queries Cost Explorer for cost data covering both completed months and the current in-progress calendar month (MTD). For each normal daily run, the pipeline collects data for: the current in-progress calendar month (the MTD period, as the primary entry written to S3 and shown first in the period selector), the most recently completed calendar month (for MoM comparison and as the second selectable period), the month before that (for further MoM comparison), and the correct year-ago period for each selectable period (for YoY comparison). Each selectable period's YoY figure must compare against the same calendar month one year prior to that specific period — not a shared or offset year-ago period. The MTD data reflects costs accrued through the day before the pipeline runs. Because the current month has not closed, the cost figures in the MTD period will change on each subsequent daily run until the month ends and the period transitions to a completed-month entry.
@@ -508,6 +523,14 @@ Refs: URS-DP-10105
 When the Cost Explorer `GetCostAndUsage` API returns a response with zero result groups for the primary period of a given month (i.e., `ResultsByTime[0].Groups` is empty and no exception was raised), the system must not write any data files for that month. The month is reported as skipped in the backfill status response. This requirement applies to both backfill mode and the normal daily run. The intent is to preserve any previously collected data for periods that have aged out of Cost Explorer's retention window, preventing valid historical records from being overwritten with zero-cost summaries. A `DataUnavailableException` raised by the CE API is already treated as a skip; this requirement addresses the silent empty-response case.
 Refs: URS-DP-20402, URS-DP-10105
 
+**[SRS-DP-420112] Store Gross Cost as Primary Parquet Figure with Net Cost Column**
+For the per-workload and per-usage-type parquet data files, the system stores the gross cost (UnblendedCost) as the primary cost figure in the `cost_usd` column and the net cost (NetAmortizedCost) as an additional `net_cost_usd` column. The `net_cost_usd` column is optional: data files written by older pipeline versions lack the column, and readers of the files handle its absence by treating all cost figures as the single available cost value.
+Refs: URS-DP-10316, URS-DP-10401
+
+**[SRS-DP-420113] Record Gross Totals in summary.json**
+The system writes additive, optional gross cost fields to summary.json alongside the existing cost fields: `totals.gross_current_cost_usd`, `totals.gross_prev_month_cost_usd`, `totals.gross_yoy_cost_usd`, and `totals.gross_mtd_prior_partial_cost_usd` (MTD periods only); each cost center entry gains `gross_current_cost_usd`, `gross_prev_month_cost_usd`, and `gross_yoy_cost_usd`; each workload entry likewise; and each `mtd_comparison` entry gains `gross_prior_partial_cost_usd`. The gross fields are computed from the UnblendedCost figures collected by the workload/usage-type queries. Existing cost fields (`current_cost_usd` etc.) remain net-based (NetAmortizedCost when Cost Categories are configured, workload sums otherwise) for backward compatibility with data files written before the dual-metric output. The gross fields are optional: when absent from a pre-existing summary.json, consumers fall back to the corresponding existing cost field.
+Refs: URS-DP-10316, URS-DP-10301, URS-DP-10302
+
 **[SRS-DP-420108] Query S3 Storage Lens for Actual Storage Volume**
 On every pipeline execution (both normal daily run and backfill), the system always attempts to query S3 Storage Lens CloudWatch metrics to obtain the actual total storage volume (in bytes) across the organization. If an explicit `storage_lens_config_id` is provided, it is used directly; otherwise the system auto-discovers the first available organization-level Storage Lens configuration (by calling `s3control:ListStorageLensConfigurations` and `s3control:GetStorageLensConfiguration`). The system then queries the CloudWatch `AWS/S3/Storage-Lens` namespace for the `StorageBytes` metric (statistic: `Average`) for the reporting period. If no organization-level configuration is found or CloudWatch returns no data, the system logs a warning and continues without Storage Lens data — storage metrics fall back to Cost Explorer usage quantities. The `STORAGE_LENS_CONFIG_ID` environment variable (and corresponding `storage_lens_config_id` Terraform variable) are optional overrides; leaving them empty triggers auto-discovery rather than disabling Storage Lens integration.
 Refs: URS-DP-10106, URS-DP-10312
@@ -517,7 +540,7 @@ The system overwrites the MTD period data in the data store on every daily pipel
 Refs: URS-DP-10314
 
 **[SRS-DP-420110] Query Prior Month's Equivalent Partial Period for MTD Comparison**
-When collecting MTD data, the system performs an additional Cost Explorer `GetCostAndUsage` query for the equivalent date range in the prior calendar month. The prior partial period spans from the first day of the prior month through the day-of-month corresponding to the last day of the current MTD window (exclusive end). For example, if today is March 8 and the MTD period covers March 1–7, the prior partial period query covers February 1–7. The query uses the same grouping and metric parameters as the MTD query (grouped by App tag and USAGE_TYPE, metric: `UnblendedCost` and `UsageQuantity`, granularity: `MONTHLY`). A separate `NetAmortizedCost` cost-center-level query is also executed for the prior partial period to support allocated cost center totals. The resulting data is processed to produce cost center and workload totals for the prior partial period and stored alongside the MTD summary data. When the MTD window starts on day 1 of the current month and the prior month has fewer days than the current day-of-month window end (e.g., February only has 28 days and today is March 30), the prior partial period end date is clamped to the last day of the prior month.
+When collecting MTD data, the system performs an additional Cost Explorer `GetCostAndUsage` query for the equivalent date range in the prior calendar month. The prior partial period spans from the first day of the prior month through the day-of-month corresponding to the last day of the current MTD window (exclusive end). For example, if today is March 8 and the MTD period covers March 1–7, the prior partial period query covers February 1–7. The query uses the same grouping and metric parameters as the MTD query (grouped by App tag and USAGE_TYPE, metrics: `UnblendedCost`, `NetAmortizedCost`, and `UsageQuantity`, granularity: `MONTHLY`). A separate `NetAmortizedCost` cost-center-level query is also executed for the prior partial period to support allocated cost center totals. The resulting data is processed to produce cost center and workload totals for the prior partial period and stored alongside the MTD summary data. When the MTD window starts on day 1 of the current month and the prior month has fewer days than the current day-of-month window end (e.g., February only has 28 days and today is March 30), the prior partial period end date is clamped to the last day of the prior month.
 Refs: URS-DP-10315, URS-DP-10302
 
 #### 4.2.2 Models
@@ -529,7 +552,7 @@ Refs: URS-DP-10315, URS-DP-10302
 | TimePeriod.Start | String (YYYY-MM-DD) | First day of the queried month |
 | TimePeriod.End | String (YYYY-MM-DD) | First day of the following month |
 | Granularity | String | Always `MONTHLY` |
-| Metrics | List[String] | `UnblendedCost`, `UsageQuantity` |
+| Metrics | List[String] | `UnblendedCost`, `NetAmortizedCost`, `UsageQuantity` |
 | GroupBy | List[Object] | `TAG` (App) and `DIMENSION` (USAGE_TYPE) |
 
 **Cost Explorer Query Parameters — cost center allocated totals query (SRS-DP-420107):**
@@ -544,26 +567,29 @@ Refs: URS-DP-10315, URS-DP-10302
 
 **Cost Explorer Query Parameters — prior month partial period queries (SRS-DP-420110):**
 
-Two queries are executed for the prior month's equivalent partial period: one workload/usage-type query (`UnblendedCost`) and one cost-center allocated totals query (`NetAmortizedCost`). The time range differs from the full-month queries.
+Two queries are executed for the prior month's equivalent partial period: one workload/usage-type query (`UnblendedCost`, `NetAmortizedCost`) and one cost-center allocated totals query (`NetAmortizedCost`). The time range differs from the full-month queries.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | TimePeriod.Start | String (YYYY-MM-DD) | First day of the prior calendar month (e.g., `2026-02-01` when current month is March) |
 | TimePeriod.End | String (YYYY-MM-DD) | Day after the last equivalent day in the prior month (e.g., `2026-02-08` when MTD covers March 1–7). Clamped to the first day of the current month if the prior month is shorter. |
 | Granularity | String | Always `MONTHLY` |
-| Metrics | List[String] | `UnblendedCost`, `UsageQuantity` (workload query); `NetAmortizedCost` (cost-center query) |
+| Metrics | List[String] | `UnblendedCost`, `NetAmortizedCost`, `UsageQuantity` (workload query); `NetAmortizedCost` (cost-center query) |
 | GroupBy | List[Object] | Same as respective full-period queries |
 
 **Metric Usage by Data Destination:**
 
-The system uses two different Cost Explorer metrics for two distinct purposes:
+The system uses both Cost Explorer metrics throughout its data outputs:
 
-| Destination | Metric | Rationale |
+| Destination | Metric(s) | Rationale |
 |-------------|--------|-----------|
-| Parquet files (`cost-by-workload.parquet`, `cost-by-usage-type.parquet`) | `UnblendedCost` | Per-workload and per-usage-type on-demand cost data for drill-down queries |
-| `summary.json` cost center totals (when allocated costs are available) | `NetAmortizedCost` | Matches the "Total allocated cost" column in the AWS Cost Categories console, including RI/SP amortization and enterprise discount adjustments |
+| Parquet files (`cost-by-workload.parquet`, `cost-by-usage-type.parquet`) | `UnblendedCost` (`cost_usd`, primary) + `NetAmortizedCost` (`net_cost_usd`, additional column) | Per-workload and per-usage-type gross on-demand cost as the primary drill-down figure, with the net post-credits figure available per row |
+| `summary.json` gross fields (`gross_*`) | `UnblendedCost` | Gross totals for the report's primary figures (total spend, cost centers, workloads, MTD comparison) |
+| `summary.json` cost center allocated totals (when Cost Categories are configured) | `NetAmortizedCost` | Matches the "Total allocated cost" column in the AWS Cost Categories console, including credits, RI/SP amortization, and enterprise discount adjustments |
+| `summary.json` legacy cost fields (`current_cost_usd` etc.) | `NetAmortizedCost` (or workload sums when no Cost Categories) | Backward-compatible headline figures; retained so pre-existing data files remain renderable |
+| CE forecast (`GetCostForecast`, MTD periods) | `NET_AMORTIZED_COST` | Projected month-end cost consistent with the net basis |
 
-As a consequence, summing the usage-type costs visible in a workload drill-down will not necessarily equal the cost center total shown on the summary card. The gap reflects RI/SP amortization and enterprise discount adjustments that are included in `NetAmortizedCost` but not in `UnblendedCost`.
+As a consequence, summing the usage-type costs visible in a workload drill-down will not necessarily equal the net cost center total shown as the secondary figure. The gap reflects credits, RI/SP amortization, and discount adjustments that are included in `NetAmortizedCost` but not in `UnblendedCost`.
 
 **Cost Data Record (parquet files):**
 
@@ -572,7 +598,8 @@ As a consequence, summing the usage-type costs visible in a workload drill-down 
 | period | String (YYYY-MM) | Reporting month |
 | cost_center | String | A value from the configured Cost Category |
 | workload | String | App tag value (or "Untagged") |
-| cost_usd | Float | UnblendedCost in USD |
+| cost_usd | Float | UnblendedCost (gross) in USD — primary figure |
+| net_cost_usd | Float (optional) | NetAmortizedCost (net, after credits/discounts) in USD; absent in files written by older pipeline versions |
 | category | String | Storage / Compute / Other / Support |
 | usage_type | String | AWS usage type identifier |
 | usage_quantity | Float | Usage amount in native unit |
@@ -722,3 +749,4 @@ Refs: URS-DP-10101
 | 0.22    | 2026-03-02 | —      | Remove Storage Lens enablement gate: update SRS-DP-420108 — Storage Lens enrichment now always runs on every pipeline execution (normal + backfill); `STORAGE_LENS_CONFIG_ID` / `storage_lens_config_id` are optional explicit-override hints, not enablement flags; auto-discovery runs when empty; graceful skip when no org-level config exists |
 | 0.23    | 2026-03-02 | —      | Exclude MTD from moving average: update SRS-DP-310215 — the 3-month moving average trend line must exclude the MTD partial month from its window to avoid artificially skewing the trend line downward; the MTD bar has no trend line value |
 | 0.24    | 2026-03-17 | —      | Add forecast feature and storage MTD fix: add SRS-DP-310221 (display forecasted month-end cost card in MTD view); add SRS-DP-310222 (forecast InfoTooltip explanation); update SRS-DP-310208 (storage MTD comparison uses prior partial period via `mtd_prior_partial_storage_cost_usd`); update SRS-DP-420104 (MTD CE storage volume scaling when Storage Lens unavailable) |
+| 0.25    | 2026-04-21 | —      | Dual-metric (gross vs net) cost collection, restoring the intent of v0.12 and fixing the net-only regression that showed $0 for credit-backed accounts: update SRS-DP-420101 (workload/usage-type queries request `UnblendedCost`, `NetAmortizedCost`, and `UsageQuantity`); add SRS-DP-420112 (gross `cost_usd` primary + optional `net_cost_usd` parquet column); add SRS-DP-420113 (additive `gross_*` summary.json fields); add SRS-DP-310223 (gross primary UI figure, net "after credits/discounts" secondary when differing ≥ $0.01); add SRS-DP-310224 (legacy data fallback to net figures); update §1.4 definitions (gross/net); update §4.2.2 metric tables and Cost Data Record; update SRS-DP-310201/310204/310211/310303 to use gross primary figures; update SRS-DP-420110 prior partial period query metrics |

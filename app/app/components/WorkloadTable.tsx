@@ -10,6 +10,7 @@ import {
 } from "@cytario/design";
 import type { Workload, MtdCostCenter } from "~/types/cost-data";
 import { formatUsd } from "~/lib/format";
+import { deltaPair, grossDiffersFromNet } from "~/lib/gross";
 
 interface WorkloadTableProps {
   workloads: Workload[];
@@ -45,6 +46,24 @@ export function WorkloadTable({
 
           const isUntagged = wl.name === "Untagged";
 
+          const mom = deltaPair(
+            wl.gross_current_cost_usd,
+            wl.current_cost_usd,
+            mtdWl !== undefined
+              ? mtdWl.gross_prior_partial_cost_usd
+              : wl.gross_prev_month_cost_usd,
+            momPrevious,
+          );
+          const yoy =
+            wl.yoy_cost_usd != null
+              ? deltaPair(
+                  wl.gross_current_cost_usd,
+                  wl.current_cost_usd,
+                  wl.gross_yoy_cost_usd,
+                  wl.yoy_cost_usd,
+                )
+              : null;
+
           return (
             <Row key={wl.name}>
               <Cell>
@@ -63,12 +82,19 @@ export function WorkloadTable({
                 <span className="tabular-nums font-medium">
                   {formatUsd(wl.current_cost_usd)}
                 </span>
+                {grossDiffersFromNet(
+                  wl.gross_current_cost_usd ?? wl.current_cost_usd,
+                  wl.gross_current_cost_usd != null
+                    ? wl.current_cost_usd
+                    : null,
+                ) && (
+                  <span className="block text-xs text-gray-400">
+                    Gross: {formatUsd(wl.gross_current_cost_usd!)}
+                  </span>
+                )}
               </Cell>
               <Cell>
-                <DeltaIndicator
-                  current={wl.current_cost_usd}
-                  previous={momPrevious}
-                />
+                <DeltaIndicator current={mom.current} previous={mom.previous} />
               </Cell>
               <Cell>
                 {isMtd ? (
@@ -78,10 +104,10 @@ export function WorkloadTable({
                     unavailable
                     unavailableText="N/A (MTD)"
                   />
-                ) : wl.yoy_cost_usd != null ? (
+                ) : yoy != null ? (
                   <DeltaIndicator
-                    current={wl.current_cost_usd}
-                    previous={wl.yoy_cost_usd}
+                    current={yoy.current}
+                    previous={yoy.previous}
                   />
                 ) : (
                   <DeltaIndicator current={0} previous={0} unavailable />

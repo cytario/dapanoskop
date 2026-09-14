@@ -14,11 +14,23 @@ from dapanoskop.processor import (
 )
 
 
-def _make_group(app: str, usage_type: str, cost: float, quantity: float) -> dict:
+def _make_group(
+    app: str,
+    usage_type: str,
+    cost: float,
+    quantity: float,
+    net_cost: float | None = None,
+) -> dict:
+    """Build a CE group mock. cost is gross (UnblendedCost); net_cost defaults
+    to cost when not given (no credits/discounts)."""
     return {
         "Keys": [f"App${app}", usage_type],
         "Metrics": {
-            "NetAmortizedCost": {"Amount": str(cost), "Unit": "USD"},
+            "UnblendedCost": {"Amount": str(cost), "Unit": "USD"},
+            "NetAmortizedCost": {
+                "Amount": str(cost if net_cost is None else net_cost),
+                "Unit": "USD",
+            },
             "UsageQuantity": {"Amount": str(quantity), "Unit": "N/A"},
         },
     }
@@ -469,11 +481,18 @@ def test_write_to_s3_parquet_schema() -> None:
     wl_data = io.BytesIO(wl_obj["Body"].read())
     wl_table = pq.read_table(wl_data)
 
-    assert wl_table.column_names == ["cost_center", "workload", "period", "cost_usd"]
+    assert wl_table.column_names == [
+        "cost_center",
+        "workload",
+        "period",
+        "cost_usd",
+        "net_cost_usd",
+    ]
     assert wl_table.schema.field("cost_center").type == pa.string()
     assert wl_table.schema.field("workload").type == pa.string()
     assert wl_table.schema.field("period").type == pa.string()
     assert wl_table.schema.field("cost_usd").type == pa.float64()
+    assert wl_table.schema.field("net_cost_usd").type == pa.float64()
 
     # Check cost-by-usage-type.parquet schema
     ut_obj = s3.get_object(Bucket=bucket, Key="2026-01/cost-by-usage-type.parquet")
@@ -486,6 +505,7 @@ def test_write_to_s3_parquet_schema() -> None:
         "category",
         "period",
         "cost_usd",
+        "net_cost_usd",
         "usage_quantity",
     ]
     assert ut_table.schema.field("workload").type == pa.string()
@@ -493,6 +513,7 @@ def test_write_to_s3_parquet_schema() -> None:
     assert ut_table.schema.field("category").type == pa.string()
     assert ut_table.schema.field("period").type == pa.string()
     assert ut_table.schema.field("cost_usd").type == pa.float64()
+    assert ut_table.schema.field("net_cost_usd").type == pa.float64()
     assert ut_table.schema.field("usage_quantity").type == pa.float64()
 
 
@@ -505,6 +526,7 @@ def test_parse_groups_empty_keys() -> None:
             "Keys": [],
             "Metrics": {
                 "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
+                "UnblendedCost": {"Amount": "100", "Unit": "USD"},
                 "UsageQuantity": {"Amount": "10", "Unit": "N/A"},
             },
         }
@@ -525,6 +547,7 @@ def test_parse_groups_single_key() -> None:
             "Keys": ["App$web-app"],
             "Metrics": {
                 "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
+                "UnblendedCost": {"Amount": "100", "Unit": "USD"},
                 "UsageQuantity": {"Amount": "10", "Unit": "N/A"},
             },
         }
@@ -544,6 +567,7 @@ def test_parse_groups_missing_keys_field() -> None:
         {
             "Metrics": {
                 "NetAmortizedCost": {"Amount": "100", "Unit": "USD"},
+                "UnblendedCost": {"Amount": "100", "Unit": "USD"},
                 "UsageQuantity": {"Amount": "10", "Unit": "N/A"},
             },
         }
@@ -2026,3 +2050,132 @@ def test_completed_month_storage_metrics_unchanged() -> None:
 
     # No MTD-specific field
     assert "mtd_prior_partial_storage_cost_usd" not in sm
+
+
+# ---------------------------------------------------------------------------
+# Gross (UnblendedCost) vs net (NetAmortizedCost) dual-metric tests
+# ---------------------------------------------------------------------------
+
+
+def test_gross_net_dual_metric_summary_fields() -> None:
+    """Gross and net figures flow through to totals, cost centers and workloads.
+
+    web-app has credits applied (gross 1000, net 800); api has none (equal).
+    """
+    collected = _make_collected(
+        current_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 1000, 744, net_cost=800),
+            _make_group("api", "BoxUsage:t3.medium", 500, 1488),
+        ],
+        prev_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 900, 720, net_cost=850),
+            _make_group("api", "BoxUsage:t3.medium", 480, 1440),
+        ],
+        yoy_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 700, 744, net_cost=700),
+            _make_group("api", "BoxUsage:t3.medium", 300, 744),
+        ],
+        cc_mapping={"web-app": "Engineering", "api": "Engineering"},
+    )
+
+    result = process(collected)
+    summary = result["summary"]
+    totals = summary["totals"]
+
+    # Totals: net headline + additive gross fields
+    assert totals["current_cost_usd"] == 1300.0  # 800 + 500 (net)
+    assert totals["gross_current_cost_usd"] == 1500.0  # 1000 + 500 (gross)
+    assert totals["prev_month_cost_usd"] == 1330.0
+    assert totals["gross_prev_month_cost_usd"] == 1380.0
+    assert totals["yoy_cost_usd"] == 1000.0
+    assert totals["gross_yoy_cost_usd"] == 1000.0
+
+    # Workload entries carry both figures
+    workloads = {w["name"]: w for w in summary["cost_centers"][0]["workloads"]}
+    assert workloads["web-app"]["current_cost_usd"] == 800.0
+    assert workloads["web-app"]["gross_current_cost_usd"] == 1000.0
+    assert workloads["api"]["current_cost_usd"] == 500.0
+    assert workloads["api"]["gross_current_cost_usd"] == 500.0
+
+    # Cost center gross fields are gross workload sums
+    cc = summary["cost_centers"][0]
+    assert cc["gross_current_cost_usd"] == 1500.0
+    assert cc["gross_prev_month_cost_usd"] == 1380.0
+    assert cc["gross_yoy_cost_usd"] == 1000.0
+
+    # Parquet rows carry gross cost_usd and net net_cost_usd
+    wl_rows = {(r["workload"], r["period"]): r for r in result["workload_rows"]}
+    cur = wl_rows[("web-app", "2026-01")]
+    assert cur["cost_usd"] == 1000.0
+    assert cur["net_cost_usd"] == 800.0
+    ut_rows = {
+        (r["workload"], r["usage_type"], r["period"]): r
+        for r in result["usage_type_rows"]
+    }
+    ut_cur = ut_rows[("web-app", "BoxUsage:m5.xlarge", "2026-01")]
+    assert ut_cur["cost_usd"] == 1000.0
+    assert ut_cur["net_cost_usd"] == 800.0
+
+
+def test_gross_net_no_credits_gross_equals_net() -> None:
+    """When no credits/discounts apply, gross and net fields are equal."""
+    collected = _make_collected(
+        current_groups=[_make_group("app", "BoxUsage:m5.xlarge", 100, 10)],
+        prev_groups=[_make_group("app", "BoxUsage:m5.xlarge", 90, 10)],
+        yoy_groups=[_make_group("app", "BoxUsage:m5.xlarge", 80, 10)],
+    )
+
+    result = process(collected)
+    totals = result["summary"]["totals"]
+    assert totals["current_cost_usd"] == 100.0
+    assert totals["gross_current_cost_usd"] == 100.0
+
+
+def test_gross_net_mtd_comparison_fields() -> None:
+    """MTD comparison entries gain gross_prior_partial_cost_usd."""
+    collected = _make_mtd_collected(
+        current_groups=[_make_group("app", "BoxUsage:m5.xlarge", 100, 10, net_cost=60)],
+        prev_complete_groups=[_make_group("app", "BoxUsage:m5.xlarge", 500, 100)],
+        prev_month_groups=[_make_group("app", "BoxUsage:m5.xlarge", 400, 100)],
+        yoy_groups=[],
+        prev_month_partial_groups=[
+            _make_group("app", "BoxUsage:m5.xlarge", 90, 10, net_cost=50)
+        ],
+    )
+
+    result = process(collected, is_mtd=True)
+    summary = result["summary"]
+    totals = summary["totals"]
+
+    assert totals["current_cost_usd"] == 60.0
+    assert totals["gross_current_cost_usd"] == 100.0
+    assert totals["mtd_prior_partial_cost_usd"] == 50.0
+    assert totals["gross_mtd_prior_partial_cost_usd"] == 90.0
+
+    mtd_cc = summary["mtd_comparison"]["cost_centers"][0]
+    assert mtd_cc["prior_partial_cost_usd"] == 50.0
+    assert mtd_cc["gross_prior_partial_cost_usd"] == 90.0
+    assert mtd_cc["workloads"][0]["prior_partial_cost_usd"] == 50.0
+    assert mtd_cc["workloads"][0]["gross_prior_partial_cost_usd"] == 90.0
+
+
+def test_workloads_sorted_by_gross_cost() -> None:
+    """Workloads sort by the gross (primary) figure, not the net figure.
+
+    web-app nets to 0 (fully credited) but has the largest gross cost; it must
+    still sort first — the whole point of the credit fix.
+    """
+    collected = _make_collected(
+        current_groups=[
+            _make_group("web-app", "BoxUsage:m5.xlarge", 1000, 744, net_cost=0),
+            _make_group("api", "BoxUsage:t3.medium", 100, 1488, net_cost=100),
+        ],
+        prev_groups=[],
+        yoy_groups=[],
+    )
+
+    result = process(collected)
+    workloads = result["summary"]["cost_centers"][0]["workloads"]
+    assert workloads[0]["name"] == "web-app"
+    assert workloads[0]["current_cost_usd"] == 0.0
+    assert workloads[0]["gross_current_cost_usd"] == 1000.0

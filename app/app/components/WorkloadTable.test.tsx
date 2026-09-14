@@ -163,4 +163,117 @@ describe("WorkloadTable", () => {
     const texts = Array.from(headers).map((h) => h.textContent);
     expect(texts).toContain("vs Prior Partial");
   });
+
+  describe("gross vs net", () => {
+    it("shows muted gross secondary under Current when gross differs", () => {
+      const wl: Workload[] = [
+        {
+          name: "data-pipeline",
+          current_cost_usd: 5000,
+          prev_month_cost_usd: 4800,
+          yoy_cost_usd: 3200,
+          gross_current_cost_usd: 5400,
+        },
+      ];
+      const { container } = renderTable(wl);
+      // Current stays net, gross shown as small secondary
+      expect(container.textContent).toContain("$5,000.00");
+      expect(container.textContent).toContain("Gross: $5,400.00");
+    });
+
+    it("shows no gross secondary when gross equals net within $0.01", () => {
+      const wl: Workload[] = [
+        {
+          name: "data-pipeline",
+          current_cost_usd: 5000,
+          prev_month_cost_usd: 4800,
+          yoy_cost_usd: 3200,
+          gross_current_cost_usd: 5000.005,
+        },
+      ];
+      const { container } = renderTable(wl);
+      expect(container.textContent).not.toContain("Gross:");
+    });
+
+    it("shows no gross secondary when gross absent (old data)", () => {
+      const { container } = renderTable(workloads);
+      expect(container.textContent).not.toContain("Gross:");
+    });
+
+    it("uses gross-vs-gross MoM delta when both sides have gross", () => {
+      const wl: Workload[] = [
+        {
+          name: "data-pipeline",
+          current_cost_usd: 5000,
+          prev_month_cost_usd: 4900, // net delta: +$100
+          yoy_cost_usd: 3200,
+          gross_current_cost_usd: 5500,
+          gross_prev_month_cost_usd: 5200, // gross delta: +$300
+        },
+      ];
+      const { container } = renderTable(wl);
+      expect(container.textContent).toContain("+$300.00");
+      expect(container.textContent).not.toContain("+$100.00");
+    });
+
+    it("falls back to net MoM delta when gross prev is absent", () => {
+      const wl: Workload[] = [
+        {
+          name: "data-pipeline",
+          current_cost_usd: 5000,
+          prev_month_cost_usd: 4900, // net delta: +$100
+          yoy_cost_usd: 3200,
+          gross_current_cost_usd: 5500,
+          // no gross_prev_month_cost_usd
+        },
+      ];
+      const { container } = renderTable(wl);
+      expect(container.textContent).toContain("+$100.00");
+    });
+
+    it("uses gross-vs-gross YoY delta when both sides have gross", () => {
+      const wl: Workload[] = [
+        {
+          name: "data-pipeline",
+          current_cost_usd: 5000,
+          prev_month_cost_usd: 4800,
+          yoy_cost_usd: 4000, // net delta: +$1,000
+          gross_current_cost_usd: 5500,
+          gross_yoy_cost_usd: 5000, // gross delta: +$500
+        },
+      ];
+      const { container } = renderTable(wl);
+      expect(container.textContent).toContain("+$500.00");
+      expect(container.textContent).not.toContain("+$1,000.00");
+    });
+
+    it("uses gross prior partial for MTD MoM when available", () => {
+      const wl: Workload[] = [
+        {
+          name: "data-pipeline",
+          current_cost_usd: 5000,
+          prev_month_cost_usd: 14000,
+          yoy_cost_usd: 3200,
+          gross_current_cost_usd: 5400,
+        },
+      ];
+      const mtdCostCenter: MtdCostCenter = {
+        name: "Engineering",
+        prior_partial_cost_usd: 4200,
+        workloads: [
+          {
+            name: "data-pipeline",
+            prior_partial_cost_usd: 4000,
+            gross_prior_partial_cost_usd: 5000,
+          },
+        ],
+      };
+      const { container } = renderTable(wl, {
+        isMtd: true,
+        mtdCostCenter,
+      });
+      // Gross pair: 5400 vs 5000 = +$400 (net pair would be +$1,000)
+      expect(container.textContent).toContain("+$400.00");
+    });
+  });
 });

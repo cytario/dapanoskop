@@ -209,4 +209,147 @@ describe("GlobalSummary", () => {
     expect(container.textContent).not.toContain("$15,000.00");
     expect(container.textContent).not.toContain("$17,000.00");
   });
+
+  describe("gross vs net", () => {
+    it("shows gross as primary Total Spend when gross differs from net", () => {
+      const summary = makeSummary({
+        totals: {
+          current_cost_usd: 18000,
+          prev_month_cost_usd: 19000,
+          yoy_cost_usd: 14500,
+          gross_current_cost_usd: 22000,
+          gross_prev_month_cost_usd: 21000,
+          gross_yoy_cost_usd: 16000,
+        },
+      });
+      const { container } = render(<GlobalSummary summary={summary} />);
+      // Gross is the headline figure
+      expect(container.textContent).toContain("$22,000.00");
+      // Net shows as secondary "after credits" line
+      expect(container.textContent).toContain("After credits: $18,000.00");
+      // Net is NOT the headline
+      expect(container.textContent).not.toContain("Total Spend$18,000");
+    });
+
+    it("shows no secondary when gross equals net within $0.01", () => {
+      const summary = makeSummary({
+        totals: {
+          current_cost_usd: 20000,
+          prev_month_cost_usd: 19000,
+          yoy_cost_usd: 14500,
+          gross_current_cost_usd: 20000.005,
+          gross_prev_month_cost_usd: 19000,
+          gross_yoy_cost_usd: 14500,
+        },
+      });
+      const { container } = render(<GlobalSummary summary={summary} />);
+      expect(container.textContent).not.toContain("After credits");
+    });
+
+    it("falls back to net Total Spend when gross absent (old data)", () => {
+      const summary = makeSummary();
+      const { container } = render(<GlobalSummary summary={summary} />);
+      expect(container.textContent).toContain("$20,000.00");
+      expect(container.textContent).not.toContain("After credits");
+    });
+
+    it("uses gross-vs-gross for the MoM delta when both sides have gross", () => {
+      const summary = makeSummary({
+        totals: {
+          current_cost_usd: 18000,
+          prev_month_cost_usd: 19000,
+          yoy_cost_usd: 14500,
+          gross_current_cost_usd: 22000,
+          gross_prev_month_cost_usd: 20000,
+        },
+      });
+      const { container } = render(<GlobalSummary summary={summary} />);
+      // Gross delta: 22000 - 20000 = +$2,000 (net delta would be -$1,000)
+      expect(container.textContent).toContain("+$2,000");
+    });
+
+    it("uses gross-vs-gross for the YoY delta when both sides have gross", () => {
+      const summary = makeSummary({
+        totals: {
+          current_cost_usd: 18000,
+          prev_month_cost_usd: 19000,
+          yoy_cost_usd: 14500,
+          gross_current_cost_usd: 22000,
+          gross_prev_month_cost_usd: 21000,
+          gross_yoy_cost_usd: 10000,
+        },
+      });
+      const { container } = render(<GlobalSummary summary={summary} />);
+      // Gross YoY delta: 22000 - 10000 = +$12,000 (net would be +$3,500)
+      expect(container.textContent).toContain("+$12,000");
+    });
+
+    it("falls back to net-to-net YoY when gross YoY is absent", () => {
+      const summary = makeSummary({
+        totals: {
+          current_cost_usd: 18000,
+          prev_month_cost_usd: 19000,
+          yoy_cost_usd: 14500,
+          gross_current_cost_usd: 22000,
+          gross_prev_month_cost_usd: 21000,
+          // no gross_yoy_cost_usd
+        },
+      });
+      const { container } = render(<GlobalSummary summary={summary} />);
+      // Net-to-net YoY delta: 18000 - 14500 = +$3,500
+      expect(container.textContent).toContain("+$3,500");
+    });
+
+    it("uses gross MTD prior partial for the MTD comparison when present", () => {
+      const summary = makeSummary({
+        is_mtd: true,
+        totals: {
+          current_cost_usd: 18000,
+          prev_month_cost_usd: 19000,
+          yoy_cost_usd: 14500,
+          mtd_prior_partial_cost_usd: 13000,
+          gross_current_cost_usd: 22000,
+          gross_prev_month_cost_usd: 21000,
+          gross_yoy_cost_usd: 16000,
+          gross_mtd_prior_partial_cost_usd: 20000,
+        },
+      });
+      const mtdComparison: MtdComparison = {
+        prior_partial_start: "2025-12-01",
+        prior_partial_end_exclusive: "2025-12-08",
+        cost_centers: [],
+      };
+      const { container } = render(
+        <GlobalSummary
+          summary={summary}
+          isMtd={true}
+          mtdComparison={mtdComparison}
+        />,
+      );
+      // Gross MTD delta: 22000 - 20000 = +$2,000 (net would be +$5,000)
+      expect(container.textContent).toContain("+$2,000");
+    });
+
+    it("keeps the forecast card net-based (unchanged)", () => {
+      const summary = makeSummary({
+        is_mtd: true,
+        totals: {
+          current_cost_usd: 18000,
+          prev_month_cost_usd: 19000,
+          yoy_cost_usd: 14500,
+          mtd_prior_partial_cost_usd: 13000,
+          forecast_total_usd: 28500,
+          forecast_month_end_delta_pct: 7.2,
+          prev_complete_total_usd: 26590,
+          gross_current_cost_usd: 22000,
+        },
+      });
+      const { container } = render(
+        <GlobalSummary summary={summary} isMtd={true} />,
+      );
+      // Forecast stays net-based
+      expect(container.textContent).toContain("$28,500.00");
+      expect(container.textContent).toContain("Forecast Month End");
+    });
+  });
 });
