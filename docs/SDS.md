@@ -5,7 +5,7 @@
 | Document ID         | SDS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.35 (Draft)                               |
+| Version             | 0.36 (Draft)                               |
 | Date                | 2026-04-21                                 |
 
 ---
@@ -177,7 +177,7 @@ The Report Renderer fetches `{year}-{month}/summary.json` for the selected repor
 
 **MTD default selection**: After reading `index.json`, the Report Renderer identifies the default reporting period as the most recently completed month. The first entry in `index.json` (the current month) is the MTD period and is detected by inspecting the `is_mtd` field of its summary.json, or by comparing the period string to the current calendar month. The default period is set to the first entry in `index.json` whose `is_mtd` flag is `false` (i.e., the most recently completed month). The MTD period is selectable but not the default, consistent with SRS-DP-310501. When the MTD period is selected, the Report Renderer reads the `is_mtd` field from the fetched summary.json and passes it as a prop to layout components, which conditionally render the MTD indicator banner (SRS-DP-310219).
 
-**GlobalSummary data source**: The `GlobalSummary` component receives the `totals` object from the fetched summary.json as a prop and uses `totals.current_cost_usd`, `totals.prev_month_cost_usd`, `totals.yoy_cost_usd`, and (for MTD) `totals.mtd_prior_partial_cost_usd` to render the three global metric cards. It does not sum cost center values. When `is_mtd` is `true` and `totals.forecast_total_usd` is present, the `GlobalSummary` component additionally renders a forecast card (SRS-DP-310221) alongside the standard three metric cards. The forecast card is conditionally rendered and never shown for completed months.
+**GlobalSummary data source**: The `GlobalSummary` component receives the `totals` object from the fetched summary.json as a prop and uses the gross fields — `totals.gross_current_cost_usd`, `totals.gross_prev_month_cost_usd`, `totals.gross_yoy_cost_usd`, and (for MTD) `totals.gross_mtd_prior_partial_cost_usd` — to render the three global metric cards, falling back to the legacy net fields (`totals.current_cost_usd` etc.) when the gross fields are absent (SDS-DP-010222). It does not sum cost center values. When `is_mtd` is `true` and `totals.forecast_total_usd` is present, the `GlobalSummary` component additionally renders a forecast card (SRS-DP-310221) alongside the standard three metric cards. The forecast card is conditionally rendered and never shown for completed months.
 Refs: SRS-DP-310201, SRS-DP-310211, SRS-DP-310219, SRS-DP-310221, SRS-DP-430102, SRS-DP-310501
 
 **[SDS-DP-010202] Render Cost Center Cards**
@@ -185,7 +185,7 @@ The Report Renderer renders each cost center as an expandable card with summary 
 Refs: SRS-DP-310201, SRS-DP-310202, SRS-DP-310203, SRS-DP-310212
 
 **[SDS-DP-010203] Render Workload Table**
-The Report Renderer renders the workload breakdown table from summary.json, with workloads sorted by current month cost descending and MoM/YoY deltas included.
+The Report Renderer renders the workload breakdown table from summary.json, with workloads sorted by current month gross cost (gross when available, net fallback for legacy data — SDS-DP-010222) descending and MoM/YoY deltas included.
 Refs: SRS-DP-310204, SRS-DP-310205
 
 **[SDS-DP-010204] Render Storage Metrics with Dynamic Tooltips and Navigation**
@@ -205,7 +205,7 @@ For drill-down views (e.g., usage types within a workload), the Report Renderer 
 Refs: SRS-DP-310301, SRS-DP-430102
 
 **[SDS-DP-010207] Fetch Multi-Period Trend Data**
-The Report Renderer includes a `useTrendData` hook that fetches all available periods' summary.json files in parallel via `Promise.allSettled`. For each successfully fetched summary, the hook extracts `current_cost_usd` per cost center and pivots it into a chart-ready data point `{ period, [costCenterName]: costUsd }`. Points are sorted chronologically (oldest first). Cost center names are collected and sorted by total cost descending (largest first, appearing at the bottom of the stacked chart). Failed period fetches are silently excluded — partial data is displayed rather than failing entirely. The hook exposes `{ points, costCenterNames, loading, error }`.
+The Report Renderer includes a `useTrendData` hook that fetches all available periods' summary.json files in parallel via `Promise.allSettled`. For each successfully fetched summary, the hook extracts the gross current cost (`gross_current_cost_usd`, falling back to `current_cost_usd` for legacy data — SDS-DP-010222) per cost center and pivots it into a chart-ready data point `{ period, [costCenterName]: costUsd }`. Points are sorted chronologically (oldest first). Cost center names are collected and sorted by total cost descending (largest first, appearing at the bottom of the stacked chart). Failed period fetches are silently excluded — partial data is displayed rather than failing entirely. The hook exposes `{ points, costCenterNames, loading, error }`.
 Refs: SRS-DP-310214
 
 **[SDS-DP-010208] Render Cost Trend Chart with Moving Average and Time Range Toggle**
@@ -241,7 +241,7 @@ The Report Renderer includes a dedicated route component at `/cost-center/:name`
 Refs: SRS-DP-310302, SRS-DP-310306
 
 **[SDS-DP-010215] Fetch Cost Center-Specific Trend Data**
-The cost center detail route component fetches trend data for a single cost center using a `useEffect` hook that calls `Promise.allSettled(periods.map(p => fetchSummary(p)))` to load all periods' summary.json files in parallel. For each successfully fetched summary, the component finds the matching cost center by name and extracts its `current_cost_usd`, building an array of `TrendPoint[]` with shape `{ period, [costCenterName]: costUsd }`. Points are sorted chronologically. The trend data is passed as props to the reusable `CostTrendSection` component, which renders the cost center-specific trend chart with the same toggle and moving average features as the main report chart.
+The cost center detail route component fetches trend data for a single cost center using a `useEffect` hook that calls `Promise.allSettled(periods.map(p => fetchSummary(p)))` to load all periods' summary.json files in parallel. For each successfully fetched summary, the component finds the matching cost center by name and extracts its gross current cost (`gross_current_cost_usd`, falling back to `current_cost_usd` for legacy data — SDS-DP-010222), building an array of `TrendPoint[]` with shape `{ period, [costCenterName]: costUsd }`. Points are sorted chronologically. The trend data is passed as props to the reusable `CostTrendSection` component, which renders the cost center-specific trend chart with the same toggle and moving average features as the main report chart.
 Refs: SRS-DP-310304
 
 **[SDS-DP-010216] Render Cost Center Detail Page Layout**
@@ -257,7 +257,7 @@ The `CostCenterCard` component conditionally renders a "Split Charge" badge (gra
 Refs: SRS-DP-310201
 
 **[SDS-DP-010219] Render Storage Cost Breakdown Route**
-The Report Renderer includes a dedicated route component at `/storage-cost` (route file: `routes/storage-cost-detail.tsx`) for displaying a breakdown of storage costs by usage type across all workloads. The route reads the period from the query string via `useSearchParams()` and follows the same authentication pattern as other detail routes. The component fetches the summary.json for context (storage metrics, periods), then initializes DuckDB-wasm and queries the `cost-by-usage-type.parquet` file with a `WHERE category = 'Storage'` filter, sorted by `cost_usd DESC`. The query returns columns: `workload`, `usage_type`, `category`, `period`, `cost_usd`, `usage_quantity`. The component renders the shared `<Header>` and `<Footer>` components, a back link to the main report (`<Link to={/?period=${period}}>`), a page heading "Storage Cost Breakdown", two summary cards showing total storage cost and MoM change from summary.json, and a lazy-loaded `<UsageTypeTable>` component displaying the query results. The table displays all storage usage types across all workloads, providing a cross-workload view of storage cost drivers. The route is registered in `routes.ts` as `route("storage-cost", "routes/storage-cost-detail.tsx")`.
+The Report Renderer includes a dedicated route component at `/storage-cost` (route file: `routes/storage-cost-detail.tsx`) for displaying a breakdown of storage costs by usage type across all workloads. The route reads the period from the query string via `useSearchParams()` and follows the same authentication pattern as other detail routes. The component fetches the summary.json for context (storage metrics, periods), then initializes DuckDB-wasm and queries the `cost-by-usage-type.parquet` file with a `WHERE category = 'Storage'` filter, sorted by `cost_usd DESC`. The query returns columns: `workload`, `usage_type`, `category`, `period`, `cost_usd` (gross), `net_cost_usd` (net, when the column exists in the file), `usage_quantity`. The component renders the shared `<Header>` and `<Footer>` components, a back link to the main report (`<Link to={/?period=${period}}>`), a page heading "Storage Cost Breakdown", two summary cards showing total storage cost and MoM change from summary.json, and a lazy-loaded `<UsageTypeTable>` component displaying the query results. The table displays all storage usage types across all workloads, providing a cross-workload view of storage cost drivers. The route is registered in `routes.ts` as `route("storage-cost", "routes/storage-cost-detail.tsx")`.
 Refs: SRS-DP-310206, SRS-DP-430102
 
 **[SDS-DP-010220] Render Storage Tier Breakdown Route**
@@ -267,9 +267,9 @@ Refs: SRS-DP-310207, SRS-DP-310208, SRS-DP-310217
 **[SDS-DP-010221] Render Like-for-Like MTD Change Annotations**
 The Report Renderer conditionally renders like-for-like MTD change annotations when the selected period is the MTD period (i.e., when the fetched `summary.json` has `is_mtd: true`) and when the `mtd_comparison` field is present. The annotations replace the standard MoM change display across all components that show per-cost-center or per-workload change figures (global summary bar, cost center cards, workload table rows). The rendering logic is as follows:
 
-- **Global summary bar annotation source**: The `GlobalSummary` component reads `totals.current_cost_usd` (current MTD total) and `totals.mtd_prior_partial_cost_usd` (prior partial period total) from the `totals` object (SDS-DP-040002) to compute the global-level like-for-like delta. This is independent of cost center definitions and split charge rules.
+- **Global summary bar annotation source**: The `GlobalSummary` component reads `totals.gross_current_cost_usd` (current MTD gross total) and `totals.gross_mtd_prior_partial_cost_usd` (prior partial period gross total) from the `totals` object (SDS-DP-040002) to compute the global-level like-for-like delta, falling back to `totals.current_cost_usd` / `totals.mtd_prior_partial_cost_usd` for legacy data (SDS-DP-010222). This is independent of cost center definitions and split charge rules.
 - **Per-cost-center and per-workload annotation source**: The `prior_partial_cost_usd` value for each cost center and workload is read from `summary.json.mtd_comparison.cost_centers[*]` and its `.workloads[*]` arrays, matched by `name` field.
-- **Delta computation**: `delta_usd` = `current_cost_usd` − `prior_partial_cost_usd`; `delta_pct` = `delta_usd / prior_partial_cost_usd × 100` (if `prior_partial_cost_usd` > 0, otherwise displayed as "N/A"). For the global bar: `delta_usd` = `totals.current_cost_usd` − `totals.mtd_prior_partial_cost_usd`.
+- **Delta computation**: `delta_usd` = gross current − gross prior partial (using `gross_current_cost_usd` and `gross_prior_partial_cost_usd` per entry, net fallback for legacy data); `delta_pct` = `delta_usd / prior_partial × 100` (if prior partial > 0, otherwise displayed as "N/A"). For the global bar: `delta_usd` = `totals.gross_current_cost_usd` − `totals.gross_mtd_prior_partial_cost_usd` (net fallback for legacy data).
 - **Display format**: Same combined format as standard MoM (e.g., "+$800 (+5.6%)"), using the same color-coded direction indicators (SRS-DP-310210).
 - **Comparison label**: A helper `formatPartialPeriodLabel(start: string, endExclusive: string): string` constructs a human-readable label from `mtd_comparison.prior_partial_start` and `mtd_comparison.prior_partial_end_exclusive` (e.g., `"Jan 1–7"` when start=`"2026-01-01"` and end_exclusive=`"2026-01-08"`). This label is rendered as a tooltip or inline annotation (e.g., "vs. Jan 1–7").
 - **YoY suppression**: When `is_mtd` is `true`, the YoY change column/row is replaced with "N/A (MTD)" to avoid displaying a full-year comparison against a partial current period.
@@ -277,6 +277,12 @@ The Report Renderer conditionally renders like-for-like MTD change annotations w
 
 The `is_mtd` flag and the `mtd_comparison` object are passed as props down the component tree from the top-level page component (which fetches summary.json) to `GlobalSummary`, `CostCenterCard`, and `WorkloadTable`.
 Refs: SRS-DP-310219, SRS-DP-310220
+
+**[SDS-DP-010222] Render Gross Cost as Primary with Net "After Credits" Secondary and Legacy Fallback**
+The Report Renderer displays the gross (UnblendedCost) cost figure as the primary cost figure throughout the report. Data resolution per displayed figure: for summary.json-derived figures it reads the `gross_*` field (`totals.gross_current_cost_usd`, cost center `gross_current_cost_usd`, workload `gross_current_cost_usd`, `gross_prev_month_cost_usd`, `gross_yoy_cost_usd`, and `gross_prior_partial_cost_usd` for MTD comparisons) and falls back to the corresponding net-based field (`current_cost_usd` etc.) when the gross field is absent (data written by an older pipeline version); for parquet-derived drill-down figures it reads `cost_usd` (gross) and, when the `net_cost_usd` column exists in the file, the net figure per row — a missing column is handled by treating `cost_usd` as the only available figure. The `WorkloadTable` sorts rows by the resolved primary (gross) figure.
+
+When the resolved gross figure exceeds the net figure by $0.01 or more, the component additionally renders the net figure as a secondary "after credits/discounts" figure adjacent to the primary (e.g., under the "Total Spend" metric in the global summary bar and next to cost center / workload costs). When the difference is below $0.01, no secondary figure is rendered. The components use the same formatting utilities (2 decimal places, currency formatting) as the primary figures.
+Refs: SRS-DP-310223, SRS-DP-310224, SRS-DP-420112, SRS-DP-420113
 
 Wireframes: See `docs/wireframes/cost-report.puml` and `docs/wireframes/workload-detail.puml`.
 Cost direction indicators (color coding, direction arrows, +/- prefixes) and anomaly highlighting are implemented with Tailwind CSS utility classes.
@@ -324,7 +330,7 @@ Refs: SRS-DP-310210, SRS-DP-310213
 **Variability**: GroupBy dimensions are fixed (TAG:App + USAGE_TYPE). The Cost Category name is configurable (defaults to the first one returned by the API).
 
 **[SDS-DP-020101] Query Cost Explorer for Current MTD Period and Comparison Periods**
-The Cost Collector queries `GetCostAndUsage` for six time periods on each normal daily invocation: (1) the current in-progress calendar month (the MTD period — from the first day of the current month to today exclusive), (2) the prior month's equivalent partial period (same day range as the MTD window, from the first day of the prior month to the same day-of-month exclusive — see SDS-DP-020210 for the date computation), (3) the most recently completed calendar month (`prev_complete` — for MoM comparison and as a standalone selectable period), (4) the month before that (`prev_month` — for further MoM comparison), (5) the same month of the previous year relative to the current MTD month (`yoy` — for the MTD period's YoY display), and (6) the same calendar month one year prior to `prev_complete` (`yoy_prev_complete` — for the completed month's YoY comparison). Periods (5) and (6) are distinct because the MTD month and the most recently completed month differ by one calendar month: e.g., when running in February 2026, `yoy` = February 2025 (for the MTD period) and `yoy_prev_complete` = January 2025 (for the January 2026 completed-month entry). Using a single shared `yoy` period for both would compare the completed month against the wrong year-ago month. Each query uses `MONTHLY` granularity and requests `UnblendedCost` and `UsageQuantity` metrics, grouped by App tag and USAGE_TYPE (2 GroupBy dimensions, within the CE API limit).
+The Cost Collector queries `GetCostAndUsage` for six time periods on each normal daily invocation: (1) the current in-progress calendar month (the MTD period — from the first day of the current month to today exclusive), (2) the prior month's equivalent partial period (same day range as the MTD window, from the first day of the prior month to the same day-of-month exclusive — see SDS-DP-020210 for the date computation), (3) the most recently completed calendar month (`prev_complete` — for MoM comparison and as a standalone selectable period), (4) the month before that (`prev_month` — for further MoM comparison), (5) the same month of the previous year relative to the current MTD month (`yoy` — for the MTD period's YoY display), and (6) the same calendar month one year prior to `prev_complete` (`yoy_prev_complete` — for the completed month's YoY comparison). Periods (5) and (6) are distinct because the MTD month and the most recently completed month differ by one calendar month: e.g., when running in February 2026, `yoy` = February 2025 (for the MTD period) and `yoy_prev_complete` = January 2025 (for the January 2026 completed-month entry). Using a single shared `yoy` period for both would compare the completed month against the wrong year-ago month. Each query uses `MONTHLY` granularity and requests `UnblendedCost`, `NetAmortizedCost`, and `UsageQuantity` metrics (both cost metrics per row — see SDS-DP-020215), grouped by App tag and USAGE_TYPE (2 GroupBy dimensions, within the CE API limit).
 
 **MTD period generation**: In normal daily invocation (no `target_year`/`target_month` parameters), the `_get_periods()` function returns the current calendar month as the primary period using a time range `[first_day_of_current_month, today)`. The MTD period's summary.json is written under the `{current_year}-{current_month}/` prefix and always appears as the first (most recent) entry in `index.json`. Because the month is in progress, the figures will change on each subsequent daily run until the month ends.
 
@@ -412,22 +418,22 @@ where `mtd_days` = number of days elapsed in the current MTD window and `days_in
 Refs: SRS-DP-420104
 
 **[SDS-DP-020204] Write Summary JSON with Storage Lens Data and MTD Comparison**
-The Data Processor writes `{year}-{month}/summary.json` containing pre-computed aggregates for the 1-page report: a `totals` object (see below), cost center totals (current, prev month, YoY), workload breakdown per cost center (sorted by cost descending, with MoM/YoY), storage metrics (total cost, cost/TB, hot tier %), a `collected_at` ISO 8601 timestamp, and optionally a `storage_lens` object containing organization-wide storage data from C-2.3 when Storage Lens integration is configured. The `storage_lens` object includes: `total_bytes` and `storage_lens_date` (timestamp from CloudWatch metric). Cost centers with `is_split_charge: true` are included in the `cost_centers` array but excluded from global summary calculations.
+The Data Processor writes `{year}-{month}/summary.json` containing pre-computed aggregates for the 1-page report: a `totals` object (see below), cost center totals (current, prev month, YoY — net-based, plus additive `gross_*` fields per SDS-DP-020215), workload breakdown per cost center (sorted by gross cost descending, with MoM/YoY), storage metrics (total cost, cost/TB, hot tier %), a `collected_at` ISO 8601 timestamp, and optionally a `storage_lens` object containing organization-wide storage data from C-2.3 when Storage Lens integration is configured. The `storage_lens` object includes: `total_bytes` and `storage_lens_date` (timestamp from CloudWatch metric). Cost centers with `is_split_charge: true` are included in the `cost_centers` array but excluded from global summary calculations.
 
 **Storage MTD comparison**: When `is_mtd=True`, `_compute_storage_metrics()` is called with storage usage rows from the `prev_month_partial` period (SDS-DP-020210) instead of the full `prev_month` period for computing the `prev_month_cost_usd` comparison field. This ensures the storage cost DeltaIndicator on the "Storage Cost" card compares the current MTD storage cost against the equivalent prior partial period, consistent with the like-for-like approach for global and cost-center comparisons (SRS-DP-310220). The resulting storage metrics also include `mtd_prior_partial_storage_cost_usd` (the prior partial period's total storage cost in USD) so the frontend can display the appropriate comparison label (e.g., "vs. Feb 1–7"). For completed months, the full prior month's storage rows continue to be used for the comparison.
 
-The processor computes the `totals` object by summing `UnblendedCost` workload-level data across all cost centers for each period, independent of cost category allocation and split charge rules: `totals.current_cost_usd` = sum of all workload costs for `current`; `totals.prev_month_cost_usd` = sum for `prev_month`; `totals.yoy_cost_usd` = sum for `yoy`. When `is_mtd` is `true`, `totals.mtd_prior_partial_cost_usd` = sum of all workload costs for the prior partial period (SDS-DP-020210); otherwise it is `null`. This computation uses the workload-level `UnblendedCost` data already collected by C-2.1 — no additional AWS API calls are required.
+The processor computes the `totals` object by summing workload-level data across all cost centers for each period, independent of cost category allocation and split charge rules, on both cost bases: the gross (`UnblendedCost`) sums populate `totals.gross_current_cost_usd` (sum of all workload gross costs for `current`), `totals.gross_prev_month_cost_usd` (sum for `prev_month`), and `totals.gross_yoy_cost_usd` (sum for `yoy`), plus `totals.gross_mtd_prior_partial_cost_usd` for the prior partial period when `is_mtd` is `true` (see SDS-DP-020215); the net (`NetAmortizedCost`) sums populate the legacy headline fields `totals.current_cost_usd`, `totals.prev_month_cost_usd`, and `totals.yoy_cost_usd`, and `totals.mtd_prior_partial_cost_usd` for the prior partial period (otherwise `null`). The net-based legacy fields are retained for backward compatibility with data consumers written before the dual-metric output (SDS-DP-010222). These computations use the workload-level dual-metric data already collected by C-2.1 — no additional AWS API calls are required.
 
 When `is_mtd` is `true`, the processor additionally writes an `mtd_comparison` object (SDS-DP-020211) containing cost center and workload totals for the prior month's equivalent partial period, plus the `prior_partial_start` and `prior_partial_end_exclusive` date strings that define the comparison range. The `mtd_comparison` field is omitted from completed-month summary.json files.
 Refs: SRS-DP-430101, SRS-DP-510002, SRS-DP-420108, SRS-DP-420110
 
 **[SDS-DP-020205] Write Workload Parquet**
-The Data Processor writes `{year}-{month}/cost-by-workload.parquet` containing per-workload cost data with columns: `cost_center`, `workload`, `period`, `cost_usd`. Rows for all three periods (current, previous month, YoY month) are included so the SPA can compute comparisons via DuckDB queries.
-Refs: SRS-DP-430101
+The Data Processor writes `{year}-{month}/cost-by-workload.parquet` containing per-workload cost data with columns: `cost_center`, `workload`, `period`, `cost_usd`, `net_cost_usd`. `cost_usd` holds the gross figure (`UnblendedCost`); `net_cost_usd` holds the net figure (`NetAmortizedCost`) — see SDS-DP-020215. The `net_cost_usd` column is absent in files written by older pipeline versions (single-metric `cost_usd` only); the SPA handles a missing column gracefully (SDS-DP-010222). Rows for all three periods (current, previous month, YoY month) are included so the SPA can compute comparisons via DuckDB queries.
+Refs: SRS-DP-430101, SRS-DP-420112
 
 **[SDS-DP-020206] Write Usage Type Parquet**
-The Data Processor writes `{year}-{month}/cost-by-usage-type.parquet` containing per-usage-type cost data with columns: `workload`, `usage_type`, `category`, `period`, `cost_usd`, `usage_quantity`. Rows for all three periods are included.
-Refs: SRS-DP-430101
+The Data Processor writes `{year}-{month}/cost-by-usage-type.parquet` containing per-usage-type cost data with columns: `workload`, `usage_type`, `category`, `period`, `cost_usd`, `net_cost_usd`, `usage_quantity`. `cost_usd` holds the gross figure (`UnblendedCost`); `net_cost_usd` holds the net figure (`NetAmortizedCost`) — see SDS-DP-020215. The `net_cost_usd` column is absent in files written by older pipeline versions; the SPA handles a missing column gracefully (SDS-DP-010222). Rows for all three periods are included.
+Refs: SRS-DP-430101, SRS-DP-420112
 
 **[SDS-DP-020207] Write Period Index Manifest**
 After writing period-specific files, the Data Processor lists all `YYYY-MM/` prefixes in the data bucket (via S3 `ListObjectsV2` with delimiter), writes a root-level `index.json` containing `{"periods": [...]}` sorted in reverse chronological order. This enables the SPA to discover available periods without requiring `s3:ListBucket` IAM permissions for browser users. The index update can be called independently (without writing period data) to support backfill scenarios where the index is updated once after all months are processed.
@@ -458,6 +464,19 @@ When `is_mtd=True` and the collected dict contains a non-None `"forecast"` value
 
 When `is_mtd=False` or the forecast value is `None`, these three fields are omitted entirely from `totals` (not set to null). Completed-month summary.json files never contain forecast fields.
 Refs: SRS-DP-310221
+
+**[SDS-DP-020215] Record Dual Cost Metrics (Gross and Net) Per Row and Aggregate Gross Fields**
+The Data Processor's `_parse_groups()` function records two cost figures per workload/usage-type row parsed from the CE `GetCostAndUsage` responses: `cost_usd` = `UnblendedCost` (gross — on-demand cost before credits, RI/SP amortization, and discount programs; the primary figure, so accounts benefiting from AWS credits no longer show $0) and `net_cost_usd` = `NetAmortizedCost` (net, post-credits/discounts). Both values come from the same query response — no additional AWS API calls are required.
+
+The processor computes per-period workload cost sums on both bases: gross (`cost_usd`) and net (`net_cost_usd`). From these it writes the additive gross fields into summary.json (see SDS-DP-040002):
+
+- `totals.gross_current_cost_usd` / `gross_prev_month_cost_usd` / `gross_yoy_cost_usd` — gross workload sums for the `current`, `prev_month`, and `yoy` periods, and `totals.gross_mtd_prior_partial_cost_usd` for the prior partial period (MTD periods only);
+- per cost center: `gross_current_cost_usd` / `gross_prev_month_cost_usd` / `gross_yoy_cost_usd` — gross sums of the cost center's workloads per period (computed with per-period CC mappings, before split charge zeroing); split charge categories keep their gross workload sums because the gross basis reflects raw workload consumption, not the allocated redistribution;
+- per workload: `gross_current_cost_usd` / `gross_prev_month_cost_usd` / `gross_yoy_cost_usd`;
+- per `mtd_comparison` entry (cost centers and workloads): `gross_prior_partial_cost_usd`.
+
+The workloads array is sorted by `gross_current_cost_usd` descending (gross is the primary figure). The existing cost fields (`current_cost_usd` etc.) remain net-based — `NetAmortizedCost` allocated totals for cost centers when Cost Categories are configured, and net workload sums otherwise — so that pre-existing data consumers and the SPA's legacy fallback (SDS-DP-010222) continue to work unchanged. All `gross_*` fields are optional additions: older summary.json files lack them, and consumers fall back to the corresponding net-based field.
+Refs: SRS-DP-420112, SRS-DP-420113, SRS-DP-310223, SRS-DP-310224
 
 ##### 3.2.3 C-2.3: Storage Lens Reader
 
@@ -630,7 +649,7 @@ Refs: SRS-DP-430101, SRS-DP-430102, SRS-DP-430103, SRS-DP-420109
 
 The `is_mtd` field indicates whether the reporting period is the current in-progress calendar month. When `true`, the SPA displays an MTD indicator and labels the period "MTD" in the period selector. When `false` (or absent), the period is a completed month and is labeled with its abbreviated month name.
 
-The `totals` object contains pre-computed global cost figures derived from raw workload costs across all cost centers. These values are computed from `UnblendedCost` workload-level data, summing all workloads regardless of cost category assignment, split charge rules, or cost center name changes. This makes the global dashboard figures (Total Spend, MoM delta, YoY delta) stable and self-consistent: `current_cost_usd` is the sum of all workload costs for the current period; `prev_month_cost_usd` is the sum for the previous month; `yoy_cost_usd` is the sum for the year-ago equivalent period; `mtd_prior_partial_cost_usd` is the sum for the prior month's equivalent partial period (populated only when `is_mtd` is `true`, otherwise `null`). The `GlobalSummary` component reads exclusively from this object for its three metric cards — it does not sum cost center values.
+The `totals` object contains pre-computed global cost figures derived from raw workload costs across all cost centers, summing all workloads regardless of cost category assignment, split charge rules, or cost center name changes. This makes the global dashboard figures (Total Spend, MoM delta, YoY delta) stable and self-consistent. Figures are provided on both cost bases (SDS-DP-020215): the optional `gross_*` fields (`gross_current_cost_usd`, `gross_prev_month_cost_usd`, `gross_yoy_cost_usd`, and `gross_mtd_prior_partial_cost_usd` — populated only when `is_mtd` is `true`, otherwise omitted) hold the gross (`UnblendedCost`) sums and are the basis of the report's primary figures; the legacy fields (`current_cost_usd`, `prev_month_cost_usd`, `yoy_cost_usd`, `mtd_prior_partial_cost_usd` — `null` for non-MTD periods) hold the net (`NetAmortizedCost`) sums and are retained for backward compatibility, serving as the fallback when the gross fields are absent (older data files). The `GlobalSummary` component reads exclusively from this object for its three metric cards — it does not sum cost center values.
 
 When `is_mtd` is `true` and forecast data is available (SDS-DP-020213/020214), the `totals` object additionally contains: `forecast_total_usd` — the projected full-month cost (actual MTD spend + CE forecast remainder); `forecast_month_end_delta_pct` — the percentage change of `forecast_total_usd` versus `prev_complete_total_usd`; and `prev_complete_total_usd` — the sum of all workload costs for the most recently completed calendar month, used as the comparison baseline. These three fields are omitted entirely (not null) when `is_mtd` is `false` or when the CE `GetCostForecast` API call fails. The `GlobalSummary` component renders a forecast card (SRS-DP-310221) when these fields are present.
 
@@ -653,6 +672,10 @@ The `mtd_comparison` field is present only when `is_mtd` is `true`. It contains 
     "prev_month_cost_usd": 15200.00,
     "yoy_cost_usd": 12000.00,
     "mtd_prior_partial_cost_usd": 3350.00,
+    "gross_current_cost_usd": 26590.00,
+    "gross_prev_month_cost_usd": 23400.00,
+    "gross_yoy_cost_usd": 18500.00,
+    "gross_mtd_prior_partial_cost_usd": 4200.00,
     "forecast_total_usd": 28500.00,
     "forecast_month_end_delta_pct": 7.2,
     "prev_complete_total_usd": 26590.00
@@ -672,12 +695,18 @@ The `mtd_comparison` field is present only when `is_mtd` is `true`. It contains 
       "current_cost_usd": 15000.00,
       "prev_month_cost_usd": 14200.00,
       "yoy_cost_usd": 11000.00,
+      "gross_current_cost_usd": 23500.00,
+      "gross_prev_month_cost_usd": 22300.00,
+      "gross_yoy_cost_usd": 17400.00,
       "workloads": [
         {
           "name": "data-pipeline",
           "current_cost_usd": 5000.00,
           "prev_month_cost_usd": 4800.00,
-          "yoy_cost_usd": 3200.00
+          "yoy_cost_usd": 3200.00,
+          "gross_current_cost_usd": 8000.00,
+          "gross_prev_month_cost_usd": 7600.00,
+          "gross_yoy_cost_usd": 5100.00
         }
       ]
     },
@@ -706,10 +735,12 @@ The `mtd_comparison` field is present only when `is_mtd` is `true`. It contains 
       {
         "name": "Engineering",
         "prior_partial_cost_usd": 3200.00,
+        "gross_prior_partial_cost_usd": 4200.00,
         "workloads": [
           {
             "name": "data-pipeline",
-            "prior_partial_cost_usd": 1100.00
+            "prior_partial_cost_usd": 1100.00,
+            "gross_prior_partial_cost_usd": 1500.00
           }
         ]
       },
@@ -735,7 +766,8 @@ Refs: SRS-DP-430101, SRS-DP-430102, SRS-DP-420110
 | cost_center | STRING | A value from the configured Cost Category |
 | workload | STRING | App tag value (or "Untagged") |
 | period | STRING | YYYY-MM |
-| cost_usd | DOUBLE | UnblendedCost in USD |
+| cost_usd | DOUBLE | UnblendedCost (gross) in USD — primary figure |
+| net_cost_usd | DOUBLE (optional) | NetAmortizedCost (net, after credits/discounts) in USD; absent in files written by older pipeline versions |
 
 **cost-by-usage-type.parquet:**
 
@@ -745,12 +777,13 @@ Refs: SRS-DP-430101, SRS-DP-430102, SRS-DP-420110
 | usage_type | STRING | AWS usage type identifier |
 | category | STRING | Storage / Compute / Other / Support |
 | period | STRING | YYYY-MM |
-| cost_usd | DOUBLE | UnblendedCost in USD |
+| cost_usd | DOUBLE | UnblendedCost (gross) in USD — primary figure |
+| net_cost_usd | DOUBLE (optional) | NetAmortizedCost (net, after credits/discounts) in USD; absent in files written by older pipeline versions |
 | usage_quantity | DOUBLE | Usage amount in native unit |
 
-Both parquet files contain rows for all three periods (current, previous month, YoY) to support comparison queries.
+Both parquet files contain rows for all three periods (current, previous month, YoY) to support comparison queries. `cost_usd` holds the gross (UnblendedCost) figure and `net_cost_usd` the net (NetAmortizedCost) figure per row (SDS-DP-020215); the SPA's DuckDB queries handle the absence of the `net_cost_usd` column in older files (SDS-DP-010222).
 
-Refs: SRS-DP-430101
+Refs: SRS-DP-430101, SRS-DP-420112
 
 The SPA discovers available periods by reading `index.json` from the data bucket (via S3 SDK in production, or HTTP fetch in local dev mode). The Lambda pipeline updates this file on every run by listing all `YYYY-MM/` prefixes in the bucket.
 
@@ -772,6 +805,9 @@ EventBridge          Lambda (C-2.1 + C-2.2)          Cost Explorer       S3 Data
     │                         │── GetCostAndUsage ────────>│                  │
     │                         │   (current month MTD,      │                  │
     │                         │    GroupBy: App + USAGE_TYPE)                 │
+    │                         │   Metrics: UnblendedCost + │                  │
+    │                         │    NetAmortizedCost +      │                  │
+    │                         │    UsageQuantity)          │                  │
     │                         │<── response ───────────────│                  │
     │                         │                            │                  │
     │                         │ [collect prior partial     │                  │
@@ -780,7 +816,10 @@ EventBridge          Lambda (C-2.1 + C-2.2)          Cost Explorer       S3 Data
     │                         │── GetCostAndUsage ────────>│                  │
     │                         │   (prior month same date   │                  │
     │                         │    range as MTD window,    │                  │
-    │                         │    GroupBy: App + USAGE_TYPE)                 │
+    │                         │    GroupBy: App + USAGE_TYPE,                 │
+    │                         │    Metrics: UnblendedCost + │                  │
+    │                         │    NetAmortizedCost +      │                  │
+    │                         │    UsageQuantity)          │                  │
     │                         │<── response ───────────────│                  │
     │                         │── GetCostAndUsage ────────>│                  │
     │                         │   (prior month same range, │                  │
@@ -1445,3 +1484,4 @@ How should Dapanoskop obtain actual storage volume data (in bytes) to supplement
 | 0.33    | 2026-03-17 | —      | Add GetCostForecast API integration: add SDS-DP-020213 (Cost Collector calls `GetCostForecast` for MTD periods only, with try/except returning None on failure); add SDS-DP-020214 (processor computes `forecast_total_usd`, `forecast_month_end_delta_pct`, `prev_complete_total_usd` in `totals` when forecast data present); update SDS-DP-040002 summary.json schema (add three forecast fields to `totals`, present only in MTD periods when forecast succeeds); update SDS-DP-010201 (GlobalSummary conditionally renders forecast card when fields present) |
 | 0.35    | 2026-04-21 | —      | Doc sync: add `ce:GetCostForecast` to SDS-DP-030301 IAM permission list (already granted in Terraform since v0.33); fix stale C-2.1 intro prose that described three periods instead of six (the numbered list in SDS-DP-020101 was already correct) |
 | 0.34    | 2026-03-17 | —      | Storage MTD comparison fix: update SDS-DP-020203 (MTD volume scaling — when Storage Lens unavailable and is_mtd=True, scale CE GB-Month value by days_in_month/mtd_days to estimate actual bytes stored); update SDS-DP-020204 (storage MTD comparison — call `_compute_storage_metrics()` with `prev_month_partial` rows instead of `prev_month` rows when is_mtd=True; output `mtd_prior_partial_storage_cost_usd` in storage_metrics); update SDS-DP-040002 schema (add `storage_metrics.mtd_prior_partial_storage_cost_usd`, present only for MTD periods); update SDS-DP-010204 (StorageOverview reads `mtd_prior_partial_storage_cost_usd` for Card 1 MoM delta when is_mtd=True, with graceful fallback) |
+| 0.36    | 2026-04-21 | —      | Dual-metric (gross vs net) implementation, restoring and extending the dual-metric architecture documented in v0.17 (the code had regressed to net-only collection, showing $0 for credit-backed accounts): update SDS-DP-020101 (workload/usage-type queries request `UnblendedCost`, `NetAmortizedCost`, and `UsageQuantity`); add SDS-DP-020215 (`_parse_groups()` records `cost_usd` = UnblendedCost gross + `net_cost_usd` = NetAmortizedCost per row; processor writes additive `gross_*` fields to totals, cost centers, workloads, and mtd_comparison; workloads sorted by gross; legacy cost fields remain net-based); update SDS-DP-020204 (totals computed on both bases — gross `gross_*` fields plus legacy net headline fields); update SDS-DP-020205/020206 (parquet gains optional `net_cost_usd` column; `cost_usd` is gross); update SDS-DP-040002 summary.json schema (gross fields in totals, cost centers, workloads, mtd_comparison with example); update SDS-DP-040003 parquet schemas (`net_cost_usd` DOUBLE optional column in both files); add SDS-DP-010222 (SPA renders gross primary, net "after credits/discounts" secondary when gross exceeds net ≥ $0.01, falls back to net fields for legacy data without gross fields / missing parquet column); update §4.1 sequence diagram (annotate dual-metric query Metrics); forecast (`GetCostForecast`, SDS-DP-020213) and cost-category allocated-totals queries remain `NetAmortizedCost` unchanged |

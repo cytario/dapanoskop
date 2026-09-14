@@ -8,6 +8,7 @@ import { getConfig } from "~/lib/config";
 import { getAwsCredentials } from "~/lib/credentials";
 import { buildS3ConfigStatements } from "~/lib/duckdb-config";
 import { formatUsd } from "~/lib/format";
+import { queryUsageTypeRows } from "~/lib/parquet-query";
 import { Header } from "~/components/Header";
 import { Footer } from "~/components/Footer";
 
@@ -100,26 +101,11 @@ export default function StorageCostDetail() {
         }
 
         try {
-          const result = await conn.query(`
-            SELECT workload, usage_type, category, period, cost_usd, usage_quantity
-            FROM read_parquet(${parquetSource})
-            WHERE category = 'Storage'
-            ORDER BY cost_usd DESC
-          `);
-
-          const rows: UsageTypeCostRow[] = [];
-          for (let i = 0; i < result.numRows; i++) {
-            rows.push({
-              workload: String(result.getChildAt(0)?.get(i) ?? ""),
-              usage_type: String(result.getChildAt(1)?.get(i) ?? ""),
-              category: String(
-                result.getChildAt(2)?.get(i) ?? "",
-              ) as UsageTypeCostRow["category"],
-              period: String(result.getChildAt(3)?.get(i) ?? ""),
-              cost_usd: Number(result.getChildAt(4)?.get(i) ?? 0),
-              usage_quantity: Number(result.getChildAt(5)?.get(i) ?? 0),
-            });
-          }
+          const { rows } = await queryUsageTypeRows(
+            async (sql) => conn.query(sql),
+            parquetSource,
+            "WHERE category = 'Storage'\n            ORDER BY cost_usd DESC",
+          );
 
           if (!cancelled) setUsageRows(rows);
         } finally {

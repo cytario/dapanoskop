@@ -186,12 +186,17 @@ def get_cost_and_usage(
     start: str,
     end: str,
 ) -> list[dict[str, Any]]:
-    """Query GetCostAndUsage with pagination, grouped by App tag + USAGE_TYPE."""
+    """Query GetCostAndUsage with pagination, grouped by App tag + USAGE_TYPE.
+
+    Requests both UnblendedCost (gross, pre-credit/discount on-demand cost) and
+    NetAmortizedCost (net, post-credit/discount) so accounts benefiting from
+    credits no longer aggregate to zero everywhere.
+    """
     results: list[dict[str, Any]] = []
     kwargs: dict[str, Any] = {
         "TimePeriod": {"Start": start, "End": end},
         "Granularity": "MONTHLY",
-        "Metrics": ["NetAmortizedCost", "UsageQuantity"],
+        "Metrics": ["UnblendedCost", "NetAmortizedCost", "UsageQuantity"],
         "GroupBy": [
             {"Type": "TAG", "Key": "App"},
             {"Type": "DIMENSION", "Key": "USAGE_TYPE"},

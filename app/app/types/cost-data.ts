@@ -6,6 +6,11 @@ export interface Totals {
   forecast_total_usd?: number;
   forecast_month_end_delta_pct?: number;
   prev_complete_total_usd?: number;
+  /** Gross (pre-credit/discount) current cost. Absent in older data. */
+  gross_current_cost_usd?: number;
+  gross_prev_month_cost_usd?: number;
+  gross_yoy_cost_usd?: number;
+  gross_mtd_prior_partial_cost_usd?: number;
 }
 
 /** Matches SDS-DP-040002 summary.json schema */
@@ -39,6 +44,8 @@ export interface MtdComparison {
 export interface MtdCostCenter {
   name: string;
   prior_partial_cost_usd: number;
+  /** Gross (pre-credit/discount) prior partial cost. Absent in older data. */
+  gross_prior_partial_cost_usd?: number;
   workloads: MtdWorkload[];
   is_split_charge?: boolean;
 }
@@ -46,6 +53,7 @@ export interface MtdCostCenter {
 export interface MtdWorkload {
   name: string;
   prior_partial_cost_usd: number;
+  gross_prior_partial_cost_usd?: number;
 }
 
 export interface StorageLens {
@@ -73,6 +81,10 @@ export interface CostCenter {
   current_cost_usd: number;
   prev_month_cost_usd: number;
   yoy_cost_usd?: number;
+  /** Gross (pre-credit/discount) costs. Absent in older data. */
+  gross_current_cost_usd?: number;
+  gross_prev_month_cost_usd?: number;
+  gross_yoy_cost_usd?: number;
   workloads: Workload[];
   is_split_charge?: boolean;
 }
@@ -82,6 +94,10 @@ export interface Workload {
   current_cost_usd: number;
   prev_month_cost_usd: number;
   yoy_cost_usd?: number;
+  /** Gross (pre-credit/discount) costs. Absent in older data. */
+  gross_current_cost_usd?: number;
+  gross_prev_month_cost_usd?: number;
+  gross_yoy_cost_usd?: number;
 }
 
 export interface TaggingCoverage {
@@ -95,7 +111,10 @@ export interface WorkloadCostRow {
   cost_center: string;
   workload: string;
   period: string;
+  /** Gross (pre-credit/discount, UnblendedCost) cost — the primary figure. */
   cost_usd: number;
+  /** Net (NetAmortizedCost) cost. Optional column, absent in older data. */
+  net_cost_usd?: number;
 }
 
 /** Matches SDS-DP-040003 cost-by-usage-type.parquet columns */
@@ -104,6 +123,9 @@ export interface UsageTypeCostRow {
   usage_type: string;
   category: "Storage" | "Compute" | "Other" | "Support";
   period: string;
+  /** Gross (pre-credit/discount, UnblendedCost) cost — the primary figure. */
   cost_usd: number;
   usage_quantity: number;
+  /** Net (NetAmortizedCost) cost. Optional column, absent in older data. */
+  net_cost_usd?: number;
 }

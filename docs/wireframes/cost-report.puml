@@ -17,6 +17,7 @@ title Dapanoskop - Cost Report Screen
       {SI
         Total Spend
         <b>$23,500</b>
+        <color:gray>after credits: $18,200</color>
       } | {SI
         vs Last Month
         <color:red><b>+$1,300 (+5.9%)</b> ▲</color>

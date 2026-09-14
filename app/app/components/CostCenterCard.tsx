@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { Card, Badge, DeltaIndicator } from "@cytario/design";
 import type { CostCenter, MtdComparison } from "~/types/cost-data";
 import { formatUsd, formatPartialPeriodLabel } from "~/lib/format";
+import { deltaPair, grossDiffersFromNet } from "~/lib/gross";
 import { WorkloadTable } from "./WorkloadTable";
 
 interface CostCenterCardProps {
@@ -30,7 +31,8 @@ export function CostCenterCard({
       ? mtdCostCenter.prior_partial_cost_usd
       : costCenter.prev_month_cost_usd;
 
-  // Find top mover (workload with highest absolute MoM change)
+  // Top mover uses gross-vs-gross when gross fields are present (comparing
+  // like with like), falling back to net.
   const topMover =
     costCenter.workloads.length > 0
       ? costCenter.workloads.reduce(
@@ -38,13 +40,25 @@ export function CostCenterCard({
             const mtdWl = mtdCostCenter?.workloads.find(
               (mw) => mw.name === wl.name,
             );
-            const prev =
+            const pair = deltaPair(
+              wl.gross_current_cost_usd,
+              wl.current_cost_usd,
+              mtdWl !== undefined
+                ? mtdWl.gross_prior_partial_cost_usd
+                : wl.gross_prev_month_cost_usd,
               mtdWl !== undefined
                 ? mtdWl.prior_partial_cost_usd
-                : wl.prev_month_cost_usd;
-            const delta = Math.abs(wl.current_cost_usd - prev);
+                : wl.prev_month_cost_usd,
+            );
+            const delta = Math.abs(pair.current - pair.previous);
             return delta > best.delta
-              ? { name: wl.name, delta, wl, prev }
+              ? {
+                  name: wl.name,
+                  delta,
+                  wl,
+                  prev: pair.previous,
+                  current: pair.current,
+                }
               : best;
           },
           {
@@ -52,17 +66,15 @@ export function CostCenterCard({
             delta: 0,
             wl: costCenter.workloads[0],
             prev: costCenter.workloads[0].prev_month_cost_usd,
+            current: costCenter.workloads[0].current_cost_usd,
           },
         )
       : null;
 
   const topMoverPct =
     topMover && topMover.prev !== 0
-      ? (
-          ((topMover.wl.current_cost_usd - topMover.prev) / topMover.prev) *
-          100
-        ).toFixed(1)
-      : topMover && topMover.wl.current_cost_usd > 0
+      ? (((topMover.current - topMover.prev) / topMover.prev) * 100).toFixed(1)
+      : topMover && topMover.current > 0
         ? "New"
         : "0.0";
 
@@ -110,6 +122,18 @@ export function CostCenterCard({
             )}
           </span>
         </div>
+        {!costCenter.is_split_charge &&
+          grossDiffersFromNet(
+            costCenter.gross_current_cost_usd ?? costCenter.current_cost_usd,
+            costCenter.gross_current_cost_usd != null
+              ? costCenter.current_cost_usd
+              : null,
+          ) && (
+            <div className="mt-1 ml-7 text-xs text-gray-400">
+              Gross: {formatUsd(costCenter.gross_current_cost_usd!)} (before
+              credits)
+            </div>
+          )}
         {costCenter.is_split_charge ? (
           <div className="mt-2 ml-7 text-sm text-gray-400">
             Costs allocated to other cost centers

@@ -5,8 +5,8 @@
 | Document ID         | URS-DP                                     |
 | Product             | Dapanoskop (DP)                            |
 | System Type         | Non-regulated Software                     |
-| Version             | 0.14 (Draft)                               |
-| Date                | 2026-02-28                                 |
+| Version             | 0.15 (Draft)                               |
+| Date                | 2026-04-21                                 |
 
 ---
 
@@ -104,6 +104,8 @@ The name comes from Greek δαπάνη (dapáni, "cost") + σκοπέω (skopéo
 - "I want to see cost per TB stored"
 - "I want to know what percentage of our data is in hot storage tiers"
 - "I want to see what we have spent so far this month, not just last month's final bill"
+- "Our AWS account receives credits, so I need to know what our spend would be without them — not just the $0 net bill"
+- "I need to know how much of our cost is covered by credits and discounts"
 
 #### 2.2.4 Macro-Step 4: Investigate Cost Anomalies
 
@@ -219,6 +221,9 @@ A Budget Owner views the cost accumulated so far in the current calendar month (
 **[URS-DP-10315] Compare Month-to-Date Costs Against an Equivalent Prior Period**
 A Budget Owner views change annotations when inspecting MTD data that compare the current month's partial spend (e.g., March 1–7) against the same date range of the prior month (e.g., February 1–7), rather than against the prior month's full-month total. This like-for-like partial-month comparison lets the user judge whether spending is running higher or lower than the prior month at the same point in time, removing the distortion that arises when comparing an incomplete month against a full completed month.
 
+**[URS-DP-10316] Distinguish Gross On-Demand Cost From Net Cost After Credits**
+A Budget Owner reviewing the cost report distinguishes the gross on-demand cost of their AWS usage (before credits, RI/Savings Plan amortization, and discount programs are applied) from the net cost actually incurred after those credits and discounts, so that accounts benefiting from AWS credits do not appear as zero-cost and the underlying consumption remains visible for budgeting purposes.
+
 #### 3.1.4 Investigate Cost Anomalies (Macro-Step 4)
 
 **[URS-DP-10401] Drill Into Workload Cost**
@@ -309,3 +314,4 @@ A Budget Owner accesses and reviews the cost report on a mobile device (phone or
 | 0.12    | 2026-02-27 | —      | Add month-to-date cost data requirement (URS-DP-10314); add MTD definition (§1.4); add MTD user request to Macro-Step 3 |
 | 0.13    | 2026-02-27 | —      | Add like-for-like MTD partial-month comparison requirement (URS-DP-10315) |
 | 0.14    | 2026-02-28 | —      | Add data protection integrity requirement for empty CE responses during re-collection (URS-DP-20402) |
+| 0.15    | 2026-04-21 | —      | Add gross-vs-net cost visibility requirement (URS-DP-10316): Budget Owners distinguish gross on-demand cost from net cost after credits/discounts; add corresponding user requests to Macro-Step 3 |

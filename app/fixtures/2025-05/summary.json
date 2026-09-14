@@ -31,33 +31,51 @@
           "name": "data-pipeline",
           "current_cost_usd": 4087.09,
           "prev_month_cost_usd": 3920.01,
-          "yoy_cost_usd": 3002.73
+          "yoy_cost_usd": 3002.73,
+          "gross_current_cost_usd": 4087.09,
+          "gross_prev_month_cost_usd": 3920.01,
+          "gross_yoy_cost_usd": 3002.73
         },
         {
           "name": "ml-training",
           "current_cost_usd": 3494.58,
           "prev_month_cost_usd": 3351.72,
-          "yoy_cost_usd": 2567.42
+          "yoy_cost_usd": 2567.42,
+          "gross_current_cost_usd": 3774.15,
+          "gross_prev_month_cost_usd": 3619.86,
+          "gross_yoy_cost_usd": 2772.81
         },
         {
           "name": "web-platform",
           "current_cost_usd": 2551.41,
           "prev_month_cost_usd": 2447.1,
-          "yoy_cost_usd": 1874.48
+          "yoy_cost_usd": 1874.48,
+          "gross_current_cost_usd": 2551.41,
+          "gross_prev_month_cost_usd": 2447.1,
+          "gross_yoy_cost_usd": 1874.48
         },
         {
           "name": "monitoring",
           "current_cost_usd": 1281.75,
           "prev_month_cost_usd": 1229.35,
-          "yoy_cost_usd": 941.68
+          "yoy_cost_usd": 941.68,
+          "gross_current_cost_usd": 1281.75,
+          "gross_prev_month_cost_usd": 1229.35,
+          "gross_yoy_cost_usd": 941.68
         },
         {
           "name": "Untagged",
           "current_cost_usd": 677.15,
           "prev_month_cost_usd": 649.47,
-          "yoy_cost_usd": 497.49
+          "yoy_cost_usd": 497.49,
+          "gross_current_cost_usd": 677.15,
+          "gross_prev_month_cost_usd": 649.47,
+          "gross_yoy_cost_usd": 497.49
         }
-      ]
+      ],
+      "gross_current_cost_usd": 12371.55,
+      "gross_prev_month_cost_usd": 11865.79,
+      "gross_yoy_cost_usd": 9089.19
     },
     {
       "name": "Data Science",
@@ -69,21 +87,33 @@
           "name": "analytics-platform",
           "current_cost_usd": 2925.08,
           "prev_month_cost_usd": 2878.17,
-          "yoy_cost_usd": 2186.58
+          "yoy_cost_usd": 2186.58,
+          "gross_current_cost_usd": 3276.09,
+          "gross_prev_month_cost_usd": 3223.55,
+          "gross_yoy_cost_usd": 2448.97
         },
         {
           "name": "data-lake",
           "current_cost_usd": 2065.11,
           "prev_month_cost_usd": 2031.99,
-          "yoy_cost_usd": 1543.73
+          "yoy_cost_usd": 1543.73,
+          "gross_current_cost_usd": 2065.11,
+          "gross_prev_month_cost_usd": 2031.99,
+          "gross_yoy_cost_usd": 1543.73
         },
         {
           "name": "batch-jobs",
           "current_cost_usd": 859.97,
           "prev_month_cost_usd": 846.18,
-          "yoy_cost_usd": 642.85
+          "yoy_cost_usd": 642.85,
+          "gross_current_cost_usd": 859.97,
+          "gross_prev_month_cost_usd": 846.18,
+          "gross_yoy_cost_usd": 642.85
         }
-      ]
+      ],
+      "gross_current_cost_usd": 6201.17,
+      "gross_prev_month_cost_usd": 6101.72,
+      "gross_yoy_cost_usd": 4635.55
     },
     {
       "name": "Platform",
@@ -95,15 +125,24 @@
           "name": "shared-services",
           "current_cost_usd": 624.94,
           "prev_month_cost_usd": 614.21,
-          "yoy_cost_usd": 480.84
+          "yoy_cost_usd": 480.84,
+          "gross_current_cost_usd": 624.94,
+          "gross_prev_month_cost_usd": 614.21,
+          "gross_yoy_cost_usd": 480.84
         },
         {
           "name": "ci-cd",
           "current_cost_usd": 374.97,
           "prev_month_cost_usd": 368.52,
-          "yoy_cost_usd": 288.5
+          "yoy_cost_usd": 288.5,
+          "gross_current_cost_usd": 374.97,
+          "gross_prev_month_cost_usd": 368.52,
+          "gross_yoy_cost_usd": 288.5
         }
-      ]
+      ],
+      "gross_current_cost_usd": 999.91,
+      "gross_prev_month_cost_usd": 982.73,
+      "gross_yoy_cost_usd": 769.34
     }
   ],
   "tagging_coverage": {

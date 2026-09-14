@@ -66,12 +66,19 @@ export function UsageTypeTable({
               </Badge>
             </Cell>
             <Cell>
+              {/* current is the gross (pre-credit) sum — the primary figure */}
               <span className="tabular-nums font-medium">
                 {formatUsd(row.current)}
               </span>
+              {row.net != null && (
+                <span className="block text-xs text-gray-400">
+                  After credits: {formatUsd(row.net)}
+                </span>
+              )}
             </Cell>
             <Cell>
               {row.prev != null ? (
+                /* prev is the gross previous-month sum — like-for-like */
                 <DeltaIndicator current={row.current} previous={row.prev} />
               ) : (
                 <DeltaIndicator current={0} previous={0} unavailable />

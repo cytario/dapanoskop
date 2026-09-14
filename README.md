@@ -2,8 +2,8 @@
 [![Release](https://github.com/cytario/dapanoskop/actions/workflows/release.yml/badge.svg)](https://github.com/cytario/dapanoskop/actions/workflows/release.yml)
 [![GitHub release](https://img.shields.io/github/v/release/cytario/dapanoskop)](https://github.com/cytario/dapanoskop/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-![Frontend Tests](https://img.shields.io/badge/frontend_tests-208-blue)
-![Python Tests](https://img.shields.io/badge/python_tests-171-blue)
+![Frontend Tests](https://img.shields.io/badge/frontend_tests-259-blue)
+![Python Tests](https://img.shields.io/badge/python_tests-175-blue)
 ![Python Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)
 
 # Dapanoskop
@@ -15,6 +15,8 @@ Dapanoskop is an opinionated approach to cloud cost monitoring. Rather than tryi
 ## How It Works
 
 A daily Lambda queries AWS Cost Explorer, aggregates costs by workload and cost center, and writes pre-computed `summary.json`, Parquet files, and an `index.json` manifest to S3. The SPA authenticates via Cognito, obtains temporary AWS credentials from a Cognito Identity Pool, and accesses S3 directly — JSON via the AWS S3 SDK, Parquet via DuckDB-wasm's native S3 support (httpfs). Data access is enforced at the IAM level: only authenticated users receive scoped `s3:GetObject` credentials.
+
+Costs are collected as two figures: **gross** (UnblendedCost — on-demand cost before AWS credits, RI/Savings Plan amortization, and discount programs) and **net** (NetAmortizedCost — after credits and discounts). Gross is the primary figure everywhere; when credits or discounts apply, the affected figures also show the net "after credits" amount. This keeps accounts benefiting from AWS credits meaningful instead of aggregating to $0.
 
 Each daily run also collects the current in-progress month (month-to-date). The MTD period appears first in the period selector with a "MTD" badge; the report displays a banner and like-for-like change annotations comparing the current partial month against the same date range of the prior month (e.g., Feb 1–7 vs. Jan 1–7). The default period selection remains the most recently completed month.
 

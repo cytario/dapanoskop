@@ -1,6 +1,7 @@
 """Generate mock fixture data for local development.
 
-Produces summary.json and parquet files matching the SDS-DP-040002/040003 schemas.
+Produces summary.json and parquet files matching the SDS-DP-040002/040003 schemas,
+including the optional gross (pre-credit/discount, UnblendedCost) cost fields.
 Output: app/fixtures/{period}/summary.json, cost-by-workload.parquet, cost-by-usage-type.parquet
 """
 
@@ -243,6 +244,88 @@ SUMMARIES: dict[str, dict] = {
 }
 
 # ---------------------------------------------------------------------------
+# Gross cost mapping (simulates AWS credits/discounts on some accounts)
+#
+# cost_usd in the parquet files is the GROSS (pre-credit/discount,
+# UnblendedCost) figure — the primary one — and net_cost_usd is the NET
+# (NetAmortizedCost) figure. Accounts with credits: cost_usd =
+# round(net * 1.05..1.15); accounts without credits: both are the same
+# value (net_cost_usd still present). Old data (pre-change) only had the
+# net figure under cost_usd with no net_cost_usd column — the frontend
+# falls back to net = net_cost_usd ?? cost_usd.
+# ---------------------------------------------------------------------------
+
+# Workloads (and cost centers, derived) that carry credits, mapped to a
+# gross/net multiplier. 1.0 means no credits (gross == net).
+GROSS_MULTIPLIERS: dict[str, float] = {
+    "data-pipeline": 1.0,
+    "ml-training": 1.08,
+    "web-platform": 1.0,
+    "monitoring": 1.0,
+    "Untagged": 1.0,
+    "analytics-platform": 1.12,
+    "data-lake": 1.0,
+    "batch-jobs": 1.0,
+    "shared-services": 1.0,
+    "ci-cd": 1.0,
+}
+
+
+def gross_for(net: float, key: str | None = None) -> float:
+    """Compute the fixture gross cost for a net cost (credits multiplier)."""
+    multiplier = GROSS_MULTIPLIERS.get(key or "", 1.0)
+    if multiplier == 1.0:
+        return round(net, 2)
+    return round(net * multiplier, 2)
+
+
+def add_gross_to_workload(wl: dict) -> None:
+    """Add gross cost fields to a summary workload entry in place."""
+    if wl.get("yoy_cost_usd") is not None:
+        wl["gross_yoy_cost_usd"] = gross_for(wl["yoy_cost_usd"], wl["name"])
+    wl["gross_prev_month_cost_usd"] = gross_for(
+        wl["prev_month_cost_usd"], wl["name"]
+    )
+    wl["gross_current_cost_usd"] = gross_for(wl["current_cost_usd"], wl["name"])
+
+
+def add_gross_to_summary(summary: dict) -> None:
+    """Add gross totals and per-cost-center gross fields to a summary in place."""
+    workloads = [wl for cc in summary["cost_centers"] for wl in cc["workloads"]]
+    for wl in workloads:
+        add_gross_to_workload(wl)
+
+    for cc in summary["cost_centers"]:
+        cc_wls = cc["workloads"]
+        cc["gross_current_cost_usd"] = round(
+            sum(wl["gross_current_cost_usd"] for wl in cc_wls), 2
+        )
+        cc["gross_prev_month_cost_usd"] = round(
+            sum(wl["gross_prev_month_cost_usd"] for wl in cc_wls), 2
+        )
+        if cc.get("yoy_cost_usd") is not None:
+            cc["gross_yoy_cost_usd"] = round(
+                sum(wl["gross_yoy_cost_usd"] for wl in cc_wls), 2
+            )
+
+    totals = summary.setdefault("totals", {})
+    totals["gross_current_cost_usd"] = round(
+        sum(wl["gross_current_cost_usd"] for wl in workloads), 2
+    )
+    totals["gross_prev_month_cost_usd"] = round(
+        sum(wl["gross_prev_month_cost_usd"] for wl in workloads), 2
+    )
+    if totals.get("yoy_cost_usd") is not None:
+        totals["gross_yoy_cost_usd"] = round(
+            sum(wl["gross_yoy_cost_usd"] for wl in workloads), 2
+        )
+
+
+# Apply gross fields to all summaries in place.
+for _summary in SUMMARIES.values():
+    add_gross_to_summary(_summary)
+
+# ---------------------------------------------------------------------------
 # Usage type detail data for parquet files
 # ---------------------------------------------------------------------------
 
@@ -366,16 +449,20 @@ for period_key, summary in SUMMARIES.items():
 
 
 def generate_workload_parquet_rows(period_key: str) -> list[dict]:
-    """Build rows for cost-by-workload.parquet from summary data."""
+    """Build rows for cost-by-workload.parquet from summary data.
+
+    cost_usd is the gross (pre-credit/discount) figure; net_cost_usd is net.
+    Columns: cost_center, workload, period, cost_usd, net_cost_usd.
+    """
     rows = []
     summary = SUMMARIES[period_key]
     periods_map = summary["periods"]
     for cc in summary["cost_centers"]:
         for wl in cc["workloads"]:
-            rows.append({"cost_center": cc["name"], "workload": wl["name"], "period": periods_map["current"], "cost_usd": wl["current_cost_usd"]})
-            rows.append({"cost_center": cc["name"], "workload": wl["name"], "period": periods_map["prev_month"], "cost_usd": wl["prev_month_cost_usd"]})
+            rows.append({"cost_center": cc["name"], "workload": wl["name"], "period": periods_map["current"], "cost_usd": wl.get("gross_current_cost_usd", wl["current_cost_usd"]), "net_cost_usd": wl["current_cost_usd"]})
+            rows.append({"cost_center": cc["name"], "workload": wl["name"], "period": periods_map["prev_month"], "cost_usd": wl.get("gross_prev_month_cost_usd", wl["prev_month_cost_usd"]), "net_cost_usd": wl["prev_month_cost_usd"]})
             if wl["yoy_cost_usd"] is not None:
-                rows.append({"cost_center": cc["name"], "workload": wl["name"], "period": periods_map["yoy"], "cost_usd": wl["yoy_cost_usd"]})
+                rows.append({"cost_center": cc["name"], "workload": wl["name"], "period": periods_map["yoy"], "cost_usd": wl.get("gross_yoy_cost_usd", wl["yoy_cost_usd"]), "net_cost_usd": wl["yoy_cost_usd"]})
     return rows
 
 
@@ -389,7 +476,7 @@ def write_period(period_key: str) -> None:
         json.dump(SUMMARIES[period_key], f, indent=2)
     print(f"  {out_dir / 'summary.json'}")
 
-    # cost-by-workload.parquet
+    # cost-by-workload.parquet (cost_usd = gross, net_cost_usd = net)
     wl_rows = generate_workload_parquet_rows(period_key)
     wl_table = pa.table(
         {
@@ -397,12 +484,15 @@ def write_period(period_key: str) -> None:
             "workload": pa.array([r["workload"] for r in wl_rows], type=pa.string()),
             "period": pa.array([r["period"] for r in wl_rows], type=pa.string()),
             "cost_usd": pa.array([r["cost_usd"] for r in wl_rows], type=pa.float64()),
+            "net_cost_usd": pa.array([r["net_cost_usd"] for r in wl_rows], type=pa.float64()),
         }
     )
     pq.write_table(wl_table, out_dir / "cost-by-workload.parquet")
     print(f"  {out_dir / 'cost-by-workload.parquet'}")
 
-    # cost-by-usage-type.parquet
+    # cost-by-usage-type.parquet (cost_usd = gross, net_cost_usd = net;
+    # column order: workload, usage_type, category, period, cost_usd,
+    # net_cost_usd, usage_quantity)
     ut_rows = USAGE_TYPE_DATA[period_key]
     ut_table = pa.table(
         {
@@ -410,7 +500,14 @@ def write_period(period_key: str) -> None:
             "usage_type": pa.array([r["usage_type"] for r in ut_rows], type=pa.string()),
             "category": pa.array([r["category"] for r in ut_rows], type=pa.string()),
             "period": pa.array([r["period"] for r in ut_rows], type=pa.string()),
-            "cost_usd": pa.array([r["cost_usd"] for r in ut_rows], type=pa.float64()),
+            "cost_usd": pa.array(
+                [gross_for(r["cost_usd"], r["workload"]) for r in ut_rows],
+                type=pa.float64(),
+            ),
+            "net_cost_usd": pa.array(
+                [round(r["cost_usd"], 2) for r in ut_rows],
+                type=pa.float64(),
+            ),
             "usage_quantity": pa.array([r["usage_quantity"] for r in ut_rows], type=pa.float64()),
         }
     )

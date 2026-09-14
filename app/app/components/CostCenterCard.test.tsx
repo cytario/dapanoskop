@@ -208,4 +208,123 @@ describe("CostCenterCard", () => {
     // Should use prev_month_cost_usd ($14200): delta = $15000-$14200 = +$800
     expect(container.textContent).toContain("+$800.00");
   });
+
+  describe("gross vs net", () => {
+    it("shows secondary gross line when gross exceeds net by >= $0.01", () => {
+      const grossCC: CostCenter = {
+        ...costCenter,
+        gross_current_cost_usd: 16500,
+        gross_prev_month_cost_usd: 15500,
+        gross_yoy_cost_usd: 12000,
+      };
+      const { container } = renderCard(grossCC);
+      // Main figure stays net (allocated total)
+      expect(container.textContent).toContain("$15,000.00");
+      // Secondary gross line
+      expect(container.textContent).toContain(
+        "Gross: $16,500.00 (before credits)",
+      );
+    });
+
+    it("shows no gross line when gross equals net within $0.01", () => {
+      const grossCC: CostCenter = {
+        ...costCenter,
+        gross_current_cost_usd: 15000.005,
+      };
+      const { container } = renderCard(grossCC);
+      expect(container.textContent).not.toContain("before credits");
+    });
+
+    it("shows no gross line when gross absent (old data)", () => {
+      const { container } = renderCard(costCenter);
+      expect(container.textContent).not.toContain("before credits");
+      expect(container.textContent).toContain("$15,000.00");
+    });
+
+    it("does not show gross line for split charge cost centers", () => {
+      const splitCC: CostCenter = {
+        name: "Split Charges",
+        current_cost_usd: 2000,
+        prev_month_cost_usd: 1800,
+        yoy_cost_usd: 1500,
+        gross_current_cost_usd: 2500,
+        workloads: [],
+        is_split_charge: true,
+      };
+      const { container } = renderCard(splitCC);
+      expect(container.textContent).not.toContain("before credits");
+    });
+
+    it("prefers gross-based top mover delta when gross fields present", () => {
+      const grossCC: CostCenter = {
+        name: "Engineering",
+        current_cost_usd: 15000,
+        prev_month_cost_usd: 14200,
+        yoy_cost_usd: 11000,
+        workloads: [
+          {
+            name: "data-pipeline",
+            current_cost_usd: 5000,
+            prev_month_cost_usd: 4900, // net delta: 100
+            yoy_cost_usd: 3200,
+            gross_current_cost_usd: 5500,
+            gross_prev_month_cost_usd: 5200, // gross delta: 300
+            gross_yoy_cost_usd: 3500,
+          },
+          {
+            name: "web-app",
+            current_cost_usd: 3000,
+            prev_month_cost_usd: 2950, // net delta: 50
+            yoy_cost_usd: 2500,
+          },
+        ],
+      };
+      const { container } = renderCard(grossCC);
+      // Top mover: data-pipeline with gross-based +300/5200 = 5.8%
+      expect(container.textContent).toContain("Top mover: data-pipeline");
+      expect(container.textContent).toContain("5.8% MoM");
+    });
+
+    it("uses gross prior partial in top mover when MTD gross available", () => {
+      const grossCC: CostCenter = {
+        name: "Engineering",
+        current_cost_usd: 15000,
+        prev_month_cost_usd: 14200,
+        yoy_cost_usd: 11000,
+        workloads: [
+          {
+            name: "data-pipeline",
+            current_cost_usd: 5000,
+            prev_month_cost_usd: 4800,
+            yoy_cost_usd: 3200,
+            gross_current_cost_usd: 5400,
+          },
+        ],
+      };
+      const mtdComparison: MtdComparison = {
+        prior_partial_start: "2025-12-01",
+        prior_partial_end_exclusive: "2025-12-08",
+        cost_centers: [
+          {
+            name: "Engineering",
+            prior_partial_cost_usd: 4500,
+            workloads: [
+              {
+                name: "data-pipeline",
+                prior_partial_cost_usd: 4000,
+                // gross prior: pair becomes 5400 vs 5000 = 8.0%
+                gross_prior_partial_cost_usd: 5000,
+              },
+            ],
+          },
+        ],
+      };
+      const { container } = renderCard(grossCC, {
+        isMtd: true,
+        mtdComparison,
+      });
+      // Net pair would be 5000/4000 = 25.0%; gross pair is 5400/5000 = 8.0%
+      expect(container.textContent).toContain("8.0% partial");
+    });
+  });
 });

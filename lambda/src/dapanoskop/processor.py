@@ -25,7 +25,14 @@ _BYTES_PER_TB = 1_099_511_627_776  # 2^40 bytes per tebibyte (binary)
 def _parse_groups(
     groups: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Parse CE API group results into flat records."""
+    """Parse CE API group results into flat records.
+
+    Records two cost figures per row:
+    - ``cost_usd``: gross cost (``UnblendedCost``) — on-demand cost before
+      credits, RI/Savings Plan amortization, and discount programs. This is
+      the primary figure: accounts benefiting from credits no longer show $0.
+    - ``net_cost_usd``: net cost (``NetAmortizedCost``) — post-credit/discount.
+    """
     rows = []
     for group in groups:
         keys = group.get("Keys", [])
@@ -34,7 +41,8 @@ def _parse_groups(
         app_tag = keys[0].removeprefix("App$")
         usage_type = keys[1]
         metrics = group.get("Metrics", {})
-        cost = float(metrics.get("NetAmortizedCost", {}).get("Amount", 0))
+        cost = float(metrics.get("UnblendedCost", {}).get("Amount", 0))
+        net_cost = float(metrics.get("NetAmortizedCost", {}).get("Amount", 0))
         quantity = float(metrics.get("UsageQuantity", {}).get("Amount", 0))
         rows.append(
             {
@@ -42,6 +50,7 @@ def _parse_groups(
                 "usage_type": usage_type,
                 "category": categorize(usage_type),
                 "cost_usd": cost,
+                "net_cost_usd": net_cost,
                 "usage_quantity": quantity,
             }
         )
@@ -177,12 +186,13 @@ def _compute_storage_metrics(
 
 def _aggregate_workloads(
     rows: list[dict[str, Any]],
+    field: str = "cost_usd",
 ) -> dict[str, float]:
-    """Sum cost per workload from parsed rows."""
+    """Sum a cost field per workload ("cost_usd" gross or "net_cost_usd" net)."""
     totals: dict[str, float] = {}
     for row in rows:
         wl = row["workload"]
-        totals[wl] = totals.get(wl, 0) + row["cost_usd"]
+        totals[wl] = totals.get(wl, 0) + row[field]
     return totals
 
 
@@ -347,6 +357,7 @@ def _compute_mtd_comparison(
     prior_partial_start, prior_partial_end_exclusive = partial_dates
     partial_rows = _parse_groups(raw_partial)
     partial_costs = _aggregate_workloads(partial_rows)
+    partial_net_costs = _aggregate_workloads(partial_rows, "net_cost_usd")
 
     # Apply split charge redistribution to partial allocated costs if needed
     partial_alloc = dict(partial_allocated)
@@ -354,6 +365,13 @@ def _compute_mtd_comparison(
         partial_alloc = _apply_split_charge_redistribution(
             partial_alloc, split_charge_rules
         )
+
+    # Gross (UnblendedCost) per-cost-center sums for the partial period, using
+    # the passed cc_mapping (the comparison aligns to current CC structure).
+    workload_cc_partial_gross: dict[str, float] = {}
+    for wl, cost in partial_costs.items():
+        cc = cc_mapping.get(wl, _DEFAULT_CC)
+        workload_cc_partial_gross[cc] = workload_cc_partial_gross.get(cc, 0.0) + cost
 
     comparison_centers = []
     for cc_name in sorted(cc_groups):
@@ -365,11 +383,16 @@ def _compute_mtd_comparison(
             workloads.append(
                 {
                     "name": wl_name,
-                    "prior_partial_cost_usd": round(partial_costs.get(wl_name, 0), 2),
+                    "prior_partial_cost_usd": round(
+                        partial_net_costs.get(wl_name, 0), 2
+                    ),
+                    "gross_prior_partial_cost_usd": round(
+                        partial_costs.get(wl_name, 0), 2
+                    ),
                 }
             )
         workloads.sort(
-            key=lambda w: w["prior_partial_cost_usd"],
+            key=lambda w: w["gross_prior_partial_cost_usd"],
             reverse=True,  # type: ignore[return-value]
         )
 
@@ -384,6 +407,9 @@ def _compute_mtd_comparison(
         cc_entry: dict[str, Any] = {
             "name": cc_name,
             "prior_partial_cost_usd": cc_partial,
+            "gross_prior_partial_cost_usd": round(
+                workload_cc_partial_gross.get(cc_name, 0.0), 2
+            ),
             "workloads": workloads,
         }
         if is_split_charge:
@@ -442,10 +468,13 @@ def process(
     prev_rows = parsed["prev_month"]
     yoy_rows = parsed["yoy"]
 
-    # Workload cost sums per period
+    # Workload cost sums per period — gross (UnblendedCost) and net (NetAmortizedCost)
     current_costs = _aggregate_workloads(current_rows)
     prev_costs = _aggregate_workloads(prev_rows)
     yoy_costs = _aggregate_workloads(yoy_rows)
+    current_net_costs = _aggregate_workloads(current_rows, "net_cost_usd")
+    prev_net_costs = _aggregate_workloads(prev_rows, "net_cost_usd")
+    yoy_net_costs = _aggregate_workloads(yoy_rows, "net_cost_usd")
 
     # Group workloads into cost centers using the current period's mapping.
     # This determines the CC structure (which CCs exist and which workloads belong
@@ -454,10 +483,11 @@ def process(
     current_mapping = _period_cc_mapping("current")
     all_workloads = set(current_costs) | set(prev_costs) | set(yoy_costs)
     partial_costs: dict[str, float] | None = None
+    partial_net_costs: dict[str, float] | None = None
     if is_mtd and "prev_month_partial" in raw_data:
-        partial_costs = _aggregate_workloads(
-            _parse_groups(raw_data["prev_month_partial"])
-        )
+        partial_rows = _parse_groups(raw_data["prev_month_partial"])
+        partial_costs = _aggregate_workloads(partial_rows)
+        partial_net_costs = _aggregate_workloads(partial_rows, "net_cost_usd")
         all_workloads |= set(partial_costs)
     cc_groups: dict[str, list[str]] = {}
     for wl in all_workloads:
@@ -481,8 +511,17 @@ def process(
     prev_mapping = _period_cc_mapping("prev_month")
     yoy_mapping = _period_cc_mapping("yoy")
 
-    workload_cc_prev = _aggregate_by_cc(prev_costs, prev_mapping)
-    workload_cc_yoy = _aggregate_by_cc(yoy_costs, yoy_mapping)
+    # Net (NetAmortizedCost) per-CC aggregates — fallbacks for the net CC fields
+    # when allocated costs are unavailable (must stay net to match the
+    # allocated-costs path, which uses CE's NetAmortizedCost).
+    workload_cc_prev = _aggregate_by_cc(prev_net_costs, prev_mapping)
+    workload_cc_yoy = _aggregate_by_cc(yoy_net_costs, yoy_mapping)
+
+    # Gross (UnblendedCost) workload sums aggregated per cost center, per period —
+    # used for the additive gross_* fields on each cost center entry.
+    workload_cc_current_gross = _aggregate_by_cc(current_costs, current_mapping)
+    workload_cc_prev_gross = _aggregate_by_cc(prev_costs, prev_mapping)
+    workload_cc_yoy_gross = _aggregate_by_cc(yoy_costs, yoy_mapping)
 
     # Build cost center summaries — apply split charge redistribution to current and
     # prev_month periods only (not yoy).
@@ -537,13 +576,16 @@ def process(
             workloads.append(
                 {
                     "name": wl_name,
-                    "current_cost_usd": round(current_costs.get(wl_name, 0), 2),
-                    "prev_month_cost_usd": round(prev_costs.get(wl_name, 0), 2),
-                    "yoy_cost_usd": round(yoy_costs.get(wl_name, 0), 2),
+                    "current_cost_usd": round(current_net_costs.get(wl_name, 0), 2),
+                    "prev_month_cost_usd": round(prev_net_costs.get(wl_name, 0), 2),
+                    "yoy_cost_usd": round(yoy_net_costs.get(wl_name, 0), 2),
+                    "gross_current_cost_usd": round(current_costs.get(wl_name, 0), 2),
+                    "gross_prev_month_cost_usd": round(prev_costs.get(wl_name, 0), 2),
+                    "gross_yoy_cost_usd": round(yoy_costs.get(wl_name, 0), 2),
                 }
             )
-        # Sort workloads by current cost descending
-        workloads.sort(key=lambda w: w["current_cost_usd"], reverse=True)
+        # Sort workloads by current gross cost descending (primary figure)
+        workloads.sort(key=lambda w: w["gross_current_cost_usd"], reverse=True)
 
         # Use allocated costs from category-level query if available AND
         # the cost center name exists in that period's allocated costs dict.
@@ -602,6 +644,13 @@ def process(
             "current_cost_usd": cc_current,
             "prev_month_cost_usd": cc_prev,
             "yoy_cost_usd": cc_yoy,
+            "gross_current_cost_usd": round(
+                workload_cc_current_gross.get(cc_name, 0.0), 2
+            ),
+            "gross_prev_month_cost_usd": round(
+                workload_cc_prev_gross.get(cc_name, 0.0), 2
+            ),
+            "gross_yoy_cost_usd": round(workload_cc_yoy_gross.get(cc_name, 0.0), 2),
             "workloads": workloads,
         }
         if is_split_charge:
@@ -685,13 +734,22 @@ def process(
     # Totals computed directly from raw workload costs — independent of CC allocation
     # and split charge rules. These provide headline numbers immune to CC renames,
     # split charge rule changes, and allocation logic.
+    # cost_usd figures are net (backward-compatible headline); gross_* are the
+    # pre-credit/discount UnblendedCost sums.
     totals: dict[str, Any] = {
-        "current_cost_usd": round(sum(current_costs.values()), 2),
-        "prev_month_cost_usd": round(sum(prev_costs.values()), 2),
-        "yoy_cost_usd": round(sum(yoy_costs.values()), 2),
+        "current_cost_usd": round(sum(current_net_costs.values()), 2),
+        "prev_month_cost_usd": round(sum(prev_net_costs.values()), 2),
+        "yoy_cost_usd": round(sum(yoy_net_costs.values()), 2),
+        "gross_current_cost_usd": round(sum(current_costs.values()), 2),
+        "gross_prev_month_cost_usd": round(sum(prev_costs.values()), 2),
+        "gross_yoy_cost_usd": round(sum(yoy_costs.values()), 2),
     }
+    if partial_net_costs is not None:
+        totals["mtd_prior_partial_cost_usd"] = round(sum(partial_net_costs.values()), 2)
     if partial_costs is not None:
-        totals["mtd_prior_partial_cost_usd"] = round(sum(partial_costs.values()), 2)
+        totals["gross_mtd_prior_partial_cost_usd"] = round(
+            sum(partial_costs.values()), 2
+        )
 
     # For MTD periods, add forecast data when available.
     # forecast_total_usd = full month-end cost projection from GetCostForecast.
@@ -704,11 +762,13 @@ def process(
         if forecast_amount is not None:
             forecast_total = forecast_amount
 
-            # Compute prev_complete total from raw_data if present
+            # Compute prev_complete total from raw_data if present.
+            # The forecast is NET (GetCostForecast NET_AMORTIZED_COST), so the
+            # baseline must be the net sum for a like-for-like delta.
             prev_complete_groups = raw_data.get("prev_complete", [])
             prev_complete_rows = _parse_groups(prev_complete_groups)
-            prev_complete_costs = _aggregate_workloads(prev_complete_rows)
-            prev_complete_total = sum(prev_complete_costs.values())
+            prev_complete_net = _aggregate_workloads(prev_complete_rows, "net_cost_usd")
+            prev_complete_total = sum(prev_complete_net.values())
 
             totals["forecast_total_usd"] = round(forecast_total, 2)
             if prev_complete_total:
@@ -752,11 +812,17 @@ def process(
         )
         summary["mtd_comparison"] = mtd_comparison
 
-    # Build parquet data (only primary periods)
+    # Build parquet data (only primary periods). cost_usd is gross
+    # (UnblendedCost); net_cost_usd is net (NetAmortizedCost).
     parquet_period_map: dict[str, dict[str, float]] = {
         "current": current_costs,
         "prev_month": prev_costs,
         "yoy": yoy_costs,
+    }
+    net_period_map: dict[str, dict[str, float]] = {
+        "current": current_net_costs,
+        "prev_month": prev_net_costs,
+        "yoy": yoy_net_costs,
     }
     workload_rows = []
     for cc in cost_centers:
@@ -771,6 +837,9 @@ def process(
                         "workload": wl["name"],
                         "period": label,
                         "cost_usd": round(cost_map.get(wl["name"], 0), 2),
+                        "net_cost_usd": round(
+                            net_period_map[period_key].get(wl["name"], 0), 2
+                        ),
                     }
                 )
 
@@ -787,6 +856,7 @@ def process(
                     "category": row["category"],
                     "period": label,
                     "cost_usd": round(row["cost_usd"], 2),
+                    "net_cost_usd": round(row["net_cost_usd"], 2),
                     "usage_quantity": round(row["usage_quantity"], 6),
                 }
             )
@@ -858,6 +928,9 @@ def write_to_s3(
                 "cost_usd": pa.array(
                     [r["cost_usd"] for r in wl_rows], type=pa.float64()
                 ),
+                "net_cost_usd": pa.array(
+                    [r["net_cost_usd"] for r in wl_rows], type=pa.float64()
+                ),
             }
         )
         buf = io.BytesIO()
@@ -886,6 +959,9 @@ def write_to_s3(
                 "period": pa.array([r["period"] for r in ut_rows], type=pa.string()),
                 "cost_usd": pa.array(
                     [r["cost_usd"] for r in ut_rows], type=pa.float64()
+                ),
+                "net_cost_usd": pa.array(
+                    [r["net_cost_usd"] for r in ut_rows], type=pa.float64()
                 ),
                 "usage_quantity": pa.array(
                     [r["usage_quantity"] for r in ut_rows], type=pa.float64()
